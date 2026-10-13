@@ -28,16 +28,14 @@ jobs:
       - name: Model and page tests
         run: node --test tests/*.test.mjs
 
-      - uses: browser-actions/setup-chrome@v2
-        id: chrome
-        with:
-          chrome-version: stable
-          install-dependencies: true
-
+      # Ubuntu's AppArmor policy permits the system Chrome installation.
+      # A downloaded Chrome for Testing binary cannot create its sandbox here.
       - name: Generated pages execute and match Node
         env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-        run: node scripts/verify-sim-browser.mjs
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          "$CHROME_PATH" --version
+          node scripts/verify-sim-browser.mjs
 
       - name: Evals file is valid
         run: node -e 'const e = require("./evals/evals.json"); if (e.skill_name !== "topology" || !e.evals.every((x) => x.id && x.prompt && x.expected_output)) process.exit(1)'
