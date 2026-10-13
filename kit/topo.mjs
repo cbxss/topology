@@ -50,7 +50,7 @@ export function prepare(spec) {
     const sync = raw.sync ?? (raw.kind ? false : !isLog(byId.get(to)) && !isLog(byId.get(from)));
     return { ...(Array.isArray(raw) ? {} : raw), from, to, index, kind: raw.kind || (isLog(byId.get(to)) || isLog(byId.get(from)) ? "async" : "sync"), sync };
   });
-  layout(nodes, edges, spec);
+  const grid = layout(nodes, edges, spec);
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) {
@@ -62,7 +62,7 @@ export function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, scenario: spec.scenario, flags: spec.flags, features: spec.features };
+  return { title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -77,6 +77,7 @@ function layout(nodes, edges, spec) {
     node.cy = row * gy;
     node.plan = { x: node.cx - node.w / 2, y: node.cy - node.d / 2, w: node.w, d: node.d, r: 3 };
   }
+  return [gx, gy];
 }
 
 // Longest-path ranks left to right; replicas sit under their primary; rows by barycentre.
@@ -803,6 +804,7 @@ export const TOPO_CSS = `
 .tp-pk[data-kind="error"]{--pk:var(--tp-red)}
 .tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
 .tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
 .tp-pk .pk-top{fill:var(--pk)}
 .tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
 .tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
