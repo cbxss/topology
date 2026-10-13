@@ -91,4 +91,5 @@ Each of these has an example to copy:
 2. `ISO.<kind>(node, c)`: the solids, using `c.S` (`solidSvg`), `c.L` (`lineSvg`), `c.led(id, point)` and the drawing core's builders in `kit/iso.mjs` (`slabOf`, `cylinder`, `extrude`, `planOutline`, `sideArc`, …). Paint back to front. Give it at least one `data-led` with id `<node>:0`. Lines must end on something (`scripts/lines.mjs`), or carry `free` when they stand for text or a pointer tip.
 3. `FLAT.<kind>(node, f)`: the glyph inside `f.box(node.plan)`, with `f.rect`, `f.line`, `f.led`.
 4. `heightOf` if it is taller than its `KINDS.h`, and `ledFor` in `kit/topo-live.js` if its LEDs aren't `<node>:0`.
-5. If it behaves differently (a new kind of buffer, say), the behaviour goes in `kit/topo-sim.mjs`, and `--check` must still read true.
+5. Add it to `KINDS` in `scripts/catalog.mjs` so it shows in the catalog, with a one-line description and its typical fields.
+6. If it behaves differently (a new kind of buffer, say), the behaviour goes in `kit/topo-sim.mjs`, and `--check` must still read true.

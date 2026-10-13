@@ -74,6 +74,21 @@ export default {
 | `bend`, `via`, `axis` | Routing: where the elbow sits (0–1), explicit world-unit waypoints, or which faces to use (`x`/`y`). |
 | `back` | `true` to ignore this edge for auto-ranking. |
 
+## Patterns
+
+`kit/patterns.mjs` has reusable fragments for the shapes that come up again and again. Each pattern returns `{ nodes, edges, groups, flags, in, out }`: `in` is the node to send traffic into, and `out` is the node or nodes it hands on from. `compose(meta, ...fragments)` joins fragments into a spec (`meta` is the rest of the spec: title, sim, scenario, extra nodes) and rejects duplicate ids. `link(from, to, options)` adds an edge, or one edge per pair when either side is a list.
+
+| Pattern | Makes | `in` / `out` |
+|---|---|---|
+| `kafkaTopic(id, { partitions, brokers, rf, minIsr, acks, skew, election, groups: { name: { consumers, rate, label } } })` | A topic and one worker per consumer, each edge carrying its `group`. Consumers are `<id>-<group>-<n>`, or `<id>-<group>` for a single consumer. | the topic / the consumers |
+| `region(id, { label, api, db, cache: { hit }, replica: { label, ms } })` | `<id>-lb` → `<id>-api` → `<id>-db` on a `region: true` plate; optionally `<id>-cache` (cache-aside) and `<id>-replica` (replication). `api` and `db` are merged into those nodes. | the LB / the API |
+| `cacheAside(service, { db, hit, id, label })` | A cache the service always calls, and its call to `db` at `p: 1 − hit`. | the service / `[db]` |
+| `replicatedDb(id, { label, replicas })` | A primary and `replicas` replicas, joined by replication edges. | the primary / `[primary]` |
+| `queueWorkers(id, { workers, rate, worker })` | A queue and its competing workers. | the queue / the workers |
+| `canary(id, { router, flag, rollout, v1, v2, flags })` | `<id>-v1` (`unless` the flag) and `<id>-v2` (`flag`) behind `router`, a `flags` node pushing config to it (`flags: false` to skip), and the flag in `spec.flags`. | the router / `[v1, v2]` |
+
+Every pattern takes `at: [col, row]` to place its nodes at fixed offsets from there; leave `at` out of every pattern and node to let auto-layout place everything. `examples/platform/` is a figure built entirely from patterns, and `node scripts/catalog.mjs` draws every kind and pattern (`examples/catalog/catalog.html`, or `/catalog` on the dev server).
+
 ## Groups
 
 `{ id, label, nodes: [ids], pad, region }`. A floor plate (iso) or dashed region (flat) around its members, which can be nodes or other groups. Inner groups stand on outer ones. `region: true` draws a heavier plate with a bigger label. The label runs along the plate's left edge.

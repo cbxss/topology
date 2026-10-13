@@ -46,6 +46,11 @@ jobs:
             node scripts/build.mjs "$spec" --light
           done
 
+      - name: Rebuild the component catalog
+        run: |
+          node scripts/catalog.mjs
+          node scripts/catalog.mjs --light
+
       - name: Committed pages are unchanged
         run: |
           git status --short

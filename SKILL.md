@@ -33,7 +33,7 @@ Build one with `node scripts/build.mjs examples/checkout/checkout.spec.mjs` (add
 ## Workflow
 
 1. **Name the question and collect the numbers.** Write down: the sources and their rates, each hop, what fans out, what is sync (request/response) and what is async (logs, queues), partitions, consumer groups and their throughput, caches and hit ratios, replicas, capacities.
-2. **Write the spec.** A `.spec.mjs` (or `.json`) with a default export; `references/spec.md` has every field and exactly what the simulation does with it. Start without coordinates and let auto-layout rank it left to right; add `at: [col, row]` when you need control (zones, a particular reading order), or drag nodes on a `serve.mjs` `?edit` page.
+2. **Write the spec.** A `.spec.mjs` (or `.json`) with a default export; `references/spec.md` has every field and exactly what the simulation does with it. For the common shapes (a region, a Kafka topic with consumer groups, cache-aside, replicas, a job queue, a canary) use the patterns in `kit/patterns.mjs` and join them with `compose()` and `link()`; `examples/catalog/catalog.html` shows every node kind and pattern with the spec that makes it. Start without coordinates and let auto-layout rank it left to right; add `at: [col, row]` when you need control (zones, a particular reading order), or drag nodes on a `serve.mjs` `?edit` page.
 3. **Write the story.** A `scenario` with 3–5 named phases (steady → incident → recovery) and a `say` line for each step: what happened, and what to watch for on screen ("bright cells", "amber retries", "the red port"). Make it loop cleanly: recover what you break, and leave time for lag to drain.
 4. **Check the model.** `node scripts/build.mjs my.spec.mjs --check` runs the simulation headless. For each phase it prints the settled numbers (in/s, p50/p99, lag, failing) and the readout just before and 3 s after each step, then per-node stats and warnings:
    - lag that keeps growing
@@ -91,6 +91,8 @@ Build one with `node scripts/build.mjs examples/checkout/checkout.spec.mjs` (add
 | `kit/topo-live.js` | The page runtime: steps the sim, draws packets (with trails), blinks LEDs, fills record and queue cells, moves cursors and flag knobs, updates breakers and edge labels, handles hover, click, keys, the sparkline and the view morph. Writes attributes, never re-renders. Exposes `window.__topo` for checks. |
 | `kit/topo-story.js` | The scenario player: timeline, phases, narration, scrubbing (re-simulates from 0), takeover. |
 | `kit/topo-edit.js` | The serve editor: drag nodes in 2D, snap to quarter cells, POST the layout. |
+| `kit/patterns.mjs` | Reusable fragments: `kafkaTopic`, `region`, `cacheAside`, `replicatedDb`, `queueWorkers`, `canary`, plus `compose()` and `link()`. |
+| `scripts/catalog.mjs` | Draws every node kind and pattern in iso and 2D with its spec (`examples/catalog/catalog.html`; `/catalog` on the dev server). |
 | `kit/topo-features.mjs` | The tool's feature toggles and their resolution (spec < CLI < URL). |
 | `tests/` | `node --test tests/*.test.mjs`: the model's behaviour and the page build. |
 | `kit/iso.mjs` | The drawing core: an orthographic camera (`iso`, `depthOf`, `fitProjection`), shaded prisms (`extrude`, `slabOf`, `cylinder`), lines on faces (`onTop`, `ring`, `sideArc`, `sideSeam`, `radialTicks`, `topMatrix`), SVG emitters (`solidSvg`, `lineSvg`, `dotsSvg`, `faceTextSvg`, `figureSvg`), the card (`plateHtml`), the page (`pageHtml`) and the palette (`KIT_CSS`, `--tp-*` tokens). |

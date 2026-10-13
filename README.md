@@ -78,6 +78,8 @@ Behaviour:
 - feature flags with rollouts and kill switches
 - scenarios with named phases
 
+Common shapes come as patterns you compose: `region()`, `kafkaTopic()`, `cacheAside()`, `replicatedDb()`, `queueWorkers()`, `canary()`. Browse every kind and pattern, drawn in iso and 2D with the spec that makes it, in the [component catalog](examples/catalog/catalog.html) (`node scripts/catalog.mjs`).
+
 Tool features (the morph, trails, labels, hops and the rest) can be toggled per spec, per build or per URL. Every field is in [`references/spec.md`](references/spec.md).
 
 ## Layout
@@ -95,7 +97,9 @@ scripts/build.mjs        spec → standalone HTML (and --check, --svg)
 scripts/capture.mjs …    headless Chrome screenshots, scripted sessions, line-end check (browser.mjs)
 kit/topo-story.js        the scenario player; kit/topo-edit.js the drag editor; kit/topo-features.mjs toggles
 scripts/serve.mjs        dev server: rebuild per request, SSE reload, ?edit
-examples/                order-events, checkout, retry-storm, failover, kafka-brokers, canary
+kit/patterns.mjs         reusable fragments: region, kafkaTopic, cacheAside, replicatedDb, queueWorkers, canary
+scripts/catalog.mjs      the component catalog page
+examples/                order-events, checkout, retry-storm, failover, kafka-brokers, canary, platform (all patterns), catalog
 tests/                   node --test tests/*.test.mjs
 evals/evals.json         test prompts and what a good answer contains
 agents/openai.yaml       display name and short description for Codex

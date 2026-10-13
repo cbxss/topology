@@ -366,17 +366,19 @@ export function heightOf(node) {
   return node.h;
 }
 
-export function projectionOf(model, view, width = 640, camera) {
+export function projectionOf(model, view, width = 640, camera, { maxScale } = {}) {
   const { azimuth, elevation } = camera || VIEWS[view];
   const pts = extentOf(model, view);
   const unit = { origin: [0, 0], scale: 1, azimuth, elevation };
   const flat = pts.map((p) => k.iso(p, unit));
   const xs = flat.map(([x]) => x);
   const ys = flat.map(([, y]) => y);
-  const aspect = (Math.max(...ys) - Math.min(...ys)) / (Math.max(...xs) - Math.min(...xs));
+  const [spanX, spanY] = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
   const pad = 26;
-  const height = Math.round(Math.min(760, Math.max(240, (width - pad * 2) * aspect + pad * 2)));
-  return { P: k.fitProjection(pts, width, height, { pad, azimuth, elevation }), width, height };
+  // With a scale cap the height follows the content; otherwise the card keeps a sensible minimum.
+  const scale = Math.min(maxScale ?? Infinity, (width - pad * 2) / spanX);
+  const height = Math.round(Math.min(760, Math.max(maxScale ? 120 : 240, spanY * scale + pad * 2)));
+  return { P: k.fitProjection(pts, width, height, { pad, azimuth, elevation, maxScale }), width, height };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -824,8 +826,8 @@ const FLAT = {
 // One view: markup plus what the live page needs to move things in it.
 
 // `camera` ({ azimuth, elevation }) overrides the iso camera: the page uses it to morph between views.
-export function renderView(model, view, width = 640, camera) {
-  const { P, width: W, height: H } = projectionOf(model, view, width, camera);
+export function renderView(model, view, width = 640, camera, options) {
+  const { P, width: W, height: H } = projectionOf(model, view, width, camera, options);
   const features = model.features || {};
   const out = [];
   const iso = view === "iso" ? isoKit(P) : null;

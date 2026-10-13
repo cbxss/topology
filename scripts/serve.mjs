@@ -74,7 +74,7 @@ for (const dir of [...roots.map((path) => (statSync(path).isFile() ? dirname(pat
 const RELOAD = `<script>(()=>{const s=new EventSource("/events");s.addEventListener("reload",()=>location.reload());})();</script>`;
 
 function build(file, params) {
-  const args = [join(HERE, "build.mjs"), file, "--stdout"];
+  const args = file === "catalog" ? [join(HERE, "catalog.mjs"), "--stdout"] : [join(HERE, "build.mjs"), file, "--stdout"];
   if (params.get("theme") === "light") args.push("--light");
   if (params.get("view")) args.push("--view", params.get("view"));
   if (params.get("features")) args.push("--features", params.get("features"));
@@ -91,7 +91,7 @@ function build(file, params) {
 
 function index(specs) {
   const rows = [...specs].map(([name, file]) => `<li><a href="/s/${name}">${name}</a> · <a href="/s/${name}?theme=light">light</a> · <a href="/s/${name}?view=flat">2D</a> · <a href="/s/${name}?edit">edit</a> <small>${escape(relative(ROOT, file))}</small></li>`);
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Topology</title><style>body{background:#0b0b0b;color:#a3a3a3;font:14px/1.9 ui-monospace,Menlo,monospace;margin:56px auto;width:min(760px,100% - 32px)}a{color:#e6e6e6}small{color:#555;margin-left:8px}h1{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:#e6e6e6}</style><h1>Topology</h1><ul>${rows.join("")}</ul><p>Pages rebuild on every load and reload when a spec, layout file or the kit changes.</p>${RELOAD}`;
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Topology</title><style>body{background:#0b0b0b;color:#a3a3a3;font:14px/1.9 ui-monospace,Menlo,monospace;margin:56px auto;width:min(760px,100% - 32px)}a{color:#e6e6e6}small{color:#555;margin-left:8px}h1{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:#e6e6e6}</style><h1>Topology</h1><p><a href="/catalog">Component catalog</a> · <a href="/catalog?theme=light">light</a></p><ul>${rows.join("")}</ul><p>Pages rebuild on every load and reload when a spec, layout file or the kit changes.</p>${RELOAD}`;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -108,9 +108,9 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end(index(specs));
   }
-  const page = url.pathname.match(/^\/s\/([^/]+)$/);
+  const page = url.pathname === "/catalog" ? [null, "catalog"] : url.pathname.match(/^\/s\/([^/]+)$/);
   if (page && req.method === "GET") {
-    const file = specs.get(decodeURIComponent(page[1]));
+    const file = page[1] === "catalog" && url.pathname === "/catalog" ? "catalog" : specs.get(decodeURIComponent(page[1]));
     if (!file) return res.writeHead(404).end("no such spec");
     const started = Date.now();
     const key = `${file}?${[...url.searchParams].sort().join("&")}`;

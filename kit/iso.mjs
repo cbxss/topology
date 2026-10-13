@@ -35,7 +35,8 @@ const viewerOf = (P) => {
 };
 
 // Fit these world points into a width × height box with `pad` to spare.
-export function fitProjection(points, width, height, { pad = 24, azimuth = 45, elevation = 30 } = {}) {
+// `maxScale` caps the zoom, so a small scene stays at its natural size, centred.
+export function fitProjection(points, width, height, { pad = 24, azimuth = 45, elevation = 30, maxScale = Infinity } = {}) {
   const unit = { origin: [0, 0], scale: 1, azimuth, elevation };
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const point of points) {
@@ -45,7 +46,7 @@ export function fitProjection(points, width, height, { pad = 24, azimuth = 45, e
     y0 = Math.min(y0, y);
     y1 = Math.max(y1, y);
   }
-  const scale = Math.min((width - 2 * pad) / Math.max(x1 - x0, 1e-6), (height - 2 * pad) / Math.max(y1 - y0, 1e-6));
+  const scale = Math.min(maxScale, (width - 2 * pad) / Math.max(x1 - x0, 1e-6), (height - 2 * pad) / Math.max(y1 - y0, 1e-6));
   return { origin: [width / 2 - ((x0 + x1) / 2) * scale, height / 2 - ((y0 + y1) / 2) * scale], scale, azimuth, elevation };
 }
 
