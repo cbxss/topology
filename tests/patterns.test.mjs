@@ -57,3 +57,18 @@ test("compose rejects duplicate ids and needs the ids patterns depend on", () =>
   assert.throws(() => cacheAside("api", {}), /needs `db`/);
   assert.throws(() => canary("c", {}), /needs `router`/);
 });
+
+test("crudService upserts and reads; outbox publishes every committed change", async () => {
+  const { crudService, outbox } = await import("../kit/patterns.mjs");
+  const spec = compose(
+    { records: { users: { keys: 30 } } },
+    { nodes: [{ id: "app", kind: "client", emit: { "POST /users": 4, "GET /users/:id": 8 } }, { id: "pg", kind: "db", tables: { users: { key: "id" } } }] },
+    crudService("users-api", { table: "users", db: "pg" }),
+    outbox("cdc", { db: "pg", topic: "users.changes" }),
+    link("app", "users-api"),
+  );
+  const sim = run(spec, 20);
+  assert.ok(sim.tablesOf("pg")[0].count > 10, "rows written");
+  assert.ok(sim.logs.get("users.changes").appended > 20, "changes published");
+  assert.ok(sim.routesOf("users-api").some((r) => r.name === "GET /users/:id"));
+});

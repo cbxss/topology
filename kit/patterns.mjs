@@ -56,6 +56,34 @@ export function replicatedDb(id, { label = id, replicas = 1, at } = {}) {
   return { nodes: [{ id, kind: "db", role: "primary", label, ...place(at, 0, 0) }, ...extra], edges: extra.map((node) => ({ from: id, to: node.id, kind: "replication" })), in: id, out: [id] };
 }
 
+// A service over one table: POST upserts, GET selects (from `replica` when given, which is
+// the classic read-your-writes trap), DELETE deletes. Pass `routes` to pick or rename.
+export function crudService(id, { label = id, table, key = "id", db, replica, routes = ["POST", "GET", "DELETE"], path = `/${table}`, ms = 6, replicas = 2, at } = {}) {
+  if (!table || !db) throw new Error("crudService: needs `table` and `db`");
+  const endpoints = {};
+  if (routes.includes("POST")) endpoints[`POST ${path}`] = { ms, calls: [{ to: db, op: "upsert", table }] };
+  if (routes.includes("GET")) endpoints[`GET ${path}/:${key}`] = { ms: Math.max(1, ms / 3), calls: [{ to: replica || db, op: "select", table }] };
+  if (routes.includes("DELETE")) endpoints[`DELETE ${path}/:${key}`] = { ms, calls: [{ to: db, op: "delete", table }] };
+  const edges = [{ from: id, to: db }];
+  if (replica && routes.includes("GET")) edges.push({ from: id, to: replica });
+  return { nodes: [{ id, kind: "service", label, replicas, endpoints, ...place(at, 0, 0) }], edges, in: id, out: [db, ...(replica ? [replica] : [])] };
+}
+
+// The transactional outbox / change data capture: a connector tails the database's WAL and
+// publishes every committed change to a topic, so the write and the event can't disagree.
+export function outbox(id, { db, topic, partitions = 3, label = `${id}-cdc`, topicLabel = topic, at } = {}) {
+  if (!db || !topic) throw new Error("outbox: needs `db` and `topic`");
+  return {
+    nodes: [
+      { id, kind: "worker", label, replicas: 1, ...place(at, 0, 0) },
+      { id: topic, kind: "kafka", partitions, label: topicLabel, ...place(at, 1.2, 0) },
+    ],
+    edges: [{ from: db, to: id, kind: "replication" }, { from: id, to: topic }],
+    in: db,
+    out: topic,
+  };
+}
+
 // A region: load balancer → API → database (optionally a cache in front and a replica
 // behind), on a region plate. `in` is the load balancer, `out` the API.
 export function region(id, { label = id, api = {}, db = {}, cache = false, replica = false, at } = {}) {

@@ -152,7 +152,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   log(story ? `nodes at ${seconds}s:` : "nodes:");
   for (const node of model.nodes) {
     log(`  ${sim.statsOf(node.id)}`);
-    for (const route of sim.routesOf(node.id)) log(`      ${route.name}  ${formatRate(route.rate, per)} · p50 ${formatMs(route.p50)} · p99 ${formatMs(route.p99)}${route.errors ? ` · ${formatRate(route.errors, per)} errors` : ""}`);
+    for (const route of sim.routesOf(node.id)) if (route.rate > 0) log(`      ${route.name}  ${formatRate(route.rate, per)} · p50 ${formatMs(route.p50)} · p99 ${formatMs(route.p99)}${route.errors ? ` · ${formatRate(route.errors, per)} errors` : ""}`);
   }
   // An endpoint's calls ride edges: each must have one.
   for (const node of model.nodes) for (const [name, endpoint] of Object.entries(node.endpoints || {})) for (const call of endpoint.calls || [])

@@ -619,7 +619,8 @@ function createSim(spec) {
     if (!node.up) return;
     if (isLog(node)) return respond(job, true);
     if (node.errorRate && rand() < node.errorRate) return respond(job, false);
-    if (job.entry) return applyEntry(job);
+    // A database replica applies WAL entries; anything else (a CDC connector) passes them on.
+    if (job.entry && node.store) return applyEntry(job);
     const op = tableOp(job);
     if (op) return respond(job, commit(job, op));
     forward(job);
