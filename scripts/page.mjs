@@ -69,6 +69,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   // each wrapped in its own scope so none of their names meet the live code's.
   if (features.morph) script += scoped("iso.mjs", "k") + scoped("topo.mjs", "TOPO");
   script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
+  if (features.trace) script += "\n" + readFileSync(join(KIT, "topo-trace.js"), "utf8");
   if (model.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
   if (data.edit) script += "\n" + readFileSync(join(KIT, "topo-edit.js"), "utf8");
   const html = k.pageHtml({ title: model.title, theme, body, script, width: Math.max(rendered.iso.width, 650) + 48 });
@@ -182,6 +183,39 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
     for (const warning of warnings) log(`  ${warning}`);
   } else log("check passed");
   return { model, sim, warnings };
+}
+
+// One request on `endpoint` followed end to end, as text: each span indented under the call
+// that made it, with its model-time duration and a bar drawn to scale.
+export function traceText(spec, endpoint, { featureLayers = [], warmup = 5 } = {}) {
+  const model = modelOf(spec, featureLayers);
+  const sim = createSim(simSpec(model));
+  sim.quiet = true;
+  for (let i = 0; i < warmup * 60; i++) sim.step(1 / 60);
+  sim.follow(endpoint);
+  let after = 0;
+  for (let i = 0; i < 60 * 60 && after < 90; i++) {
+    sim.step(1 / 60);
+    if (sim.tracing.done) after++;
+  }
+  const { spans } = sim.tracing;
+  if (!spans.length) return [`no request on ${endpoint || "any route"} started within a minute`];
+  const label = (id) => model.byId.get(id)?.label || id;
+  const total = Math.max(...spans.map((s) => (s.start || 0) + (s.total || 0)), 0.001);
+  const width = 28;
+  const depth = (s) => (s.parent == null ? 0 : depth(spans[s.parent]) + 1);
+  const order = [];
+  const walk = (parent) => spans.filter((s) => s.parent === parent).forEach((s) => (order.push(s), walk(s.id)));
+  walk(null);
+  const lines = [`${spans[0].label || endpoint || "request"}: ${formatMs(spans[0].total ?? 0)}${spans[0].ok === false ? " (failed)" : ""}`];
+  for (const s of order) {
+    const from = Math.round(((s.start || 0) / total) * width);
+    const len = Math.max(1, Math.round(((s.total || 0) / total) * width));
+    const bar = " ".repeat(from) + "█".repeat(len);
+    const name = `${"  ".repeat(depth(s))}${label(s.node)}${s.label && s.parent != null ? `  ${s.label}` : ""}${s.async ? "  (async)" : ""}`;
+    lines.push(`  ${name.padEnd(46)} ${(s.done ? formatMs(s.total) : "…").padStart(7)}  ${bar}`);
+  }
+  return lines;
 }
 
 function storyWarnings(model, story) {

@@ -13,7 +13,7 @@ const inspector = (() => {
   panel.className = "tp-inspect";
   panel.hidden = true;
   panel.setAttribute("aria-live", "polite");
-  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
+  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-follow" hidden>Follow a request</button><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
   stage.after(panel);
   const $ = (sel) => panel.querySelector(sel);
   const tip = document.createElement("div");
@@ -82,6 +82,8 @@ const inspector = (() => {
     write("name", $(".tp-ins-name"), esc(spec.label || open));
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
+    // Following needs requests through this node: offered once it has seen some.
+    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit));
     write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
     panel.toggleAttribute("data-down", !node.up);
   }
@@ -114,6 +116,10 @@ const inspector = (() => {
     if (!tip.hidden && focus) drawTip(focus);
   });
   $(".tp-ins-close").addEventListener("click", close);
+  $(".tp-ins-follow").addEventListener("click", () => {
+    const id = open;
+    tracer.follow(routeFilter || sim.routesOf(id)[0]?.name);
+  });
   $(".tp-ins-fail").addEventListener("click", () => {
     if (open) toggle(open);
     render();

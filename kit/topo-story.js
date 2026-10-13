@@ -40,6 +40,8 @@
     while (next.time < t - 1e-9) next.step(1 / 60);
     next.quiet = false;
     resetVisuals(next);
+    inspector.close();
+    if (typeof tracer !== "undefined") tracer.stop();
     mode = "story";
     render();
   }
@@ -94,6 +96,18 @@
       }
     }
     render();
+  });
+  // Steps can open detail at the right moment: { inspect: "pg" } / { inspect: false },
+  // { follow: "POST /orders" | true } / { follow: false }.
+  hooks.step.push((index) => {
+    const step = story.steps.find((s) => s.index === index);
+    if (!step || mode !== "story") return;
+    if (step.inspect === false) inspector.close();
+    else if (step.inspect) inspector.show(step.inspect);
+    if (typeof tracer !== "undefined") {
+      if (step.follow === false) tracer.stop();
+      else if (step.follow) tracer.follow(step.follow === true ? null : step.follow);
+    }
   });
   hooks.takeover.push(() => {
     if (mode !== "story") return;

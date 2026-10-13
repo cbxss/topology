@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { buildPage, check, loadSpec, nameOf, svgOf } from "./page.mjs";
+import { buildPage, check, loadSpec, nameOf, svgOf, traceText } from "./page.mjs";
 
 const argv = process.argv.slice(2);
 if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
@@ -16,6 +16,7 @@ if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
   --features <list>   turn tool features on or off: "trails,-morph" (see kit/topo-features.mjs)
   --no-<feature>      the same, for one feature
   --edit              include the drag-to-arrange editor (serve.mjs uses this)
+  --trace <route>     follow one request on that route (e.g. "POST /orders") and print its spans
   --check [seconds]   run the model headless for that long (default 30) and print what the readout
                       will say, per node, plus warnings: growing lag, drops, idle edges, layout.
                       Writes nothing.
@@ -32,6 +33,11 @@ const value = (name, fallback) => {
 const file = resolve(argv[0]);
 const spec = await loadSpec(file);
 const featureLayers = [[value("--features", ""), ...argv.filter((arg) => arg.startsWith("--no-")).map((arg) => "-" + arg.slice(5))].filter(Boolean).join(",")];
+
+if (flag("--trace")) {
+  for (const line of traceText(spec, value("--trace", ""), { featureLayers })) console.log(line);
+  process.exit(0);
+}
 
 if (flag("--check")) {
   check(spec, { seconds: Number(value("--check", 30)), featureLayers });

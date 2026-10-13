@@ -6,7 +6,9 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [], select: [], focus: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: [] };
+// Slowed while following a request.
+let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
 let routeFilter = null;
 let paused = false;
@@ -107,7 +109,8 @@ function drawPackets() {
       slot.tail = tail;
       slot.trail.setAttribute("d", tail);
     }
-    const dim = routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    const traced = sim.tracing?.msgId;
+    const dim = traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
@@ -134,6 +137,7 @@ function light(id, until) {
 function events(now) {
   for (const event of sim.events) {
     if (event.type === "handle") light(ledFor(event), now + 90);
+    else if (event.type === "step") for (const hook of hooks.step) hook(event.index);
     else if (event.type === "flag") {
       if (flagPanel) light(`${flagPanel.id}:0`, now + 600);
     } else if (event.type === "fail" || event.type === "recover") {
@@ -388,7 +392,7 @@ let statusClock = 0;
 function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
   last = now;
-  if (!paused) sim.step(dt * (window.__topoSpeed ?? 1));
+  if (!paused) sim.step(dt * timeScale * (window.__topoSpeed ?? 1));
   events(now);
   for (const hook of hooks.tick) hook(dt);
   logClock += dt;

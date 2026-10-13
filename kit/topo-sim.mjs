@@ -273,6 +273,19 @@ export function createSim(spec) {
 
   function startJob(node, msg, call, extra = {}) {
     const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
+    const t = sim.tracing;
+    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint)) {
+      t.msgId = msg.id;
+      t.endpoint = msg.endpoint;
+      t.started = sim.time;
+    }
+    if (t && t.msgId === msg.id) {
+      // Where this span starts in model time: the parent's own time plus any stages it had
+      // finished, plus the network on the way.
+      const parent = call ? call.job : extra.parentJob;
+      job.span = { id: t.spans.length, parent: parent?.span?.id ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      t.spans.push(job.span);
+    }
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
@@ -354,6 +367,8 @@ export function createSim(spec) {
       if (!ok) route.errors.push(sim.time);
       if (job.root && node.answers) route.roots.push({ at: sim.time, ms, ok });
     }
+    if (job.span) Object.assign(job.span, { done: true, ok, total: ms, own, end: sim.time });
+    if (job.root && job.span && sim.tracing) sim.tracing.done = true;
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
@@ -427,7 +442,7 @@ export function createSim(spec) {
       if (edge.sync) {
         job.waiting++;
         callOut(job, edge, 0);
-      } else launch(edge, "request", { msg: job.msg });
+      } else launch(edge, "request", { msg: job.msg, parentJob: job });
     }
   }
 
@@ -516,7 +531,7 @@ export function createSim(spec) {
       else if (edge.sync) {
         job.waiting++;
         callOut(job, edge, 0, 0, call);
-      } else launch(edge, "request", { msg: job.msg, op: call });
+      } else launch(edge, "request", { msg: job.msg, op: call, parentJob: job });
     }
   }
   function advance(job) {
@@ -548,6 +563,7 @@ export function createSim(spec) {
       if (!row) {
         stats.misses.push(sim.time);
         rowEvent(node, "miss", table, key);
+        if (job.span) job.span.label = `select ${op.table}/${key} → not found`;
         return true;
       }
       // On a replica: stale if the primary has a newer version, or if this same request
@@ -556,9 +572,11 @@ export function createSim(spec) {
       const stale = newest > row.version;
       if (stale) stats.stale.push(sim.time);
       rowEvent(node, "select", table, key, { version: row.version, stale });
+      if (job.span) job.span.label = `select ${op.table}/${key} → v${row.version}${stale ? " (stale)" : ""}`;
       return true;
     }
     if (op.op === "insert" && row) {
+      if (job.span) job.span.label = `insert ${op.table}/${key} → conflict (v${row.version} exists)`;
       stats.conflicts.push(sim.time);
       rowEvent(node, "conflict", table, key, { version: row.version });
       return false;
@@ -588,7 +606,8 @@ export function createSim(spec) {
     node.wal.recent = [...node.wal.recent.slice(-23), entry];
     node.wal.applied = entry.lsn;
     rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
-    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry });
+    if (job.span) job.span.label = `${op.op} ${op.table}/${key} → ${kind} v${version}`;
+    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry, parentJob: job });
     return true;
   }
 
@@ -650,8 +669,9 @@ export function createSim(spec) {
       }
       log.end[p]++;
       log.appended++;
+      return startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob });
   }
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
@@ -954,6 +974,11 @@ export function createSim(spec) {
     const n = Math.max(1, Math.ceil(dt / (1 / 60)));
     for (let i = 0; i < n; i++) step(dt / n);
   };
+  // Follow one request: the next one started on `endpoint` (any, if omitted). Its spans fill
+  // sim.tracing.spans as it moves; sim.tracing.done once its root answers.
+  sim.follow = (endpoint) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null });
+  sim.unfollow = () => (sim.tracing = null);
+  sim.tracedId = (packet) => (packet.msg || packet.call?.job.msg)?.id;
   sim.setUp = setUp;
   sim.setBroker = setBroker;
   sim.readable = readable;

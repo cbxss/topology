@@ -185,9 +185,30 @@ button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 v
 .tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
 .tp-tip b{color:var(--tp-strong);font-weight:500}
 .tp-tip i{color:var(--tp-red);font-style:normal}
-.k-corner[data-corner="hint"]{max-width:46%;overflow:hidden;text-overflow:ellipsis}
-.k-corner[data-corner="readout"]{max-width:56%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="hint"]{max-width:50%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="readout"]{max-width:50%;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
+.tp-trace{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lit);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-trace[hidden]{display:none}
+.tp-trace header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-trace header button{all:unset;cursor:pointer}
+.tp-tr-name{color:var(--tp-strong);font-weight:600}
+.tp-tr-stat{flex:1;color:var(--tp-muted)}
+.tp-tr-again,.tp-ins-follow{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-follow[hidden]{display:none}
+.tp-tr-body{display:grid;gap:2px;margin-top:10px}
+.tp-span{display:grid;grid-template-columns:minmax(0,1.3fr) 56px minmax(0,1fr);gap:10px;align-items:center}
+.tp-span-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-span-name small{color:var(--tp-muted);font-size:10px}
+.tp-span-ms{text-align:right;font-variant-numeric:tabular-nums}
+.tp-span-bar{position:relative;height:8px;background:var(--tp-shade-1)}
+.tp-span-bar i{position:absolute;top:0;bottom:0;background:var(--tp-mid)}
+.tp-span[data-open] .tp-span-bar i{background:var(--tp-amber)}
+.tp-span[data-bad] .tp-span-bar i{background:var(--tp-red)}
+.tp-stage[data-tracing] .tp-node:not([data-traced]){opacity:.3}
+.tp-stage[data-tracing] .tp-edge:not([data-traced]) .k-line{stroke:var(--tp-faint)}
+.tp-stage[data-tracing] .tp-edge[data-traced] .k-line{stroke:var(--tp-hi)}
+@media (max-width:560px){.tp-span{grid-template-columns:minmax(0,1fr) 50px}.tp-span-bar{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -492,6 +513,19 @@ function createSim(spec) {
 
   function startJob(node, msg, call, extra = {}) {
     const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
+    const t = sim.tracing;
+    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint)) {
+      t.msgId = msg.id;
+      t.endpoint = msg.endpoint;
+      t.started = sim.time;
+    }
+    if (t && t.msgId === msg.id) {
+      // Where this span starts in model time: the parent's own time plus any stages it had
+      // finished, plus the network on the way.
+      const parent = call ? call.job : extra.parentJob;
+      job.span = { id: t.spans.length, parent: parent?.span?.id ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      t.spans.push(job.span);
+    }
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
@@ -573,6 +607,8 @@ function createSim(spec) {
       if (!ok) route.errors.push(sim.time);
       if (job.root && node.answers) route.roots.push({ at: sim.time, ms, ok });
     }
+    if (job.span) Object.assign(job.span, { done: true, ok, total: ms, own, end: sim.time });
+    if (job.root && job.span && sim.tracing) sim.tracing.done = true;
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
@@ -646,7 +682,7 @@ function createSim(spec) {
       if (edge.sync) {
         job.waiting++;
         callOut(job, edge, 0);
-      } else launch(edge, "request", { msg: job.msg });
+      } else launch(edge, "request", { msg: job.msg, parentJob: job });
     }
   }
 
@@ -735,7 +771,7 @@ function createSim(spec) {
       else if (edge.sync) {
         job.waiting++;
         callOut(job, edge, 0, 0, call);
-      } else launch(edge, "request", { msg: job.msg, op: call });
+      } else launch(edge, "request", { msg: job.msg, op: call, parentJob: job });
     }
   }
   function advance(job) {
@@ -767,6 +803,7 @@ function createSim(spec) {
       if (!row) {
         stats.misses.push(sim.time);
         rowEvent(node, "miss", table, key);
+        if (job.span) job.span.label = `select ${op.table}/${key} → not found`;
         return true;
       }
       // On a replica: stale if the primary has a newer version, or if this same request
@@ -775,9 +812,11 @@ function createSim(spec) {
       const stale = newest > row.version;
       if (stale) stats.stale.push(sim.time);
       rowEvent(node, "select", table, key, { version: row.version, stale });
+      if (job.span) job.span.label = `select ${op.table}/${key} → v${row.version}${stale ? " (stale)" : ""}`;
       return true;
     }
     if (op.op === "insert" && row) {
+      if (job.span) job.span.label = `insert ${op.table}/${key} → conflict (v${row.version} exists)`;
       stats.conflicts.push(sim.time);
       rowEvent(node, "conflict", table, key, { version: row.version });
       return false;
@@ -807,7 +846,8 @@ function createSim(spec) {
     node.wal.recent = [...node.wal.recent.slice(-23), entry];
     node.wal.applied = entry.lsn;
     rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
-    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry });
+    if (job.span) job.span.label = `${op.op} ${op.table}/${key} → ${kind} v${version}`;
+    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry, parentJob: job });
     return true;
   }
 
@@ -869,8 +909,9 @@ function createSim(spec) {
       }
       log.end[p]++;
       log.appended++;
+      return startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob });
   }
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
@@ -1173,6 +1214,11 @@ function createSim(spec) {
     const n = Math.max(1, Math.ceil(dt / (1 / 60)));
     for (let i = 0; i < n; i++) step(dt / n);
   };
+  // Follow one request: the next one started on `endpoint` (any, if omitted). Its spans fill
+  // sim.tracing.spans as it moves; sim.tracing.done once its root answers.
+  sim.follow = (endpoint) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null });
+  sim.unfollow = () => (sim.tracing = null);
+  sim.tracedId = (packet) => (packet.msg || packet.call?.job.msg)?.id;
   sim.setUp = setUp;
   sim.setBroker = setBroker;
   sim.readable = readable;
@@ -2831,9 +2877,30 @@ button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 v
 .tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
 .tp-tip b{color:var(--tp-strong);font-weight:500}
 .tp-tip i{color:var(--tp-red);font-style:normal}
-.k-corner[data-corner="hint"]{max-width:46%;overflow:hidden;text-overflow:ellipsis}
-.k-corner[data-corner="readout"]{max-width:56%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="hint"]{max-width:50%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="readout"]{max-width:50%;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
+.tp-trace{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lit);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-trace[hidden]{display:none}
+.tp-trace header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-trace header button{all:unset;cursor:pointer}
+.tp-tr-name{color:var(--tp-strong);font-weight:600}
+.tp-tr-stat{flex:1;color:var(--tp-muted)}
+.tp-tr-again,.tp-ins-follow{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-follow[hidden]{display:none}
+.tp-tr-body{display:grid;gap:2px;margin-top:10px}
+.tp-span{display:grid;grid-template-columns:minmax(0,1.3fr) 56px minmax(0,1fr);gap:10px;align-items:center}
+.tp-span-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-span-name small{color:var(--tp-muted);font-size:10px}
+.tp-span-ms{text-align:right;font-variant-numeric:tabular-nums}
+.tp-span-bar{position:relative;height:8px;background:var(--tp-shade-1)}
+.tp-span-bar i{position:absolute;top:0;bottom:0;background:var(--tp-mid)}
+.tp-span[data-open] .tp-span-bar i{background:var(--tp-amber)}
+.tp-span[data-bad] .tp-span-bar i{background:var(--tp-red)}
+.tp-stage[data-tracing] .tp-node:not([data-traced]){opacity:.3}
+.tp-stage[data-tracing] .tp-edge:not([data-traced]) .k-line{stroke:var(--tp-faint)}
+.tp-stage[data-tracing] .tp-edge[data-traced] .k-line{stroke:var(--tp-hi)}
+@media (max-width:560px){.tp-span{grid-template-columns:minmax(0,1fr) 50px}.tp-span-bar{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -2875,7 +2942,9 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [], select: [], focus: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: [] };
+// Slowed while following a request.
+let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
 let routeFilter = null;
 let paused = false;
@@ -2976,7 +3045,8 @@ function drawPackets() {
       slot.tail = tail;
       slot.trail.setAttribute("d", tail);
     }
-    const dim = routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    const traced = sim.tracing?.msgId;
+    const dim = traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
@@ -3003,6 +3073,7 @@ function light(id, until) {
 function events(now) {
   for (const event of sim.events) {
     if (event.type === "handle") light(ledFor(event), now + 90);
+    else if (event.type === "step") for (const hook of hooks.step) hook(event.index);
     else if (event.type === "flag") {
       if (flagPanel) light(`${flagPanel.id}:0`, now + 600);
     } else if (event.type === "fail" || event.type === "recover") {
@@ -3257,7 +3328,7 @@ let statusClock = 0;
 function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
   last = now;
-  if (!paused) sim.step(dt * (window.__topoSpeed ?? 1));
+  if (!paused) sim.step(dt * timeScale * (window.__topoSpeed ?? 1));
   events(now);
   for (const hook of hooks.tick) hook(dt);
   logClock += dt;
@@ -3383,7 +3454,7 @@ const inspector = (() => {
   panel.className = "tp-inspect";
   panel.hidden = true;
   panel.setAttribute("aria-live", "polite");
-  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
+  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-follow" hidden>Follow a request</button><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
   stage.after(panel);
   const $ = (sel) => panel.querySelector(sel);
   const tip = document.createElement("div");
@@ -3452,6 +3523,8 @@ const inspector = (() => {
     write("name", $(".tp-ins-name"), esc(spec.label || open));
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
+    // Following needs requests through this node: offered once it has seen some.
+    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit));
     write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
     panel.toggleAttribute("data-down", !node.up);
   }
@@ -3484,6 +3557,10 @@ const inspector = (() => {
     if (!tip.hidden && focus) drawTip(focus);
   });
   $(".tp-ins-close").addEventListener("click", close);
+  $(".tp-ins-follow").addEventListener("click", () => {
+    const id = open;
+    tracer.follow(routeFilter || sim.routesOf(id)[0]?.name);
+  });
   $(".tp-ins-fail").addEventListener("click", () => {
     if (open) toggle(open);
     render();
@@ -3516,6 +3593,118 @@ const inspector = (() => {
 
   window.__topo.inspector = { show, close, get open() { return open; } };
   return { show, close, sections, render, get open() { return open; } };
+})();
+
+// Follow one request: level 3 of the disclosure ladder. Inlined after topo-inspect.js when
+// the `trace` feature is on. The next request on a route is picked; time slows to a quarter;
+// its packets and path stay lit while everything else dims; and a timeline under the card
+// lists each step, indented under the call that made it, with its model-time duration.
+const tracer = (() => {
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const labelOf = (id) => DATA.spec.nodes.find((node) => node.id === id)?.label || id;
+  const ms = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}s` : n >= 10 ? `${n.toFixed(0)}ms` : `${n.toFixed(1)}ms`);
+  const panel = document.createElement("section");
+  panel.className = "tp-trace";
+  panel.hidden = true;
+  panel.setAttribute("aria-live", "polite");
+  panel.innerHTML = `<header><span class="tp-ins-kind">following</span><strong class="tp-tr-name"></strong><span class="tp-tr-stat"></span><button type="button" class="tp-tr-again">Another</button><button type="button" class="tp-ins-close" aria-label="Stop following">×</button></header><div class="tp-tr-body"></div>`;
+  stage.after(panel);
+  let endpoint = null;
+  let active = false;
+  let lingering = 0;
+
+  function follow(route) {
+    inspector.close();
+    endpoint = route || null;
+    sim.follow(endpoint);
+    active = true;
+    lingering = 0;
+    timeScale = 0.25;
+    stage.setAttribute("data-tracing", "");
+    panel.hidden = false;
+    render();
+  }
+  function stop() {
+    if (!active && panel.hidden) return;
+    active = false;
+    sim.unfollow();
+    timeScale = 1;
+    panel.hidden = true;
+    stage.removeAttribute("data-tracing");
+    for (const v of viewList) {
+      for (const el of v.nodes.values()) el.removeAttribute("data-traced");
+      v.edges.forEach((el) => el.removeAttribute("data-traced"));
+    }
+  }
+
+  function render() {
+    const t = sim.tracing;
+    if (!t) return;
+    const spans = t.spans;
+    const root = spans[0];
+    panel.querySelector(".tp-tr-name").textContent = t.endpoint || endpoint || "a request";
+    panel.querySelector(".tp-tr-stat").textContent = !root ? "waiting for the next one…" : t.done ? `${ms(root.total)}${root.ok === false ? " · failed" : ""}` : "in flight…";
+    // Light the path: every node with a span, and the edges between parent and child spans.
+    const nodes = new Set(spans.map((s) => s.node));
+    const edges = new Set();
+    for (const s of spans) if (s.parent != null) {
+      const from = spans[s.parent].node;
+      const index = DATA.spec.edges.findIndex((e) => e.from === from && e.to === s.node);
+      if (index >= 0) edges.add(index);
+    }
+    for (const v of viewList) {
+      for (const [id, el] of v.nodes) el.toggleAttribute("data-traced", nodes.has(id));
+      v.edges.forEach((el, index) => el.toggleAttribute("data-traced", edges.has(index)));
+    }
+    if (!root) return void (panel.querySelector(".tp-tr-body").innerHTML = "");
+    const total = Math.max(...spans.map((s) => (s.start || 0) + (s.total || 0)), root.total || 0, 0.001);
+    const order = [];
+    const depth = new Map();
+    const walk = (parent, d) => spans.filter((s) => s.parent === parent).forEach((s) => (order.push(s), depth.set(s.id, d), walk(s.id, d + 1)));
+    walk(null, 0);
+    panel.querySelector(".tp-tr-body").innerHTML = order
+      .map((s) => {
+        const left = ((s.start || 0) / total) * 100;
+        const width = s.done ? Math.max(0.8, ((s.total || 0) / total) * 100) : 0.8;
+        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>`;
+      })
+      .join("");
+  }
+
+  let clock = 0;
+  hooks.tick.push((dt) => {
+    if (!active) return;
+    clock += dt;
+    if (clock < 0.12) return;
+    clock = 0;
+    render();
+    // Once the request has answered and its async steps have landed, return to normal speed
+    // but keep the timeline up until the reader closes it.
+    const t = sim.tracing;
+    if (t?.done && t.spans.every((s) => s.done)) {
+      lingering += 0.12;
+      if (lingering > 0.6) {
+        timeScale = 1;
+        active = false;
+      }
+    }
+  });
+  hooks.key.push((event) => {
+    if (event.key === "Escape" && !panel.hidden) {
+      stop();
+      return true;
+    }
+    if ((event.key === "t" || event.key === "T") && focus) {
+      follow(sim.routesOf(focus)[0]?.name);
+      return true;
+    }
+    return false;
+  });
+  hooks.select.push(() => !panel.hidden && stop());
+  panel.querySelector(".tp-ins-close").addEventListener("click", stop);
+  panel.querySelector(".tp-tr-again").addEventListener("click", () => follow(endpoint));
+  window.__topo.tracer = { follow, stop, get active() { return active; } };
+  return { follow, stop, get active() { return active; } };
 })();
 
 // The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
@@ -3560,6 +3749,8 @@ const inspector = (() => {
     while (next.time < t - 1e-9) next.step(1 / 60);
     next.quiet = false;
     resetVisuals(next);
+    inspector.close();
+    if (typeof tracer !== "undefined") tracer.stop();
     mode = "story";
     render();
   }
@@ -3614,6 +3805,18 @@ const inspector = (() => {
       }
     }
     render();
+  });
+  // Steps can open detail at the right moment: { inspect: "pg" } / { inspect: false },
+  // { follow: "POST /orders" | true } / { follow: false }.
+  hooks.step.push((index) => {
+    const step = story.steps.find((s) => s.index === index);
+    if (!step || mode !== "story") return;
+    if (step.inspect === false) inspector.close();
+    else if (step.inspect) inspector.show(step.inspect);
+    if (typeof tracer !== "undefined") {
+      if (step.follow === false) tracer.stop();
+      else if (step.follow) tracer.follow(step.follow === true ? null : step.follow);
+    }
   });
   hooks.takeover.push(() => {
     if (mode !== "story") return;
