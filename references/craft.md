@@ -79,7 +79,7 @@ Each of these has an example to copy:
 
 ## Anti-patterns
 
-- **A diagram with nothing to try.** If clicking any node does nothing interesting, the figure has no question. Find the one failure worth showing and tune for it.
+- **A diagram with nothing to try.** If inspecting, following or explicitly failing a node reveals nothing interesting, the figure has no question. Find the one failure worth showing and tune for it.
 - **Invented numbers presented as real.** Say in the caption which numbers are illustrative.
 - **Everything in one figure.** Past ~14 nodes the routing tangles and the packets turn to noise. Split by question.
 - **Zones that overlap.** A non-member inside a group's box reads as a member. Rearrange rows.
@@ -93,3 +93,11 @@ Each of these has an example to copy:
 4. `heightOf` if it is taller than its `KINDS.h`, and `ledFor` in `kit/topo-live.js` if its LEDs aren't `<node>:0`.
 5. Add it to `KINDS` in `scripts/catalog.mjs` so it shows in the catalog, with a one-line description and its typical fields.
 6. If it behaves differently (a new kind of buffer, say), the behaviour goes in `kit/topo-sim.mjs`, and `--check` must still read true.
+
+## Disclosure and evidence
+
+Use three levels: the topology overview, a selected node's inspector, then a followed request. Keep route lists, rows, versions and WAL details out of the overview. Click or Enter inspects; F or the inspector button fails/restores; broker units toggle directly. A route selection filters traffic. Follow reveals the sequence and model-time spans.
+
+Narrate the detail when opening it (`inspect` or `follow`), and close it with `false` before moving on. Use orders-api for endpoint inspection, read-your-writes for replica freshness, idempotent-retries for retry outcomes, and lost-update for locking. Check stale-read/conflict/lost-update rates and a representative trace before writing causal claims.
+
+Captions must disclose invented rates, packet scaling, synthetic keys and simplifications: probabilistic cache misses are not a cache implementation; upsert preserves row content but still writes versions; row locks and version races are not full SQL transactions. Missing replica rows can be stale too. Packet travel affects ordering, so lag must be tuned against the final layout. Do not promise an exact version in narration unless its trace establishes it.

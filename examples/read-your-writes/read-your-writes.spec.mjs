@@ -5,8 +5,8 @@ export default {
   title: "Read your writes",
   fig: "Fig 9",
   caption:
-    "PUT /profile upserts the profile into the primary, then reads it back to return it. While the replica keeps up, reading back from it is fine. When it falls behind (it applies the WAL 1.5 s late), the read-back returns the old version: a stale read, the user's change seems lost. The fix reads your own write from the primary.",
-  sim: { per: 20, seed: 21 },
+    "Illustrative workload: 6 requests/s over 30 keys. PUT /profile upserts the profile into the primary, then reads it back to return it. Even at low lag, concurrent writes can race replica reads. When it falls behind (it applies the WAL 4 s late), the read-back returns the old version: a stale read, the user's change seems lost. The fix reads your own write from the primary.",
+  sim: { seed: 21 },
   grid: [150, 80],
   records: { profiles: { key: "userId", keys: 30, fields: { plan: ["free", "pro", "team"] } } },
   nodes: [
@@ -34,9 +34,9 @@ export default {
       { name: "fixed", at: 24 },
     ],
     steps: [
-      { at: 1, say: "Each PUT /profile writes to the primary, then reads the profile back from the replica to return it. The replica applies the WAL almost at once." },
-      { phase: "replica behind", set: { replica: { lag: 1.5 } }, inspect: "replica", say: "The replica starts applying the WAL 1.5 s late (amber: rows behind the primary). The read-back often gets the previous version." },
-      { phase: "replica behind", after: 5, follow: "PUT /profile", say: "Follow one request: the upsert writes v5 to the primary, the read-back from the replica returns v4, marked stale." },
+      { at: 1, say: "Each PUT /profile writes to the primary, then reads the profile back from the replica to return it. The replica applies the WAL almost at once, though concurrent writes can still race reads." },
+      { phase: "replica behind", set: { replica: { lag: 4 } }, inspect: "replica", say: "The replica starts applying the WAL 4 s late (amber: rows behind the primary). The read-back often gets the previous version." },
+      { phase: "replica behind", after: 5, follow: "PUT /profile", say: "Follow one request: the upsert writes a new version to the primary; the read-back from the replica returns an older version or a missing row, marked stale." },
       { phase: "fixed", follow: false, inspect: false, set: { app: { emit: { "PUT /profile (fixed)": 6 } } }, say: "The fix: read your own write from the primary. The replica is still behind, but nobody reads it straight after writing." },
       { phase: "fixed", after: 8, set: { replica: { lag: 0 } }, say: "The replica catches up." },
     ],

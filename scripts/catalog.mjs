@@ -4,7 +4,7 @@
 //   node scripts/catalog.mjs [--light] [--stdout] [--out file]
 //
 // Default output: examples/catalog/catalog.html (or catalog-light.html).
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../kit/iso.mjs";
@@ -73,6 +73,17 @@ const PATTERNS = [
   canary("checkout", { router: "lb", rollout: 0.25 }),
 )`],
 ];
+
+// Reuse the example sources so the catalog cannot drift from the runnable stories.
+for (const [name, note] of [
+  ["orders-api", "Endpoint mixes: inspect per-route latency, synthetic rows and WAL."],
+  ["read-your-writes", "Sequential write/read calls expose stale replica reads, then primary read-back."],
+  ["idempotent-retries", "Retries keep a record key: INSERT conflicts, UPSERT preserves row content."],
+  ["lost-update", "Hot-key read-modify-write races; row locks trade lost updates for waiting."],
+]) {
+  const source = readFileSync(join(ROOT, "examples", name, `${name}.spec.mjs`), "utf8");
+  PATTERNS.push([name, note, source.split("export default ")[1].trim().replace(/;$/, "")]);
+}
 
 const fmt = (value) => (typeof value === "string" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(fmt).join(", ")}]` : value && typeof value === "object" ? `{ ${Object.entries(value).map(([key, v]) => `${key}: ${fmt(v)}`).join(", ")} }` : String(value));
 const code = (text) => `<pre class="cat-code"><code>${k.escape(text)}</code></pre>`;

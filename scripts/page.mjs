@@ -6,12 +6,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import * as k from "../kit/iso.mjs";
 import { hiddenBy, labelTries, modelOf, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
 import { createSim, formatCount, formatMs, formatRate, isLog, normalizeScenario, targetOf } from "../kit/topo-sim.mjs";
+import { bundleSim } from "./sim-bundle.mjs";
 import { describeFeatures } from "../kit/topo-features.mjs";
 
 export { modelOf };
 
 const KIT = join(dirname(fileURLToPath(import.meta.url)), "..", "kit");
-const strip = (source) => source.replace(/^export /gm, "");
 
 export const nameOf = (file) => basename(file).replace(/\.(spec\.)?(mjs|js|json)$/, "");
 export const layoutFileOf = (file) => join(dirname(file), `${nameOf(file)}.layout.json`);
@@ -53,7 +53,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
 
   const keys = spec.keys || legendOf(model);
   const shown = (v) => rendered[v].svg.replace("<svg", `<svg${view === v ? "" : " hidden"}`);
-  const stageHtml = `<style>${TOPO_CSS}</style><div class="tp-views" role="group" aria-label="View">${["iso", "flat"].map((v) => `<button type="button" data-view="${v}" aria-pressed="${v === view}">${v === "iso" ? "ISO" : "2D"}</button>`).join("")}</div><div class="tp-stage" tabindex="0" role="application" aria-label="${k.escape(model.title)}: hover or arrow keys pick a node, Enter fails or restores it, V switches between isometric and 2D">${shown("iso")}${shown("flat")}</div>`;
+  const stageHtml = `<style>${TOPO_CSS}</style><div class="tp-views" role="group" aria-label="View">${["iso", "flat"].map((v) => `<button type="button" data-view="${v}" aria-pressed="${v === view}">${v === "iso" ? "ISO" : "2D"}</button>`).join("")}</div><div class="tp-stage" tabindex="0" role="application" aria-label="${k.escape(model.title)}: hover or arrow keys pick a node, Enter inspects it, F fails or restores it, V switches between isometric and 2D">${shown("iso")}${shown("flat")}</div>`;
   const body = k.plateHtml({
     fig: model.fig,
     title: model.title,
@@ -64,11 +64,12 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
     body: stageHtml,
   });
   if (features.morph) data.raw = spec;
-  let script = strip(readFileSync(join(KIT, "topo-sim.mjs"), "utf8")) + `\nconst DATA = ${JSON.stringify(data)};\n`;
+  let script = bundleSim() + `\nconst DATA = ${JSON.stringify(data)};\n`;
   // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
   // each wrapped in its own scope so none of their names meet the live code's.
   if (features.morph) script += scoped("iso.mjs", "k") + scoped("topo.mjs", "TOPO");
   script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
+  if (features.tables) script += "\n" + readFileSync(join(KIT, "topo-records.js"), "utf8");
   if (features.trace) script += "\n" + readFileSync(join(KIT, "topo-trace.js"), "utf8");
   if (model.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
   if (data.edit) script += "\n" + readFileSync(join(KIT, "topo-edit.js"), "utf8");
@@ -124,6 +125,15 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   const lines = [];
   const progress = [];
   const lagAt = [];
+  const tableRates = () => {
+    const totals = { stale: 0, conflicts: 0, lost: 0 };
+    for (const node of sim.nodes.values()) {
+      // Operation counters are node-wide: count each database once, not once per table.
+      const table = sim.tablesOf(node.id)[0];
+      if (table) for (const key of Object.keys(totals)) totals[key] += table[key];
+    }
+    return totals;
+  };
   const totalLag = () => [...sim.logs.keys()].reduce((sum, id) => sum + sim.lagOf(id), 0);
   let next = 0;
   try {
@@ -132,7 +142,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
       const t = i / 60;
       if (i % 15 === 0) {
         const lat = sim.latencyOf();
-        samples.push({ t, in: sim.totalIn(), p50: lat.count ? lat.p50 : null, p99: lat.count ? lat.p99 : null, failing: lat.failed / 3, lag: totalLag() });
+        samples.push({ t, in: sim.totalIn(), p50: lat.count ? lat.p50 : null, p99: lat.count ? lat.p99 : null, failing: lat.failed / 3, ...tableRates(), lag: totalLag() });
       }
       while (next < marks.length && t >= marks[next].at) {
         const mark = marks[next++];
@@ -147,7 +157,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   } catch (error) {
     warnings.push(`scenario: ${error.message}`);
   }
-  if (story) reportStory(story, samples, lines, per, sim.logs.size > 0, log, warnings);
+  if (story) reportStory(story, samples, lines, per, sim.logs.size > 0, [...sim.nodes.values()].some((node) => node.store), log, warnings);
   progress.forEach((line) => log(line));
   log(story ? `nodes at ${seconds}s:` : "nodes:");
   for (const node of model.nodes) {
@@ -232,7 +242,7 @@ function storyWarnings(model, story) {
   return warnings;
 }
 
-function reportStory(story, samples, lines, per, hasLogs, log, warnings) {
+function reportStory(story, samples, lines, per, hasLogs, hasTables, log, warnings) {
   const phases = story.phases.length ? story.phases : [{ name: "story", at: 0, end: story.length }];
   const within = (from, to) => samples.filter((s) => s.t > from && s.t <= to);
   const mean = (list, key) => {
@@ -242,7 +252,7 @@ function reportStory(story, samples, lines, per, hasLogs, log, warnings) {
   const ms = (n) => (n == null ? "—" : formatMs(n));
   for (const phase of phases) {
     const window = within(Math.max(phase.at, phase.end - 3), phase.end);
-    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean(window, "in"), per)} in · p50 ${ms(mean(window, "p50"))} · p99 ${ms(mean(window, "p99"))}${hasLogs ? ` · lag ${formatCount(mean(window, "lag"), per)}` : ""} · ${formatRate(mean(window, "failing"), per)} failing`);
+    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean(window, "in"), per)} in · p50 ${ms(mean(window, "p50"))} · p99 ${ms(mean(window, "p99"))}${hasLogs ? ` · lag ${formatCount(mean(window, "lag"), per)}` : ""} · ${formatRate(mean(window, "failing"), per)} failing${hasTables ? ` · ${formatRate(mean(window, "stale"), per)} stale reads · ${formatRate(mean(window, "conflicts"), per)} conflicts · ${formatRate(mean(window, "lost"), per)} lost updates` : ""}`);
     for (const line of lines) if (line.at >= phase.at - 0.2 && line.at < phase.end - 0.2) log(line.text);
   }
   // Compare the story's last second with the first phase's settled state.

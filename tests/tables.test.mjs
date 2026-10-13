@@ -63,3 +63,12 @@ test("tables feature off: no store, plain traffic", () => {
   assert.equal(sim.tablesOf("pg").length, 0);
   assert.ok(sim.nodes.get("pg").flow > 0);
 });
+
+test("missing replica rows count as stale when this request already committed the key", () => {
+  const spec = orders([{ to: "pg", op: "upsert", table: "orders" }, { to: "replica", op: "select", table: "orders", then: true }], { replica: { lag: 60 } });
+  const sim = run(simOf(spec), 12);
+  const table = sim.tablesOf("replica")[0];
+  assert.equal(table.count, 0);
+  assert.ok(table.misses > 0);
+  assert.equal(table.stale, table.misses);
+});

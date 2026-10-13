@@ -75,7 +75,7 @@ Drive a failure and watch its consequence (put long action lists in a file with 
 ```json
 [["wait", 1500],
  ["move", ".tp-iso [data-node='billing-a']", 0.5, 0.5], ["wait", 300], ["shot", "shots/hover.png"],
- ["click", ".tp-iso [data-node='billing-a']"], ["wait", 6000], ["shot", "shots/failed.png"],
+ ["click", ".tp-iso [data-node='billing-a']"], ["key", "f"], ["wait", 6000], ["shot", "shots/failed.png"],
  ["key", "v"], ["wait", 400], ["shot", "shots/failed-flat.png"]]
 ```
 ```sh
@@ -87,7 +87,7 @@ Scenario pages: seek to each step and shoot it. `window.__topo.story.seek(t)` re
 ```json
 [["wait", 800], ["eval", "window.__topo.story.seek(17); 1"], ["wait", 900], ["shot", "shots/incident.png"],
  ["click", ".tp-phase[data-at='22']"], ["wait", 500], ["eval", "document.querySelector('.tp-say').textContent"],
- ["click", ".tp-iso [data-node='indexer']"], ["eval", "window.__topo.story.mode"]]
+ ["click", ".tp-iso [data-node='indexer']"], ["key", "f"], ["eval", "window.__topo.story.mode"]]
 ```
 The last two lines check takeover: `mode` turns `free`. Morph: click `[data-view='flat']`, then `["slow", 0.5]` and `["sheet", "morph.png", 30, 12, null, 0.5, null, 4]`. The camera should swing smoothly to top-down and crossfade, with no pops and no blank frame.
 
@@ -115,3 +115,7 @@ Open every PNG and ask:
 - Story: does each phase show what its narration says, at the moment it says it? Does it loop without a jump?
 - Breakers, queue cells, edge labels and flag knobs: do they change when the readout says they should?
 - Console: clean.
+
+For engine refactors, also run `node scripts/verify-sim-browser.mjs`: it exercises generated HTML, compares browser/Node state with the frozen S4 baseline, and checks inspector, saved-record, follow, failure and view controls. See `engine.md` for the comparison's limits. If `/tmp` is quota-limited, set `TMPDIR` to a directory with room for Chrome profiles.
+
+For record inspection, open a database, click a row, check all named fields against the saved version, then select Follow writes. Confirm that the selected key stays pinned even when it leaves the recent-row list, and that the primary and replica show the same fields once replication applies. Check this on a phone too.

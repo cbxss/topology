@@ -1,6 +1,6 @@
 // The inspector: level 2 of the disclosure ladder. Inlined after topo-live.js. Clicking a
 // node opens one panel under the stage for it: its numbers, a Fail/Restore button and, when
-// the spec declares them, its routes (and later its tables and traces). Hovering a node that
+// the spec declares them, its routes, tables and record details. Hovering a node that
 // has routes shows a compact card (level 1). Esc closes the panel; one panel at a time.
 const inspector = (() => {
   const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -57,8 +57,8 @@ const inspector = (() => {
           if (t.stale) bits.push(`<em>${rate(t.stale)} stale reads</em>`);
           if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
           if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
-          const field = (r) => Object.values(r.fields)[0] ?? "";
-          const rows = t.rows.map((r) => `<div class="tp-row"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></div>`).join("");
+          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${value}`).join(" · ");
+          const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}" aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
           // WAL: the newest entries; amber ones haven't reached every replica yet.
           const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
           const cells = t.wal.recent.map((e) => `<i title="lsn ${e.lsn} ${e.op} ${esc(e.key)} v${e.version}"${e.lsn > shipped ? " data-pending" : ""}></i>`).join("");
@@ -99,6 +99,7 @@ const inspector = (() => {
     open = null;
     panel.hidden = true;
     routeFilter = null;
+    recordFilter = null;
   }
 
   hooks.select.push((id) => (open === id ? close() : show(id)));
@@ -127,6 +128,7 @@ const inspector = (() => {
   panel.addEventListener("click", (event) => {
     const row = event.target.closest(".tp-route[data-route]");
     if (!row) return;
+    recordFilter = null;
     routeFilter = routeFilter === row.dataset.route ? null : row.dataset.route;
     written.delete("body");
     render();

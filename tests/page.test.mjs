@@ -27,3 +27,9 @@ test("feature toggles remove their markup and code", async () => {
   assert.ok(!off.includes("Drag-to-arrange"));
   assert.throws(() => buildPage(spec, { featureLayers: ["-nonsense"] }), /unknown feature/);
 });
+
+test("table feature owns saved-record disclosure code", async () => {
+  const spec = { nodes: [{ id: "pg", kind: "db", tables: { orders: {} } }], edges: [] };
+  assert.ok(buildPage(spec).html.includes("const recordInspector"));
+  assert.ok(!buildPage(spec, { featureLayers: ["-tables"] }).html.includes("const recordInspector"));
+});

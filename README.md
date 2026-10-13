@@ -10,7 +10,7 @@ Write a spec of nodes, links, zones, rates and a short story. The build lays it 
 - DNS keeps sending to a dead region until its TTL expires
 - canaries ramp, and a kill switch sends traffic back
 
-The story plays on its own with a timeline and narration. Click any node to take over and break things yourself; the readout always says what the model says.
+The story plays on its own with a timeline and narration. Click a node to inspect routes or tables, follow a request, and use Fail/Restore or F to take over; the readout always says what the model says.
 
 ## Quick start
 
@@ -22,7 +22,7 @@ node scripts/build.mjs examples/order-events/order-events.spec.mjs --check  # ru
 node --test tests/*.test.mjs                                                # the model's tests
 ```
 
-No dependencies: Node 20.10+ only. Chrome or Chromium for the screenshot checks.
+No dependencies: Node 20.10+ for building. Browser checks require Node 22+ (built-in WebSocket) and Chrome or Chromium.
 
 Install as a skill by copying or symlinking this folder to `~/.claude/skills/topology`, then ask Claude for an architecture figure:
 
@@ -90,7 +90,7 @@ references/spec.md       every spec field and exactly what the simulation does
 references/craft.md      vocabulary, colour, layout patterns, sizing numbers, adding a kind
 references/verify.md     --check, capture, drive, line ends, the review checklist
 kit/topo.mjs             layout, routing, iso and flat renderers, label placement, CSS
-kit/topo-sim.mjs         the model (pure, seeded; runs in Node and in the page)
+kit/topo-sim.mjs         stable simulation entry point (implementation in kit/sim/)
 kit/topo-live.js         the page runtime
 kit/iso.mjs              the drawing core: camera, shaded solids, lines on faces, SVG, the card
 scripts/build.mjs        spec → standalone HTML (and --check, --svg)
@@ -109,3 +109,14 @@ agents/openai.yaml       display name and short description for Codex
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+### Endpoint and data stories
+
+- [Orders API](examples/orders-api/orders-api.spec.mjs): route mixes, synthetic records and table inspection.
+- [Read your writes](examples/read-your-writes/read-your-writes.spec.mjs): replica lag and stale reads.
+- [Idempotent retries](examples/idempotent-retries/idempotent-retries.spec.mjs): committed writes, timeouts, conflicts and upserts.
+- [Lost updates](examples/lost-update/lost-update.spec.mjs): hot-key races and row locks.
+
+The overview stays compact; click for details, choose a route to filter traffic, then follow a request for its span timeline. These examples model illustrative workloads, not a SQL database or exactly-once side effects.
+
+To author a figure, start with [the spec reference and runnable recipe](references/spec.md#minimal-endpointtable-recipe), choose an example from [the skill](SKILL.md), and run the [verification workflow](references/verify.md). The kit supplies the engine; a new supported story needs only a spec. [Engine maintenance](references/engine.md) documents module ownership and browser packaging.

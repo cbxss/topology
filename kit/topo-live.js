@@ -1,4 +1,4 @@
-// The live page. Inlined after topo-sim.mjs (exports stripped) and `const DATA = …`.
+// The live page. Inlined after the scoped simulation module bundle and `const DATA = …`.
 // It steps the sim, draws its packets into the visible view and writes attributes:
 // it never re-renders markup per frame.
 const stage = document.querySelector(".tp-stage");
@@ -11,6 +11,8 @@ const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: []
 let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
 let routeFilter = null;
+// A selected saved record: keep its request/replication packets visible.
+let recordFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -110,7 +112,9 @@ function drawPackets() {
       slot.trail.setAttribute("d", tail);
     }
     const traced = sim.tracing?.msgId;
-    const dim = traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    const record = recordFilter && ((packet.msg || packet.call?.job.msg)?.records?.[recordFilter.table]);
+    const matchesRecord = recordFilter && (record?.key === recordFilter.key || (packet.entry?.table === recordFilter.table && packet.entry.key === recordFilter.key));
+    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }

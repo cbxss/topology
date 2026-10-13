@@ -1,13 +1,21 @@
 // One service, two routes: POST /orders upserts the order into Postgres and publishes an event;
-// GET /orders/:id reads through Redis and falls back to the read replica on a miss.
+// GET /orders/:id checks Redis and probabilistically reads the replica.
 export default {
   title: "Orders API",
   fig: "Fig 8",
   caption:
-    "The app sends ~3 writes and ~12 reads a second over 40 orders. POST /orders upserts the order into Postgres (insert the first time, then a new version) and publishes it; the primary streams its WAL to a replica. GET /orders/:id checks Redis first and reads the replica on a miss (about 1 in 6). Click orders-api for each route's numbers, or postgres to watch rows and versions change.",
-  sim: { per: 20, seed: 8 },
+    "Illustrative workload: the app sends ~3 writes and ~12 reads a second over 40 orders. POST /orders upserts the order into Postgres (insert the first time, then a new version) and publishes it; the primary streams its WAL to a replica. GET /orders/:id checks Redis and independently samples a replica read (about 1 in 6). Click orders-api for each route's numbers, or either database then a row to inspect every saved field. Field values are synthetic and sampled independently on each request.",
+  sim: { seed: 8 },
   grid: [140, 72],
-  records: { orders: { key: "orderId", keys: 40, fields: { status: ["new", "paid", "shipped"] } } },
+  records: { orders: { key: "orderId", keys: 40, fields: {
+    customerId: [201, 202, 203, 204],
+    status: ["new", "paid", "shipped"],
+    item: ["Notebook", "Desk lamp", "Travel mug"],
+    quantity: [1, 2, 3],
+    totalCents: [2400, 4800, 7200],
+    currency: ["USD"],
+    shippingCity: ["Portland", "Seattle", "Austin"],
+  } } },
   nodes: [
     { id: "app", kind: "client", at: [0, 0.75], emit: { "POST /orders": 3, "GET /orders/:id": 12 } },
     { id: "gw", kind: "gateway", label: "gateway", at: [1, 0.75] },
