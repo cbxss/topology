@@ -137,7 +137,7 @@ export function canary(id, { router, flag = id, rollout = 0, v1 = {}, v2 = {}, f
 //   import ledger from "../ledger/ledger.spec.mjs";   // or: await importSpec(new URL(…, import.meta.url))
 //   const books = system("books", ledger, { at: [5, 0] });
 //   compose(meta, books, link("orders", books.in), link(books.id("shard-3"), "audit"));
-export function system(prefix, spec, { at, label = spec.title ?? prefix, keepSources = false, shared = [], plate = true, region = false } = {}) {
+export function system(prefix, spec, { at, label = spec.title ?? prefix, keepSources = false, shared = [], sharedEntities = {}, plate = true, region = false } = {}) {
   if (!prefix || /[.>:]/.test(prefix)) throw new Error(`system: the prefix must be nonempty, without ".", ">" or ":" (got "${prefix}")`);
   if (!spec || !Array.isArray(spec.nodes)) throw new Error(`system ${prefix}: expected a spec with nodes`);
   const id = (local) => `${prefix}.${local}`;
@@ -155,6 +155,8 @@ export function system(prefix, spec, { at, label = spec.title ?? prefix, keepSou
     spot = new Map(kept.map((node) => [node.id, [round(at[0] + spot.get(node.id)[0] - c0), round(at[1] + spot.get(node.id)[1] - r0)]]));
   }
 
+  const entityOf = name => sharedEntities[name] ?? id(name);
+  for (const [name, target] of Object.entries(sharedEntities)) if (!spec.entities?.[name] || typeof target !== "string" || !target) throw new Error(`system ${prefix}: invalid shared entity ${name}`);
   const flagOf = (name) => (name == null || shared.includes(name) ? name : id(name));
   const action = (a) => (a.type === "send" ? { ...a, to: id(a.to) } : a.type === "weighted" ? { ...a, targets: a.targets.map((t) => ({ ...t, to: id(t.to) })) } : a);
   const routing = (r) => ({ ...r, rules: r.rules.map((rule) => ({ ...rule, action: action(rule.action) })), fallback: action(r.fallback) });
@@ -163,7 +165,7 @@ export function system(prefix, spec, { at, label = spec.title ?? prefix, keepSou
     if (node.routing) out.routing = routing(node.routing);
     if (node.endpoints)
       out.endpoints = Object.fromEntries(Object.entries(node.endpoints).map(([route, endpoint]) =>
-        [route, endpoint.calls ? { ...endpoint, calls: endpoint.calls.map((call) => ({ ...call, ...(call.to != null ? { to: id(call.to) } : {}), ...(call.routing ? { routing: routing(call.routing) } : {}) })) } : endpoint]));
+        [route, endpoint.calls ? { ...endpoint, calls: endpoint.calls.map((call) => ({ ...call, ...(call.entityStep ? {entityStep:{...call.entityStep,entity:entityOf(call.entityStep.entity)}} : {}), ...(call.to != null ? { to: id(call.to) } : {}), ...(call.routing ? { routing: routing(call.routing) } : {}) })) } : endpoint]));
     return out;
   });
   const keptEdges = edges.filter((edge) => !dropped.has(edge.from) && !dropped.has(edge.to)).map(({ via: _, ...edge }) => {
@@ -206,6 +208,9 @@ export function system(prefix, spec, { at, label = spec.title ?? prefix, keepSou
     groups,
     flags: Object.fromEntries(Object.entries(spec.flags || {}).map(([name, flag]) => [flagOf(name), flag])),
     records: spec.records,
+    entities: spec.entities && Object.fromEntries(Object.entries(spec.entities).filter(([name])=>!Object.hasOwn(sharedEntities,name)).map(([name,def])=>[entityOf(name), {
+      ...def, owner:id(def.owner), representations:Object.fromEntries(Object.entries(def.representations).map(([key,rep])=>[key,{...rep,node:id(rep.node),...(rep.owners ? {owners:Object.fromEntries(Object.entries(rep.owners).map(([field,owner])=>[field,id(owner)]))} : {})}]))
+    }])),
     sources: spec.sources && Object.fromEntries(Object.entries(spec.sources).map(([name, source]) => [`${prefix}.${name}`, source])),
     traffic: spec.traffic,
     policies: spec.policies,
@@ -239,7 +244,7 @@ export async function importSpec(file) {
 // records, traffic classes, policies and sources with one name must agree.
 export function compose(meta = {}, ...fragments) {
   const spec = { ...meta, nodes: [...(meta.nodes || [])], edges: [...(meta.edges || [])], groups: [...(meta.groups || [])], flags: { ...(meta.flags || {}) } };
-  const MERGED = ["records", "traffic", "policies", "sources"];
+  const MERGED = ["records", "traffic", "policies", "sources", "entities"];
   for (const key of MERGED) spec[key] = { ...(meta[key] || {}) };
   const per = meta.sim?.per ?? 1;
   for (const fragment of fragments.flat(Infinity)) {

@@ -17,6 +17,7 @@ export const FEATURES = {
   edit: true, // drag-to-arrange in serve mode
   endpoints: true, // routes on services, per-route stats and an endpoint mix on sources
   tables: true, // database tables, writes, the WAL and replica lag
+  entities: true, // explicitly bound entity journeys
   trace: true, // follow one request end to end
 };
 
@@ -58,6 +59,14 @@ export const describeFeatures = (set) =>
 export function stripFeatures(spec, set) {
   const out = { ...spec, nodes: spec.nodes.map((node) => ({ ...node })), edges: (spec.edges || []).map((edge) => (Array.isArray(edge) ? edge : { ...edge })) };
   const objects = (list) => list.filter((item) => !Array.isArray(item));
+  if (!set.entities || !set.tables || !set.endpoints) {
+    delete out.entities;
+    for (const node of out.nodes) if (node.endpoints) node.endpoints = Object.fromEntries(Object.entries(node.endpoints).map(([name, endpoint]) => [name, {...endpoint, ...(endpoint.calls ? {calls:endpoint.calls.map(call => {
+      const next = {...call};
+      if (next.entityStep && !set.tables) { delete next.op; delete next.table; }
+      delete next.entityStep; return next;
+    })} : {})}]));
+  }
   if (!set.scenario) delete out.scenario;
   if (!set.endpoints) {
     for (const node of objects(out.nodes)) {

@@ -171,6 +171,35 @@ try {
   }
   console.log('routing browser parity, class controls, asynchronous tracing and both views passed');
 
+  for (const name of ['order-journey','flagged-projection-rollout']) {
+    await load(name);
+    await browser.eval('window.__topo.story.seek(18); window.__topo.select("pg");');
+    const reference = createSim(await browser.eval('window.__topo.data.spec'));
+    for (let i=0;i<1080;i++) reference.step(1/60);
+    const expected = [...reference.entityState.histories.values()].map(h=>reference.entityOf(h.ref));
+    assert.deepEqual(await browser.eval('[...window.__topo.sim.entityState.histories.values()].map(h=>window.__topo.sim.entityOf(h.ref))'),JSON.parse(JSON.stringify(expected)),`${name}: entity browser/Node parity`);
+    await until('document.querySelector("[data-entity-ref]") !== null');
+    await browser.eval('document.querySelector("[data-entity-ref]").click()');
+    assert.ok(await browser.eval('window.__topo.entities.selected'));
+    assert.equal(await browser.eval('document.querySelectorAll(".tp-entity .tp-record-copy").length'),4);
+    const before = await browser.eval('JSON.stringify(window.__topo.sim.entityOf(window.__topo.entities.selected))');
+    await browser.eval('document.querySelector("[data-follow-entity]").click()');
+    assert.equal(await browser.eval('document.querySelector("[data-follow-entity]").getAttribute("aria-pressed")'), 'true');
+    assert.equal(await browser.eval('JSON.stringify(window.__topo.sim.entityOf(window.__topo.entities.selected))'),before);
+    await browser.eval('window.__topo.setView("flat")');
+    await until('window.__topo.view === "flat" && !window.__topo.morphing');
+    await browser.eval('window.__topo.story.seek(28)');
+    assert.equal(await browser.eval('window.__topo.entities.selected'),null);
+    assert.deepEqual(errors, []);
+  }
+  for (const feature of ['-entities','-tables','-endpoints','-trace','-flags']) {
+    await load('order-journey',feature);
+    await browser.eval('for(let i=0;i<600;i++) window.__topo.sim.step(1/60);');
+    assert.equal(await browser.eval('!!window.__topo.sim.entityOf'),['-trace','-flags'].includes(feature));
+    assert.deepEqual(errors, []);
+  }
+  console.log('entity inspector, read-only following, views, seeking and feature dependencies passed');
+
   await load('orders-api', '-tables,-trace,-morph');
   assert.equal(await browser.eval('!!window.__topo.records || !!window.__topo.tracer'), false);
   assert.deepEqual(errors, []);

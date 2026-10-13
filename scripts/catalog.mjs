@@ -4,7 +4,7 @@
 //   node scripts/catalog.mjs [--light] [--stdout] [--out file]
 //
 // Default output: examples/catalog/catalog.html (or catalog-light.html).
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as k from "../kit/iso.mjs";
@@ -79,6 +79,8 @@ const PATTERNS = [
 
 // Reuse the example sources so the catalog cannot drift from the runnable stories.
 for (const [name, note] of [
+  ["order-journey", "Follow one scoped order through primary commits, events, projection, replica and cache expiration."],
+  ["flagged-projection-rollout", "Optional projection rollout with captured flag decisions and an honest divergent copy."],
   ["tenant-routing", "Immutable context selects service and database; traffic colors reveal tenant isolation."],
   ["event-routing", "Kafka retains mixed event context through backlog and downstream consumer routing."],
   ["orders-api", "Endpoint mixes: inspect per-route latency, synthetic rows and WAL."],
@@ -86,8 +88,8 @@ for (const [name, note] of [
   ["idempotent-retries", "Retries keep a record key: INSERT conflicts, UPSERT preserves row content."],
   ["lost-update", "Hot-key read-modify-write races; row locks trade lost updates for waiting."],
 ]) {
-  const source = readFileSync(join(ROOT, "examples", name, `${name}.spec.mjs`), "utf8");
-  PATTERNS.push([name, note, source.split("export default ")[1].trim().replace(/;$/, "")]);
+  const {default: spec} = await import(new URL(`../examples/${name}/${name}.spec.mjs`, import.meta.url));
+  PATTERNS.push([name, note, JSON.stringify(spec, null, 2)]);
 }
 
 const fmt = (value) => (typeof value === "string" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(fmt).join(", ")}]` : value && typeof value === "object" ? `{ ${Object.entries(value).map(([key, v]) => `${key}: ${fmt(v)}`).join(", ")} }` : String(value));

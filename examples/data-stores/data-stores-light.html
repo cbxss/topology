@@ -69,6 +69,8 @@
 *{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
 body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 .k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="light"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 12</span><span class="k-corner" data-corner="title">Reusable data stores</span><span class="k-corner" data-corner="hint">Hover a node · click to inspect · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>7.5/s in · healthy</span></div><style>
+.tp-entity{margin-top:12px;min-width:0}.tp-entity header{display:flex;gap:8px;align-items:center}.tp-entity details{max-height:260px;overflow:auto;margin-top:10px}.tp-entity-event{font:11px var(--tp-mono);padding:5px 0;overflow-wrap:anywhere}.tp-entity-event small{display:block}.tp-entity .tp-record-copy{overflow-wrap:anywhere}.tp-entity dl{display:grid;grid-template-columns:minmax(65px,1fr) 2fr;gap:3px 10px;margin:6px 0;font:11px var(--tp-mono)}.tp-entity dt{color:var(--tp-mid)}.tp-entity dd{margin:0;overflow-wrap:anywhere}
+
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
@@ -301,9 +303,242 @@ return { SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashO
 const module1 = (() => {
 'use strict';
 
+// Explicit caches are independent of the existing probabilistic cache routing.
+function createEntityCache(sim, expired) {
+  const stores = new Map();
+  const keyOf = (type, representation) => JSON.stringify([type, representation]);
+  function store(type, representation) {
+    const key = keyOf(type, representation);
+    if (!stores.has(key)) stores.set(key, new Map());
+    return stores.get(key);
+  }
+  function expire() {
+    for (const rows of stores.values()) for (const [key, row] of rows) if (row.expiresAt != null && sim.time >= row.expiresAt) {
+      rows.delete(key); expired(row);
+    }
+  }
+  return { stores, store, expire };
+}
+
+
+return { createEntityCache };
+})();
+const module2 = (() => {
+'use strict';
+
+// Immutable routing inputs are independent of mutable per-request execution state.
+function freezeData(value) {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) freezeData(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+function attachContext(msg, context, traffic, origin = msg.source, rootId = msg.id) {
+  msg.context = freezeData(structuredClone(context));
+  msg.traffic = traffic ?? null;
+  msg.origin = origin;
+  msg.rootId = rootId;
+  return msg;
+}
+function envelopeOf(msg, parentSpan) {
+  return freezeData(structuredClone({ context: msg.context, traffic: msg.traffic, origin: msg.origin, rootId: msg.rootId, parentId: msg.id, endpoint: msg.endpoint, records: msg.records, draws: msg.draws, parentSpan, entityRefs: msg.entityRefs, entityResults: msg.entityResults, entityEvent: msg.entityEvent, entityFlags: msg.entityFlags }));
+}
+function inheritEnvelope(msg, envelope) {
+  attachContext(msg, envelope.context, envelope.traffic, envelope.origin, envelope.rootId);
+  msg.parentId = envelope.parentId;
+  msg.endpoint = envelope.endpoint;
+  if (envelope.records) msg.records = structuredClone(envelope.records);
+  if (envelope.draws) msg.draws = structuredClone(envelope.draws);
+  for (const key of ['entityRefs', 'entityResults', 'entityEvent', 'entityFlags']) if (envelope[key]) msg[key] = structuredClone(envelope[key]);
+  if (msg.entityEvent) freezeData(msg.entityEvent);
+  for (const result of Object.values(msg.entityResults || {})) freezeData(result);
+  for (const ref of Object.values(msg.entityRefs || {})) freezeData(ref);
+  return msg;
+}
+
+
+return { freezeData, attachContext, envelopeOf, inheritEnvelope };
+})();
+const module3 = (() => {
+'use strict';
+const { createEntityCache } = module1;
+const { freezeData } = module2;
+
+
+
+// Owns entity identity and causal results. Transport still owns every call and failure.
+function createEntities(sim, definitions) {
+  const histories = new Map(), pending = new Map();
+  let sequence = 0, operations = 0;
+  const state = { definitions, histories, pending };
+  sim.entityState = state;
+  const keyOf = (type, scope, key) => JSON.stringify([type, scope, key]);
+  const versionKey = (ref, representation) => JSON.stringify([ref.id,representation]);
+  const resultKey = (type, step) => JSON.stringify([type, step]);
+  function event(ref, data) {
+    let history = histories.get(ref.id);
+    if (!history) {
+      if (histories.size >= 256) histories.delete(histories.keys().next().value);
+      history = { ref, events: [], incomplete: true };
+      histories.set(ref.id, history);
+    }
+    const entry = { id: ++sequence, at: sim.time, ...data };
+    if (entry.outcome === 'committed' && entry.initialAuthority) history.incomplete = false;
+    history.events.push(entry);
+    if (history.events.length > 128) { history.events.shift(); history.incomplete = true; }
+    // LRU without pinning unbounded history in the renderer.
+    histories.delete(ref.id); histories.set(ref.id, history);
+    return entry.id;
+  }
+  const caches = createEntityCache(sim, row => event(row.entity.ref, { node: row.node, representation: row.entity.representation, outcome: 'expired', parent: row.entity.cause, revision: row.entity.revision }));
+  state.caches = caches.stores;
+  const authority = def => Object.entries(def.representations).find(([,r]) => r.authoritative);
+  function identity(msg, type, recordOf) {
+    msg.entityRefs ??= {};
+    if (msg.entityRefs[type]) return msg.entityRefs[type];
+    const def = definitions[type];
+    const scope = (def.scope || []).map(path => {
+      let value = msg.context;
+      for (const part of path.split('.').slice(1)) value = value && Object.hasOwn(value, part) ? value[part] : undefined;
+      if (value == null || !['string','number','boolean'].includes(typeof value)) throw new Error(`entity ${type}: missing or nonscalar scope ${path}`);
+      return value;
+    });
+    const record = recordOf(msg, def.record);
+    const ref = freezeData({type, scope, key: record.key, id: keyOf(type, scope, record.key)});
+    msg.entityRefs[type] = ref;
+    return ref;
+  }
+  function mapped(fields, rep) {
+    if (!rep.fields) return structuredClone(fields);
+    const result = Object.create(null);
+    for (const [name, mapping] of Object.entries(rep.fields)) {
+      if (Object.hasOwn(mapping, 'value')) result[name] = structuredClone(mapping.value);
+      else if (Object.hasOwn(fields, mapping.from)) result[name] = structuredClone(fields[mapping.from]);
+    }
+    return result;
+  }
+  function prepare(msg, binding, actor, recordOf) {
+    const def = definitions[binding.entity], step = def.steps[binding.step];
+    const ref = identity(msg, binding.entity, recordOf);
+    const input = step.input?.step ? msg.entityResults?.[resultKey(binding.entity, step.input.step)] : step.input?.event ? msg.entityEvent?.name === step.input.event && msg.entityEvent.snapshot.ref.type === binding.entity ? msg.entityEvent.snapshot : null : null;
+    const run = { id: ++operations, ref, step: binding.step, kind: step.kind, target: step.target, actor, request:msg.id, root:msg.rootId ?? msg.id, optional: !!binding.optional, input: input ? freezeData(structuredClone(input)) : null };
+    run.invalid = !!step.input && !input;
+    const fields = step.kind === 'write' ? recordOf(msg, def.record).fields : input?.fields || {};
+    const rep = def.representations[step.target];
+    run.record = { key:ref.id, fields: mapped(fields, rep || {}) };
+    run.cause = event(ref, {operation:run.id, node:actor, step:run.step, outcome:'started', parent:input?.cause});
+    pending.set(run.id, run);
+    return run;
+  }
+  function note(run, outcome, extra = {}) {
+    if (!run) return;
+    return event(run.ref, {operation:run.id, request:run.request, root:run.root, step:run.step, node:run.actor, representation:run.target, parent:run.cause, outcome, ...extra});
+  }
+  function end(run, outcome, extra) { if (!run) return; note(run, outcome, extra); pending.delete(run.id); }
+  function accept(msg, run, snapshot) {
+    if (snapshot) { msg.entityResults ??= {}; msg.entityResults[resultKey(run.ref.type, run.step)] = snapshot; }
+  }
+  function metadata(run, revision, cause, deleted = false) {
+    return {ref:run.ref, representation:run.target, revision, cause, deleted};
+  }
+  function committed(job, entry, row) {
+    const run = job.op?.entityRun;
+    if (!run) return;
+    const revision = run.kind === 'write' ? entry.version : run.input.revision;
+    const deleted = entry.op === 'delete';
+    const cause = note(run, 'committed', { node:job.node.id, attempt:job.call?.attempt || 0, revision, localVersion:entry.version, ...(run.kind === 'write' && revision === 1 ? {initialAuthority:true} : {}) });
+    entry.entity = metadata(run, revision, cause, deleted);
+    if (row) row.entity = entry.entity;
+    job.node.entityVersions ??= new Map(); job.node.entityVersions.set(versionKey(run.ref,run.target), entry.entity);
+    job.entityResult = freezeData({ref:run.ref, revision, fields:structuredClone(row?.fields || {}), deleted, cause});
+  }
+  function before(job) {
+    const run = job.op?.entityRun;
+    if (!run) return null;
+    const def = definitions[run.ref.type], rep = def.representations[run.target];
+    if (run.kind === 'project') {
+      const prior = job.node.entityVersions?.get(versionKey(run.ref,run.target));
+      if (rep.versionPolicy === 'if-newer' && prior && prior.revision >= run.input.revision) {
+        note(run,'older-or-duplicate', {node:job.node.id,revision:run.input.revision}); return true;
+      }
+      if (run.input.deleted) job.op = {...job.op, op:'delete'};
+    }
+    if (!run.kind.startsWith('cache-')) return null;
+    const rows = caches.store(run.ref.type, run.target), row = rows.get(run.ref.id);
+    if (run.kind === 'cache-get') {
+      job.entityResult = row ? freezeData({ref:run.ref,fields:structuredClone(row.fields),revision:row.entity.revision,cause:row.entity.cause,deleted:false}) : null;
+      note(run,row ? 'cache-hit' : 'cache-miss',{node:job.node.id,revision:row?.entity.revision});
+    } else if (run.kind === 'cache-invalidate' || run.input?.deleted) {
+      rows.delete(run.ref.id); note(run,'invalidated',{node:job.node.id});
+    } else {
+      const cause = note(run,'cache-filled',{node:job.node.id,revision:run.input.revision});
+      const saved = {key:run.ref.key,fields:run.record.fields,node:job.node.id,entity:metadata(run,run.input.revision,cause),expiresAt:rep.ttl ? sim.time+rep.ttl : null};
+      rows.set(run.ref.id,saved); job.entityResult = freezeData({...run.input,fields:structuredClone(saved.fields),cause});
+    }
+    return true;
+  }
+  function published(job, log, partition) {
+    const run = job.op?.entityRun;
+    if (!run || run.kind !== 'publish') return;
+    const step = definitions[run.ref.type].steps[run.step];
+    const cause = note(run,'published',{node:log.node.id,event:step.event,partition,offset:log.end[partition],revision:run.input.revision});
+    job.msg.entityEvent = freezeData({name:step.event,snapshot:{...run.input,cause}});
+    job.entityResult = job.msg.entityEvent.snapshot;
+  }
+  function read(job, row) {
+    const run = job.op?.entityRun;
+    if (!run) return;
+    note(run,row ? 'read' : 'missing',{node:job.node.id,revision:row?.entity?.revision});
+    if (row?.entity) job.entityResult = freezeData({ref:run.ref,revision:row.entity.revision,fields:structuredClone(row.fields),cause:row.entity.cause,deleted:false});
+  }
+  function applied(node, entry) {
+    if (!entry.entity) return;
+    node.entityVersions ??= new Map(); node.entityVersions.set(versionKey(entry.entity.ref,entry.entity.representation), entry.entity);
+    event(entry.entity.ref,{node:node.id,outcome:'replicated',parent:entry.entity.cause,revision:entry.entity.revision});
+  }
+  sim.entityOf = ref => {
+    if (!ref || !definitions[ref.type] || ref.id !== keyOf(ref.type,ref.scope,ref.key)) return null;
+    const def = definitions[ref.type], [authorityName, primary] = authority(def);
+    const node = sim.nodes.get(primary.node), source = node.store?.get(primary.table)?.rows.get(ref.id);
+    const latest = node.entityVersions?.get(versionKey(ref,authorityName));
+    function representationOf(name, rep) {
+      const host = sim.nodes.get(rep.node);
+      const replica = host.primary?.id === primary.node && rep.table === primary.table;
+      const row = rep.cache ? caches.stores.get(JSON.stringify([ref.type,name]))?.get(ref.id) : host.store?.get(rep.table)?.rows.get(ref.id);
+      const version = row?.entity || (!rep.cache && host.entityVersions?.get(versionKey(ref,replica ? authorityName : name)));
+      const expected = source ? rep.authoritative ? source.fields : mapped(source.fields,rep) : {};
+      const differences = [...new Set([...Object.keys(expected),...Object.keys(row?.fields || {})])].filter(k => JSON.stringify(expected[k]) !== JSON.stringify(row?.fields[k]));
+      // An absent cache after a deletion already agrees with the authority.
+      const behind = latest && !(rep.cache && latest.deleted && !row)
+        ? !version || version.revision < latest.revision || (!!row === !!latest.deleted) : false;
+      return {name,...rep,...(replica ? {replica:true} : {}),row:row || null,sourceRevision:version?.revision ?? null,behind:!!behind,differences};
+    }
+    const representations = Object.entries(def.representations).map(([name, rep]) => representationOf(name,rep));
+    for (const host of sim.nodes.values()) if (host.primary?.id === primary.node && !representations.some(r=>r.node===host.id && r.table===primary.table)) {
+      representations.push(representationOf(host.id,{node:host.id,table:primary.table}));
+    }
+    const queued = [];
+    for (const log of sim.logs.values()) for (const [partition, envelopes] of (log.envelopes || []).entries()) {
+      for (const [offset, envelope] of envelopes) if (envelope.entityEvent?.snapshot.ref.id === ref.id) {
+        queued.push({node:log.node.id,partition,offset,event:envelope.entityEvent.name,groups:log.groups.filter(g=>g.committed[partition]<offset).map(g=>g.name)});
+      }
+    }
+    const possible = Object.entries(def.steps).map(([name,step])=>({name,...step}));
+    return structuredClone({ref,queued,possible,owner:def.owner,authority:authorityName,representations,history:histories.get(ref.id) || {ref,events:[],incomplete:true},pending:[...pending.values()].filter(r=>r.ref.id===ref.id).map(r=>({id:r.id,step:r.step,node:r.actor}))});
+  };
+  return { prepare, note, end, accept, committed, before, published, read, applied, expire:caches.expire };
+}
+
+
+return { createEntities };
+})();
+const module4 = (() => {
+'use strict';
+
 // Tables own record identity, row locks, operations and WAL application.
 // Callbacks preserve transport scheduling without importing the transport module.
-function createTables(sim, records, { launch, respond, begin }) {
+function createTables(sim, records, { launch, respond, begin, entities }) {
   const { nodes, rand } = sim;
   // Tables: rows keyed by a record key, a write-ahead log, and replicas that apply its entries.
   // A replica (a db fed by a replication edge) gets its primary's tables if it declares none.
@@ -333,6 +568,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     }
     return msg.records[table];
   };
+  const recordFor = (job, table) => job.op?.entityRun?.record || recordOf(job.msg, table);
   const WRITES = new Set(["insert", "upsert", "update", "delete", "rmw"]);
   const tableOp = (job) => (job.node.store && job.op?.table && job.node.store.has(job.op.table) ? job.op : null);
 
@@ -341,7 +577,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     // Row locks: a write waits for any other write on the same key to commit.
     const op = tableOp(job);
     if (op && node.locks && WRITES.has(op.op) && !job.holdsLock) {
-      const key = `${op.table}:${recordOf(job.msg, op.table).key}`;
+      const key = `${op.table}:${recordFor(job, op.table).key}`;
       if (node.locked.has(key)) {
         node.locked.get(key).push(job);
         node.tableStats.lockWaits.push(sim.time);
@@ -352,7 +588,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     }
     // An unlocked read-modify-write reads now and writes at commit: anything committed in
     // between is overwritten (a lost update).
-    if (op && op.op === "rmw") job.readVersion = node.store.get(op.table).rows.get(recordOf(job.msg, op.table).key)?.version ?? 0;
+    if (op && op.op === "rmw") job.readVersion = node.store.get(op.table).rows.get(recordFor(job, op.table).key)?.version ?? 0;
     return true;
   }
 
@@ -387,11 +623,12 @@ function createTables(sim, records, { launch, respond, begin }) {
   function commit(job, op) {
     const node = job.node;
     const table = node.store.get(op.table);
-    const record = recordOf(job.msg, op.table);
+    const record = recordFor(job, op.table);
     const key = record.key;
     const row = table.rows.get(key);
     const stats = node.tableStats;
     if (op.op === "select") {
+      entities?.read(job, row);
       if (row) touch(table, key);
       if (!row) {
         const stale = !!node.primary?.store.get(op.table)?.rows.has(key) || (job.msg.wrote?.[`${op.table}:${key}`] ?? 0) > 0;
@@ -424,7 +661,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     const version = (table.versions.get(key) ?? 0) + 1;
     let kind = "delete";
     if (op.op === "delete") {
-      if (!row) return true;
+      if (!row && !op.entityRun) return true;
       table.rows.delete(key);
     } else {
       // An unlocked read-modify-write that read an older version overwrites a newer one.
@@ -439,6 +676,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     if (kind === "update") stats.updates.push(sim.time);
     job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: op.op === "delete" ? -version : version };
     const entry = { lsn: ++node.wal.lsn, table: op.table, key, op: kind, version, fields: record.fields, at: sim.time };
+    entities?.committed(job, entry, table.rows.get(key));
     node.wal.recent = [...node.wal.recent.slice(-23), entry];
     node.wal.applied = entry.lsn;
     rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
@@ -472,7 +710,8 @@ function createTables(sim, records, { launch, respond, begin }) {
           node.wal.received.delete(next.lsn);
           const target = node.store.get(next.table);
           if (next.op === "delete") target.rows.delete(next.key);
-          else target.rows.set(next.key, { key: next.key, version: next.version, fields: next.fields, at: sim.time });
+          else target.rows.set(next.key, { key: next.key, version: next.version, fields: next.fields, at: sim.time, ...(next.entity ? {entity:next.entity} : {}) });
+          entities?.applied(node, next);
           target.versions.set(next.key, next.version);
           touch(target, next.key);
           node.tableStats.applied.push(sim.time);
@@ -524,40 +763,7 @@ function createTables(sim, records, { launch, respond, begin }) {
 
 return { createTables };
 })();
-const module2 = (() => {
-'use strict';
-
-// Immutable routing inputs are independent of mutable per-request execution state.
-function freezeData(value) {
-  if (value && typeof value === "object") {
-    for (const child of Object.values(value)) freezeData(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-function attachContext(msg, context, traffic, origin = msg.source, rootId = msg.id) {
-  msg.context = freezeData(structuredClone(context));
-  msg.traffic = traffic ?? null;
-  msg.origin = origin;
-  msg.rootId = rootId;
-  return msg;
-}
-function envelopeOf(msg, parentSpan) {
-  return freezeData(structuredClone({ context: msg.context, traffic: msg.traffic, origin: msg.origin, rootId: msg.rootId, parentId: msg.id, endpoint: msg.endpoint, records: msg.records, draws: msg.draws, parentSpan }));
-}
-function inheritEnvelope(msg, envelope) {
-  attachContext(msg, envelope.context, envelope.traffic, envelope.origin, envelope.rootId);
-  msg.parentId = envelope.parentId;
-  msg.endpoint = envelope.endpoint;
-  if (envelope.records) msg.records = structuredClone(envelope.records);
-  if (envelope.draws) msg.draws = structuredClone(envelope.draws);
-  return msg;
-}
-
-
-return { attachContext, envelopeOf, inheritEnvelope };
-})();
-const module3 = (() => {
+const module5 = (() => {
 'use strict';
 const { envelopeOf, inheritEnvelope } = module2;
 const { isLog, groupOf, hashOf } = module0;
@@ -719,7 +925,7 @@ function createLogs(sim, { launch, newMsg }) {
 
 return { createLogs };
 })();
-const module4 = (() => {
+const module6 = (() => {
 'use strict';
 const { hashOf } = module0;
 
@@ -765,8 +971,15 @@ function createScenario(sim, definitions, { resetNode, setEdge, setBroker, rebal
   const flagNode = [...nodes.values()].find((node) => node.kind === "flags");
 
   const decide = (msg, name) => {
+    if (sim.entityState && Object.hasOwn(msg.entityFlags || {}, name)) return msg.entityFlags[name].value;
     const flag = flags.get(name);
     if (!flag) return false;
+    if (sim.entityState) {
+      msg.entityFlags ??= {};
+      const value = flag.sticky ? (hashOf(`${msg.origin ?? msg.source}:${name}`) % 10000) / 10000 < flag.effective : msg.draws?.[name] ?? rand() < flag.effective;
+      msg.entityFlags[name] = {value, effective:flag.effective, at:sim.time};
+      return value;
+    }
     if (flag.sticky) return (hashOf(`${msg.source}:${name}`) % 10000) / 10000 < flag.effective;
     msg.draws ??= {};
     if (msg.draws[name] === undefined) msg.draws[name] = rand() < flag.effective;
@@ -830,7 +1043,7 @@ function createScenario(sim, definitions, { resetNode, setEdge, setBroker, rebal
 
 return { targetOf, normalizeScenario, createScenario };
 })();
-const module5 = (() => {
+const module7 = (() => {
 'use strict';
 
 // Pure conditions and destination selection. Transport owns all delivery semantics.
@@ -883,12 +1096,12 @@ function selectRoute(routing, msg, policies, rand) {
 
 return { matches, selectRoute };
 })();
-const module6 = (() => {
+const module8 = (() => {
 'use strict';
 const { attachContext } = module2;
-const { matches, selectRoute } = module5;
+const { matches, selectRoute } = module7;
 const { DETECT, isLog, routeOf, split } = module0;
-const { targetOf } = module4;
+const { targetOf } = module6;
 
 
 
@@ -900,7 +1113,7 @@ function breakerOf(value) {
   return value ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], bad: 0, until: 0, trial: false } : null;
 }
 
-function createTransport(sim, { tables, logModel, decide }) {
+function createTransport(sim, { tables, logModel, decide, entities }) {
   const { cfg, nodes, edges, logs, rand } = sim;
   const { recordOf, tableOp, acquireWrite, releaseWrite, commit, applyEntry } = tables;
   const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
@@ -925,15 +1138,19 @@ function createTransport(sim, { tables, logModel, decide }) {
     const msg = { id: ++ids, source, born: sim.time, draws: null, endpoint };
     return sim.trafficState ? attachContext(msg, {}, null) : msg;
   };
-  function decisionFor(job, routing) {
+  const gateOpen = (msg, edge) => (!edge.flag || decide(msg, edge.flag)) && (!edge.unless || !decide(msg, edge.unless));
+  function decisionFor(job, routing, run) {
     const decision = selectRoute(routing, job.msg, sim.trafficState.policies, rand);
     const edge = decision.to && job.node.data.find(e => e.to === decision.to);
-    if (edge && ((edge.flag && !decide(job.msg, edge.flag)) || (edge.unless && decide(job.msg, edge.unless)))) decision.outcome = "flag-blocked";
+    if (edge && !gateOpen(job.msg, edge)) decision.outcome = "flag-blocked";
     if (edge && decision.outcome === "selected" && !nodes.get(edge.to).up) decision.outcome = "target-down";
     const event = { ...decision, node: job.node.id, at: sim.time, traffic: job.msg.traffic, msgId: job.msg.id };
     sim.trafficState.decisions.push(event);
     if (job.span) (job.span.decisions ??= []).push(event);
-    if (!edge || decision.outcome === "flag-blocked") { job.failed = true; return null; }
+    if (!edge || decision.outcome === "flag-blocked") {
+      entities?.end(run, decision.outcome === 'flag-blocked' ? 'flag-skipped' : 'rejected', {flags:structuredClone(job.msg.entityFlags || {})});
+      if (!run?.optional) job.failed = true; return null;
+    }
     return edge;
   }
   // Per-route history at a node: rates, service times, end-to-end latency and errors.
@@ -1046,7 +1263,11 @@ function createTransport(sim, { tables, logModel, decide }) {
     }
     if (job.span) Object.assign(job.span, { done: true, ok, total: ms, own, end: sim.time });
     if (job.root && job.span && sim.tracing) sim.tracing.done = true;
-    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
+    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms, ...(job.entityResult ? {entityResult:job.entityResult} : {}) });
+    else if (job.op?.entityRun) {
+      entities.accept(job.msg,job.op.entityRun,job.entityResult);
+      entities.end(job.op.entityRun,ok ? 'completed' : 'failed');
+    }
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
 
@@ -1058,6 +1279,8 @@ function createTransport(sim, { tables, logModel, decide }) {
     if (node.errorRate && rand() < node.errorRate) return respond(job, false);
     // A database replica applies WAL entries; anything else (a CDC connector) passes them on.
     if (job.entry && node.store) return applyEntry(job);
+    const handled = entities?.before(job);
+    if (handled != null) return respond(job, handled);
     const op = tableOp(job);
     if (op) return respond(job, commit(job, op));
     forward(job);
@@ -1135,7 +1358,8 @@ function createTransport(sim, { tables, logModel, decide }) {
       if (br.state === "open" && sim.time >= br.until) setBreaker(edge, "half");
       if (br.state === "open" || (br.state === "half" && br.trial)) {
         edge.fast++;
-        return finish(job, false, prior);
+        entities?.end(op?.entityRun,'breaker-open');
+        return finish(job, false, prior, op);
       }
       if (br.state === "half") {
         br.trial = true;
@@ -1184,17 +1408,22 @@ function createTransport(sim, { tables, logModel, decide }) {
       }
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
+      entities?.note(call.op?.entityRun,'retry-waiting',{attempt:call.attempt});
       const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
-      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op) });
+      sim.timers.push({ at: sim.time + wait, run: () => { if (!job.dead && !job.done) callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op); else entities?.end(call.op?.entityRun,'interrupted'); } });
       return;
     }
-    finish(job, ok, spent);
+    if (call.op?.entityRun) {
+      if (ok) entities.accept(job.msg,call.op.entityRun,call.entityResult);
+      entities.end(call.op.entityRun,ok ? 'completed' : 'failed',{attempt:call.attempt});
+    }
+    finish(job, ok, spent, call.op);
   }
 
-  function finish(job, ok, ms) {
+  function finish(job, ok, ms, op) {
     job.waiting--;
     job.cost = Math.max(job.cost, ms);
-    if (!ok) job.failed = true;
+    if (!ok && !op?.entityRun?.optional) job.failed = true;
     if (job.waiting === 0 && job.forwarded) advance(job);
   }
 
@@ -1202,22 +1431,31 @@ function createTransport(sim, { tables, logModel, decide }) {
   function issue(job, calls) {
     const node = job.node;
     for (const call of calls) {
-      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) continue;
+      const run = call.entityStep ? entities.prepare(job.msg,call.entityStep,node.id,recordOf) : null;
+      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) { entities?.end(run,'condition-skipped'); continue; }
       let edge;
       if (call.routing) {
-        if (rand() >= (call.p ?? 1)) continue;
-        edge = decisionFor(job, call.routing);
+        if (rand() >= (call.p ?? 1)) { entities?.end(run,'probability-skipped'); continue; }
+        edge = decisionFor(job, call.routing, run);
       } else {
         edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-        if (!edge || rand() >= (call.p ?? 1)) continue;
+        if (!edge || rand() >= (call.p ?? 1)) { entities?.end(run,'probability-skipped'); continue; }
+        if (!gateOpen(job.msg,edge)) {
+          entities?.end(run,'flag-skipped',{flags:structuredClone(job.msg.entityFlags || {})});
+          if (!run?.optional) job.failed = true;
+          continue;
+        }
       }
       if (!edge) continue;
-      if (call.table) recordOf(job.msg, call.table);
+      if (run?.invalid) { entities.end(run,'missing-input'); if (!run.optional) job.failed = true; continue; }
+      const op = run ? {...call,entityRun:run} : call;
+      if (call.table && !run) recordOf(job.msg, call.table);
+      if (run) entities.note(run,'dispatched',{to:edge.to,flags:structuredClone(job.msg.entityFlags || {})});
       if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
       else if (edge.sync) {
         job.waiting++;
-        callOut(job, edge, 0, 0, call);
-      } else launch(edge, "request", { msg: job.msg, op: call, parentJob: job });
+        callOut(job, edge, 0, 0, op);
+      } else launch(edge, "request", { msg: job.msg, op, parentJob: job });
     }
   }
   function advance(job) {
@@ -1242,10 +1480,12 @@ function createTransport(sim, { tables, logModel, decide }) {
         call.timedOut = true;
         return settle(call, false, edge.timeout * 1000);
       }
+      if (packet.entityResult) call.entityResult = packet.entityResult;
       return settle(call, packet.kind === "response", ms);
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
+      if (!packet.call) entities?.end(packet.op?.entityRun,'failed',{node:node.id});
       dropAt(edge, node, packet.msg || packet.call?.job.msg);
       // Connection refused: the caller hears about it straight away.
       if (packet.call) {
@@ -1258,12 +1498,16 @@ function createTransport(sim, { tables, logModel, decide }) {
       const log = logs.get(node.id);
       const p = logModel.append(log, edge, packet);
       if (p == null) {
+        if (!packet.call) entities?.end(packet.op?.entityRun,'publication-failed',{node:node.id});
         dropAt(edge, node, packet.msg || packet.call?.job.msg);
         if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
         return;
       }
-      const job = startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
-      logModel.remember(log, p, packet.msg || packet.call?.job.msg, job?.span?.id);
+      const op = packet.op || packet.call?.op;
+      const msg = packet.msg || packet.call?.job.msg || newMsg(edge.from);
+      const job = startJob(node, op?.entityRun ? {...msg} : msg, packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p, ...(op?.entityRun ? {op} : {}) });
+      entities?.published(job,log,p);
+      logModel.remember(log, p, job.msg, job?.span?.id);
       return job;
     }
     startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob, ...(packet.traceParent != null ? { traceParent: packet.traceParent } : {}) });
@@ -1309,6 +1553,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     // In-flight work is lost; callers waiting on it get a reset.
     for (const job of node.jobs) {
       if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
+      if (!job.call) entities?.end(job.op?.entityRun,'interrupted',{node:node.id});
       job.dead = true;
     }
     tables.reset(node);
@@ -1421,7 +1666,7 @@ function createTransport(sim, { tables, logModel, decide }) {
 
 return { breakerOf, createTransport };
 })();
-const module7 = (() => {
+const module9 = (() => {
 'use strict';
 
 const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
@@ -1445,7 +1690,7 @@ function attachReporting(sim) {
         rows: table.touched.slice(0, table.show).map((key) => {
           const row = table.rows.get(key);
           const newest = primary?.rows.get(key)?.version;
-          return { key, version: row?.version ?? null, fields: row?.fields || {}, age: row ? sim.time - row.at : null, behind: newest != null && (row?.version ?? 0) < newest };
+          return { key, ...(row?.entity ? {entity:row.entity.ref} : {}), version: row?.version ?? null, fields: row?.fields || {}, age: row ? sim.time - row.at : null, behind: newest != null && (row?.version ?? 0) < newest };
         }),
         writes: rate(st.writes),
         inserts: rate(st.inserts),
@@ -1654,14 +1899,16 @@ function summaryOf(sim) {
 
 return { attachReporting, reportTick, formatRate, formatCount, formatMs, statsOf, summaryOf };
 })();
-const module8 = (() => {
+const module10 = (() => {
 'use strict';
 const { SIM_DEFAULTS, SERVICE_MS, rngOf, split } = module0;
-const { createTables } = module1;
-const { createLogs } = module3;
-const { createScenario, normalizeScenario } = module4;
-const { createTransport, breakerOf } = module6;
-const { attachReporting, reportTick } = module7;
+const { createEntities } = module3;
+const { createTables } = module4;
+const { createLogs } = module5;
+const { createScenario, normalizeScenario } = module6;
+const { createTransport, breakerOf } = module8;
+const { attachReporting, reportTick } = module9;
+
 
 
 
@@ -1753,11 +2000,13 @@ function createSim(spec) {
   const logs = new Map();
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
-  const contextual = !!(spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
+  const contextual = !!(spec.entities || spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
   if (contextual) sim.trafficState = { definitions: spec.traffic || {}, policies: spec.policies || {}, emitted: [], arrivals: [], paths: [], decisions: [] };
   // Factories only initialize state. Callbacks run after transport has been wired.
   let transport;
+  const entities = spec.entities ? createEntities(sim, spec.entities) : null;
   const tables = createTables(sim, spec.records || {}, {
+    entities,
     launch: (...args) => transport.launch(...args),
     respond: (...args) => transport.respond(...args),
     begin: (job) => transport.begin(job),
@@ -1773,7 +2022,7 @@ function createSim(spec) {
     setBroker,
     rebalance: logModel.rebalance,
   });
-  transport = createTransport(sim, { tables, logModel, decide });
+  transport = createTransport(sim, { tables, logModel, decide, entities });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -1794,6 +2043,7 @@ function createSim(spec) {
         due.forEach((timer) => timer.run());
       }
     }
+    entities?.expire();
     tables.retryReplication();
     transport.tickNodes(dt);
     transport.tickTimeouts();
@@ -1845,12 +2095,12 @@ function createSim(spec) {
 
 return { createSim };
 })();
-const module9 = (() => {
+const module11 = (() => {
 'use strict';
-const { createSim } = module8;
+const { createSim } = module10;
 const { SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashOf } = module0;
-const { targetOf, normalizeScenario } = module4;
-const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module7;
+const { targetOf, normalizeScenario } = module6;
+const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module9;
 // Stable public entry point. Figure authors use specs; engine maintainers use sim/.
 
 
@@ -1861,10 +2111,10 @@ const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module7;
 
 return { createSim, SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashOf, targetOf, normalizeScenario, formatRate, formatCount, formatMs, statsOf, summaryOf };
 })();
-return module9;
+return module11;
 })();
 
-const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"grid":[132,86],"positions":{"users":[0,0],"api":[1,0],"sessions":[2,-1.3],"items":[2,1.3],"writer":[0,2.6],"save":[1,2.6],"cache":[2,0]},"spec":{"nodes":[{"id":"users","kind":"client","emit":{"GET /items":5},"partitions":0,"replicas":1,"label":"users"},{"id":"api","kind":"service","label":"catalog-api","endpoints":{"GET /items":{"calls":[{"to":"sessions"},{"to":"cache"},{"to":"items","op":"select","table":"items","p":0.2}]}},"partitions":0,"replicas":1},{"id":"sessions","kind":"cache","label":"Redis sessions","partitions":0,"replicas":1,"component":"redis"},{"id":"items","kind":"db","label":"DynamoDB items","tables":{"items":{"key":"itemId"}},"partitions":0,"replicas":1,"component":"dynamodb"},{"id":"writer","kind":"client","emit":{"PUT /items":2},"partitions":0,"replicas":1,"label":"writer"},{"id":"save","kind":"service","endpoints":{"PUT /items":{"calls":[{"to":"items","op":"upsert","table":"items"}]}},"partitions":0,"replicas":1,"label":"save"},{"id":"cache","kind":"cache","label":"ElastiCache","partitions":0,"replicas":1,"component":"elasticache"}],"edges":[{"from":"users","to":"api","kind":"sync","sync":true,"len":85},{"from":"api","to":"sessions","kind":"sync","sync":true,"len":175.35149520792612},{"from":"writer","to":"save","kind":"sync","sync":true,"len":85},{"from":"save","to":"items","kind":"sync","sync":true,"len":178.6714952079261},{"from":"api","to":"cache","kind":"sync","sync":true,"len":79},{"from":"api","to":"items","p":0.2,"kind":"sync","sync":true,"len":168.59149520792613}],"sim":{},"records":{"items":{"key":"itemId","keys":12,"fields":{"name":["Notebook","Mug"],"stock":[0,12,48],"available":[true,false]}}},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,85],[0,25.17,27.7,29.83,31.81,33.95,36.48,124.2,126.74,128.87,130.85,132.98,135.52,175.35],[0,85],[0,43.17,45.7,47.83,49.81,51.95,54.48,140.52,143.06,145.19,147.17,149.3,151.84,178.67],[0,79],[0,34.17,36.7,38.83,40.81,42.95,45.48,121.44,123.98,126.11,128.09,130.22,132.76,168.59]],"views":{"iso":{"edges":[[[240.9,71.3],[329.6,103]],[[393.1,117.5],[419.3,126.9],[422.1,127.7],[424.8,128],[427.2,127.7],[429.5,126.9],[431.5,125.7],[493.3,77.1],[495.3,75.9],[497.6,75.1],[500,74.8],[502.7,75.1],[505.5,75.9],[547.1,90.7]],[[83.6,194.9],[172.2,226.6]],[[228.6,246.7],[273.6,262.8],[276.5,263.6],[279.1,263.9],[281.5,263.6],[283.8,262.9],[285.9,261.6],[346.4,214],[348.5,212.7],[350.7,211.9],[353.2,211.7],[355.8,212],[358.6,212.7],[386.6,222.7]],[[386,123.1],[468.4,152.6]],[[378.9,128.7],[414.5,141.4],[416.9,142.5],[418.4,143.7],[418.9,145],[418.4,146.4],[416.9,147.9],[363.4,189.9],[362,191.4],[361.4,192.8],[361.9,194.1],[363.4,195.3],[365.8,196.4],[403.2,209.7]]],"step":[7.30393231411972,2.610681462759814],"flagStep":[0,0],"packet":{"top":"M3.8 -4.2L0.7 -1.7L-3.8 -3.4L-0.7 -5.8Z","sides":"M3.8 -4.2L0.7 -1.7L0.7 2L3.8 -0.4ZM0.7 -1.7L-3.8 -3.4L-3.8 0.4L0.7 2Z","outline":"M-3.8 -3.4L-0.7 -5.8L3.8 -4.2L3.8 -0.4L0.7 2L-3.8 0.4Z"}},"flat":{"edges":[[[99.5,264.1],[255.4,264.1]],[[354.5,245.6],[400.7,245.6],[405.3,245.1],[408.9,243.6],[411.4,241],[413,237.4],[413.5,232.8],[413.5,71.9],[414,67.2],[415.6,63.6],[418.1,61.1],[421.7,59.5],[426.3,59],[499.4,59]],[[99.5,674.3],[255.4,674.3]],[[354.5,674.3],[433.7,674.3],[438.3,673.8],[441.9,672.2],[444.5,669.7],[446,666.1],[446.5,661.5],[446.5,503.6],[447,499],[448.6,495.4],[451.1,492.8],[454.7,491.3],[459.4,490.8],[508.6,490.8]],[[354.5,264.1],[499.4,264.1]],[[354.5,282.6],[417.2,282.6],[421.8,283.1],[425.4,284.7],[428,287.2],[429.5,290.8],[430,295.4],[430,434.8],[430.5,439.4],[432.1,443],[434.6,445.6],[438.2,447.1],[442.8,447.6],[508.6,447.6]]],"step":[12.841203943954326,0],"flagStep":[0,0],"packet":null,"k":1.8344577062791905}},"raw":{"title":"Reusable data stores","fig":"Fig 12","caption":"Illustrative traffic and synthetic fields. Redis and ElastiCache use the shared cache model; the service independently samples reads to DynamoDB at a 20% miss rate. The session branch demonstrates Redis separately. DynamoDB uses generic table operations, not AWS APIs, capacity units, consistency modes or global tables. Click DynamoDB, then a row, to inspect saved fields and follow writes.","records":{"items":{"key":"itemId","keys":12,"fields":{"name":["Notebook","Mug"],"stock":[0,12,48],"available":[true,false]}}},"nodes":[{"id":"users","kind":"client","emit":{"GET /items":5},"at":[0,0]},{"id":"api","kind":"service","label":"catalog-api","at":[1,0],"endpoints":{"GET /items":{"calls":[{"to":"sessions"},{"to":"cache"},{"to":"items","op":"select","table":"items","p":0.2}]}}},{"id":"sessions","kind":"redis","label":"Redis sessions","at":[2,-1.3]},{"id":"items","kind":"dynamodb","label":"DynamoDB items","at":[2,1.3],"tables":{"items":{"key":"itemId"}}},{"id":"writer","kind":"client","emit":{"PUT /items":2},"at":[0,2.6]},{"id":"save","kind":"service","at":[1,2.6],"endpoints":{"PUT /items":{"calls":[{"to":"items","op":"upsert","table":"items"}]}}},{"id":"cache","kind":"elasticache","label":"ElastiCache","at":[2,0]}],"edges":[["users","api"],["api","sessions"],["writer","save"],["save","items"],{"from":"api","to":"cache"},{"from":"api","to":"items","p":0.2}]}};
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"entities":true,"trace":true},"edit":false,"grid":[132,86],"positions":{"users":[0,0],"api":[1,0],"sessions":[2,-1.3],"items":[2,1.3],"writer":[0,2.6],"save":[1,2.6],"cache":[2,0]},"spec":{"nodes":[{"id":"users","kind":"client","emit":{"GET /items":5},"partitions":0,"replicas":1,"label":"users"},{"id":"api","kind":"service","label":"catalog-api","endpoints":{"GET /items":{"calls":[{"to":"sessions"},{"to":"cache"},{"to":"items","op":"select","table":"items","p":0.2}]}},"partitions":0,"replicas":1},{"id":"sessions","kind":"cache","label":"Redis sessions","partitions":0,"replicas":1,"component":"redis"},{"id":"items","kind":"db","label":"DynamoDB items","tables":{"items":{"key":"itemId"}},"partitions":0,"replicas":1,"component":"dynamodb"},{"id":"writer","kind":"client","emit":{"PUT /items":2},"partitions":0,"replicas":1,"label":"writer"},{"id":"save","kind":"service","endpoints":{"PUT /items":{"calls":[{"to":"items","op":"upsert","table":"items"}]}},"partitions":0,"replicas":1,"label":"save"},{"id":"cache","kind":"cache","label":"ElastiCache","partitions":0,"replicas":1,"component":"elasticache"}],"edges":[{"from":"users","to":"api","kind":"sync","sync":true,"len":85},{"from":"api","to":"sessions","kind":"sync","sync":true,"len":175.35149520792612},{"from":"writer","to":"save","kind":"sync","sync":true,"len":85},{"from":"save","to":"items","kind":"sync","sync":true,"len":178.6714952079261},{"from":"api","to":"cache","kind":"sync","sync":true,"len":79},{"from":"api","to":"items","p":0.2,"kind":"sync","sync":true,"len":168.59149520792613}],"sim":{},"records":{"items":{"key":"itemId","keys":12,"fields":{"name":["Notebook","Mug"],"stock":[0,12,48],"available":[true,false]}}},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"entities":true,"trace":true}},"lens":[[0,85],[0,25.17,27.7,29.83,31.81,33.95,36.48,124.2,126.74,128.87,130.85,132.98,135.52,175.35],[0,85],[0,43.17,45.7,47.83,49.81,51.95,54.48,140.52,143.06,145.19,147.17,149.3,151.84,178.67],[0,79],[0,34.17,36.7,38.83,40.81,42.95,45.48,121.44,123.98,126.11,128.09,130.22,132.76,168.59]],"views":{"iso":{"edges":[[[240.9,71.3],[329.6,103]],[[393.1,117.5],[419.3,126.9],[422.1,127.7],[424.8,128],[427.2,127.7],[429.5,126.9],[431.5,125.7],[493.3,77.1],[495.3,75.9],[497.6,75.1],[500,74.8],[502.7,75.1],[505.5,75.9],[547.1,90.7]],[[83.6,194.9],[172.2,226.6]],[[228.6,246.7],[273.6,262.8],[276.5,263.6],[279.1,263.9],[281.5,263.6],[283.8,262.9],[285.9,261.6],[346.4,214],[348.5,212.7],[350.7,211.9],[353.2,211.7],[355.8,212],[358.6,212.7],[386.6,222.7]],[[386,123.1],[468.4,152.6]],[[378.9,128.7],[414.5,141.4],[416.9,142.5],[418.4,143.7],[418.9,145],[418.4,146.4],[416.9,147.9],[363.4,189.9],[362,191.4],[361.4,192.8],[361.9,194.1],[363.4,195.3],[365.8,196.4],[403.2,209.7]]],"step":[7.30393231411972,2.610681462759814],"flagStep":[0,0],"packet":{"top":"M3.8 -4.2L0.7 -1.7L-3.8 -3.4L-0.7 -5.8Z","sides":"M3.8 -4.2L0.7 -1.7L0.7 2L3.8 -0.4ZM0.7 -1.7L-3.8 -3.4L-3.8 0.4L0.7 2Z","outline":"M-3.8 -3.4L-0.7 -5.8L3.8 -4.2L3.8 -0.4L0.7 2L-3.8 0.4Z"}},"flat":{"edges":[[[99.5,264.1],[255.4,264.1]],[[354.5,245.6],[400.7,245.6],[405.3,245.1],[408.9,243.6],[411.4,241],[413,237.4],[413.5,232.8],[413.5,71.9],[414,67.2],[415.6,63.6],[418.1,61.1],[421.7,59.5],[426.3,59],[499.4,59]],[[99.5,674.3],[255.4,674.3]],[[354.5,674.3],[433.7,674.3],[438.3,673.8],[441.9,672.2],[444.5,669.7],[446,666.1],[446.5,661.5],[446.5,503.6],[447,499],[448.6,495.4],[451.1,492.8],[454.7,491.3],[459.4,490.8],[508.6,490.8]],[[354.5,264.1],[499.4,264.1]],[[354.5,282.6],[417.2,282.6],[421.8,283.1],[425.4,284.7],[428,287.2],[429.5,290.8],[430,295.4],[430,434.8],[430.5,439.4],[432.1,443],[434.6,445.6],[438.2,447.1],[442.8,447.6],[508.6,447.6]]],"step":[12.841203943954326,0],"flagStep":[0,0],"packet":null,"k":1.8344577062791905}},"raw":{"title":"Reusable data stores","fig":"Fig 12","caption":"Illustrative traffic and synthetic fields. Redis and ElastiCache use the shared cache model; the service independently samples reads to DynamoDB at a 20% miss rate. The session branch demonstrates Redis separately. DynamoDB uses generic table operations, not AWS APIs, capacity units, consistency modes or global tables. Click DynamoDB, then a row, to inspect saved fields and follow writes.","records":{"items":{"key":"itemId","keys":12,"fields":{"name":["Notebook","Mug"],"stock":[0,12,48],"available":[true,false]}}},"nodes":[{"id":"users","kind":"client","emit":{"GET /items":5},"at":[0,0]},{"id":"api","kind":"service","label":"catalog-api","at":[1,0],"endpoints":{"GET /items":{"calls":[{"to":"sessions"},{"to":"cache"},{"to":"items","op":"select","table":"items","p":0.2}]}}},{"id":"sessions","kind":"redis","label":"Redis sessions","at":[2,-1.3]},{"id":"items","kind":"dynamodb","label":"DynamoDB items","at":[2,1.3],"tables":{"items":{"key":"itemId"}}},{"id":"writer","kind":"client","emit":{"PUT /items":2},"at":[0,2.6]},{"id":"save","kind":"service","at":[1,2.6],"endpoints":{"PUT /items":{"calls":[{"to":"items","op":"upsert","table":"items"}]}}},{"id":"cache","kind":"elasticache","label":"ElastiCache","at":[2,0]}],"edges":[["users","api"],["api","sessions"],["writer","save"],["save","items"],{"from":"api","to":"cache"},{"from":"api","to":"items","p":0.2}]}};
 const k = (() => {
 
 // The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
@@ -2436,8 +2686,96 @@ function validateRouting(spec) {
 
 return { validateRouting };
 })();
+const ENTITY_VALIDATION = (() => {
+
+// Entity authoring is validated separately from transport and rendering.
+function validateEntities(spec) {
+  if (!spec.entities) {
+    if (spec.nodes.some(n=>Object.values(n.endpoints || {}).some(e=>e.calls?.some(c=>c.entityStep)))) throw new Error("spec entities: bindings require definitions");
+    return;
+  }
+  const fail = message => { throw new Error(`spec entities: ${message}`); };
+  const object = value => value && typeof value === 'object' && !Array.isArray(value);
+  const json = value => value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || (Array.isArray(value) ? value.every(json) : object(value) && Object.getPrototypeOf(value) === Object.prototype && Object.values(value).every(json));
+  const kinds = new Set(['write', 'read', 'publish', 'project', 'cache-get', 'cache-fill', 'cache-invalidate']);
+  const nodes = new Map(spec.nodes.map(n => [n.id, n]));
+  const tableAt = (node, table) => nodes.get(node)?.tables?.[table] || spec.edges.some(e=>!Array.isArray(e) && e.kind === 'replication' && e.to === node && nodes.get(e.from)?.tables?.[table]);
+  if (!object(spec.entities)) fail('expected a definition map');
+  for (const [name, def] of Object.entries(spec.entities)) {
+    if (!object(def) || !spec.records?.[def.record]) fail(`${name} needs an existing record generator`);
+    if (!nodes.has(def.owner)) fail(`${name} has an unknown owner`);
+    if (!Array.isArray(def.scope || []) || (def.scope || []).some(p => typeof p !== 'string' || !/^context\.[\w.-]+$/.test(p) || p.split('.').some(k => ['__proto__','constructor','prototype'].includes(k)))) fail(`${name} has invalid scope paths`);
+    if (!object(def.representations) || !object(def.steps)) fail(`${name} needs representations and steps`);
+    if (Object.values(def.representations).filter(r => r.authoritative === true).length !== 1) fail(`${name} needs exactly one authoritative representation`);
+    for (const [id, rep] of Object.entries(def.representations)) {
+      if (!object(rep) || !nodes.has(rep.node)) fail(`${name}.${id} has an unknown node`);
+      if (!!rep.table === !!rep.cache) fail(`${name}.${id} needs table or cache`);
+      if (rep.table && !tableAt(rep.node,rep.table)) fail(`${name}.${id} has an unknown table`);
+      if (rep.cache && !['cache','redis','elasticache'].includes(nodes.get(rep.node).kind)) fail(`${name}.${id} needs a cache node`);
+      if (rep.authoritative && spec.edges.some(e => !Array.isArray(e) && e.kind === 'replication' && e.to === rep.node)) fail(`${name}.${id} authority cannot be a replica`);
+      if (rep.authoritative && !rep.table) fail(`${name}.${id} authority must be a table`);
+      if (rep.table && !rep.authoritative && !['arrival','if-newer'].includes(rep.versionPolicy)) fail(`${name}.${id} needs versionPolicy arrival or if-newer`);
+      if (rep.ttl != null && (!Number.isFinite(rep.ttl) || rep.ttl <= 0)) fail(`${name}.${id} ttl must be positive`);
+      if (rep.fields != null && !object(rep.fields)) fail(`${name}.${id} fields must be a map`);
+      for (const mapping of Object.values(rep.fields || {})) {
+        if (!object(mapping) || Object.keys(mapping).length !== 1 || !(typeof mapping.from === 'string' || Object.hasOwn(mapping, 'value'))) fail(`${name}.${id} mappings use {from: field} or {value: JSON}`);
+        if (Object.hasOwn(mapping, 'value')) { try { if (!json(mapping.value)) fail('invalid constant'); } catch { fail(`${name}.${id} constant must be JSON`); } }
+      }
+      for (const owner of Object.values(rep.owners || {})) if (!nodes.has(owner)) fail(`${name}.${id} has an unknown field owner`);
+    }
+    for (const [id, step] of Object.entries(def.steps)) {
+      if (!object(step) || !kinds.has(step.kind)) fail(`${name}.${id} has an unknown step kind`);
+      const rep = def.representations[step.target];
+      if (step.kind === 'publish') {
+        if (typeof step.event !== 'string' || !step.event) fail(`${name}.${id} needs an event name`);
+      } else if (!rep) fail(`${name}.${id} has an unknown representation`);
+      if (step.kind === 'read' && !rep?.table) fail(`${name}.${id} reads need a table`);
+      if (step.kind === 'write' && !rep?.authoritative) fail(`${name}.${id} must write the authority`);
+      if (step.kind === 'project' && (!rep?.table || rep.authoritative)) fail(`${name}.${id} needs a projection table`);
+      if (step.kind.startsWith('cache-') && !rep?.cache) fail(`${name}.${id} needs a cache representation`);
+      if (['publish','project','cache-fill'].includes(step.kind) && !step.input) fail(`${name}.${id} needs input`);
+      if (step.input) {
+        if (!object(step.input) || Object.keys(step.input).length !== 1) fail(`${name}.${id} input uses step or event`);
+        if (step.input.step && !def.steps[step.input.step]) fail(`${name}.${id} references an unknown step`);
+        if (step.input.event && !Object.values(def.steps).some(s => s.kind === 'publish' && s.event === step.input.event)) fail(`${name}.${id} references an unknown event`);
+        if (!step.input.step && !step.input.event) fail(`${name}.${id} needs a step or event input`);
+      }
+      const seen = new Set([id]); let current = step;
+      while (current?.input?.step) {
+        if (seen.has(current.input.step)) fail(`${name}.${id} has cyclic step inputs`);
+        seen.add(current.input.step); current = def.steps[current.input.step];
+      }
+    }
+  }
+  for (const node of spec.nodes) for (const endpoint of Object.values(node.endpoints || {})) {
+    const ids = new Set(), bindings = new Set();
+    for (const call of endpoint.calls || []) {
+      if (!call.entityStep) continue;
+      const binding = call.entityStep, def = spec.entities[binding.entity], step = def?.steps[binding.step];
+      if (!step) fail(`${node.id} binds an unknown entity step`);
+      if (typeof call.id !== 'string' || !call.id || ids.has(call.id)) fail(`${node.id} entity calls need unique ids per endpoint`);
+      ids.add(call.id);
+      const key = JSON.stringify([binding.entity,binding.step]);
+      if (bindings.has(key)) fail(`${node.id} binds the same entity step twice in one endpoint; use distinct steps`);
+      bindings.add(key);
+      if (binding.optional != null && typeof binding.optional !== 'boolean') fail(`${call.id} optional must be boolean`);
+      const actions = call.routing ? [...call.routing.rules.map(r=>r.action),call.routing.fallback] : [{type:'send',to:call.to}];
+      const targets = actions.flatMap(a => a.type === 'send' ? [a.to] : a.type === 'weighted' ? a.targets.map(t=>t.to) : []);
+      const rep = def.representations[step.target];
+      for (const to of targets) {
+        if (step.kind === 'publish' ? !['kafka','queue'].includes(nodes.get(to)?.kind) : to !== rep.node) fail(`${call.id} destination does not match its step`);
+      }
+      if (rep?.table && (call.table !== rep.table || (['read'].includes(step.kind) ? call.op !== 'select' : !['insert','update','upsert','delete','rmw'].includes(call.op)))) fail(`${call.id} table operation does not match its step`);
+      if (!rep?.table && (call.op || call.table)) fail(`${call.id} cache/publish calls must not declare table operations`);
+    }
+  }
+}
+
+return { validateEntities };
+})();
 const VALIDATION = (() => {
-const { validateRouting } = ROUTING_VALIDATION;
+const { validateRouting } = ROUTING_VALIDATION; const { validateEntities } = ENTITY_VALIDATION;
+
 
 // Validate the public authoring contract before layout, browser packaging or simulation.
 const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
@@ -2562,6 +2900,7 @@ function validateSpec(spec, features = {}, kinds) {
       }
     }
   }
+  if (features.entities !== false && features.tables !== false && features.endpoints !== false) validateEntities(spec);
   if (spec.ports != null) {
     object(spec.ports, "ports");
     for (const [port, ids] of Object.entries(spec.ports))
@@ -2803,7 +3142,7 @@ function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.entities ? { entities: spec.entities } : {}), ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -3807,6 +4146,7 @@ function simSpec(model) {
     scenario: model.scenario,
     flags: model.flags,
     records: model.records,
+    ...(model.entities ? { entities: model.entities } : {}),
     ...(model.traffic ? { traffic: model.traffic } : {}),
     ...(model.policies ? { policies: model.policies } : {}),
     features: model.features,
@@ -3814,6 +4154,8 @@ function simSpec(model) {
 }
 
 const TOPO_CSS = `
+.tp-entity{margin-top:12px;min-width:0}.tp-entity header{display:flex;gap:8px;align-items:center}.tp-entity details{max-height:260px;overflow:auto;margin-top:10px}.tp-entity-event{font:11px var(--tp-mono);padding:5px 0;overflow-wrap:anywhere}.tp-entity-event small{display:block}.tp-entity .tp-record-copy{overflow-wrap:anywhere}.tp-entity dl{display:grid;grid-template-columns:minmax(65px,1fr) 2fr;gap:3px 10px;margin:6px 0;font:11px var(--tp-mono)}.tp-entity dt{color:var(--tp-mid)}.tp-entity dd{margin:0;overflow-wrap:anywhere}
+
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
@@ -4013,7 +4355,7 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: [], reset: [] };
 // Slowed while following a request.
 let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
@@ -4021,6 +4363,7 @@ let routeFilter = null;
 let trafficDisplay = null;
 // A selected saved record: keep its request/replication packets visible.
 let recordFilter = null;
+let entityFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -4131,7 +4474,9 @@ function drawPackets() {
     const matchesRecord = recordFilter && (record?.key === recordFilter.key || (packet.entry?.table === recordFilter.table && packet.entry.key === recordFilter.key));
     trafficDisplay?.paint(slot, packet);
     const classDim = trafficDisplay && !trafficDisplay.matches(packet) ? 0.12 : 1;
-    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
+    const entityMsg = packet.msg || packet.call?.job.msg;
+    const matchesEntity = entityFilter && (packet.entry?.entity?.ref.id === entityFilter || Object.values(entityMsg?.entityRefs || {}).some(ref => ref.id === entityFilter));
+    const dim = entityFilter ? (matchesEntity ? 1 : .08) : recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
@@ -4507,6 +4852,7 @@ document.querySelectorAll(".tp-views button").forEach((button) => button.addEven
 // Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
 function resetVisuals(next) {
   sim = next;
+  for (const hook of hooks.reset) hook();
   for (const v of viewList) {
     resetView(v);
     for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
@@ -4595,7 +4941,7 @@ const inspector = (() => {
           if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
           if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
           const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ");
-          const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}" aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
+          const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}"${r.entity ? ` data-entity-ref="${esc(JSON.stringify(r.entity))}"` : ""} aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.entity ? [...r.entity.scope,r.entity.key].join(" / ") : r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
           // WAL: the newest entries; amber ones haven't reached every replica yet.
           const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
           const cells = t.wal.recent.map((e) => `<i title="lsn ${e.lsn} ${e.op} ${esc(e.key)} v${e.version}"${e.lsn > shipped ? " data-pending" : ""}></i>`).join("");
@@ -4721,6 +5067,7 @@ const recordInspector = (() => {
   inspector.sections.push(section);
   panel.addEventListener("click", event => {
     const row = event.target.closest("button.tp-row[data-table]");
+    if (row?.dataset.entityRef) return;
     if (row) {
       selected = { node: inspector.open, table: row.dataset.table, key: Number(row.dataset.key) };
       recordFilter = null;

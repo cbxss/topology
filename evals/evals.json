@@ -90,6 +90,18 @@
       "prompt": "Show purchase and audit events sharing Kafka, a consumer outage and recovery, then each event reaching the appropriate downstream service.",
       "expected_output": "Use mixed traffic workload and context; consumer routing chooses sinks after Kafka delivery. Context and class persist through backlog with parent/root trace continuity. Explain dispatch offsets rather than durable ACKs or exactly-once. Verify backlog drains, correct sinks receive each class, and follow includes async descendants. Inspect colors, reduced motion and phone layout; check browser console and line ends.",
       "files": []
+    },
+    {
+      "id": 16,
+      "prompt": "Show one tenant-scoped order through a database write, Kafka event, search projection and Redis cache. Pause the consumer so I can inspect divergent saved fields and then follow recovery.",
+      "expected_output": "Uses entities and explicit endpoint entityStep bindings from the public spec reference. Scope isolates equal order IDs. Publication consumes an acknowledged committed snapshot, mappings rename saved fields, cache TTL is explicit. Captures a selected saved row with observed causal history and copy differences. Reports queued work, partial histories, and dispatch-only Kafka semantics. Runs check and browser verification in both views without custom engine changes.",
+      "files": []
+    },
+    {
+      "id": 17,
+      "prompt": "Add an optional search projection flag and roll it back while orders are queued. Existing admitted work should retain its decisions; new orders should skip search without failing the main save.",
+      "expected_output": "Uses optional entityStep on the projection call with modeled flag gates. Captures each decision on first encounter, retains it through asynchronous envelopes, and explains first encounter at a consumer versus producer. Shows skipped outcomes and copy divergence, tests trace disabled and flags disabled, and discloses that removing gates can run alternatives. Uses flagged-projection-rollout as an authoring example.",
+      "files": []
     }
   ]
 }

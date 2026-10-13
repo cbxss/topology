@@ -9,7 +9,7 @@ function breakerOf(value) {
   return value ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], bad: 0, until: 0, trial: false } : null;
 }
 
-function createTransport(sim, { tables, logModel, decide }) {
+function createTransport(sim, { tables, logModel, decide, entities }) {
   const { cfg, nodes, edges, logs, rand } = sim;
   const { recordOf, tableOp, acquireWrite, releaseWrite, commit, applyEntry } = tables;
   const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
@@ -34,15 +34,19 @@ function createTransport(sim, { tables, logModel, decide }) {
     const msg = { id: ++ids, source, born: sim.time, draws: null, endpoint };
     return sim.trafficState ? attachContext(msg, {}, null) : msg;
   };
-  function decisionFor(job, routing) {
+  const gateOpen = (msg, edge) => (!edge.flag || decide(msg, edge.flag)) && (!edge.unless || !decide(msg, edge.unless));
+  function decisionFor(job, routing, run) {
     const decision = selectRoute(routing, job.msg, sim.trafficState.policies, rand);
     const edge = decision.to && job.node.data.find(e => e.to === decision.to);
-    if (edge && ((edge.flag && !decide(job.msg, edge.flag)) || (edge.unless && decide(job.msg, edge.unless)))) decision.outcome = "flag-blocked";
+    if (edge && !gateOpen(job.msg, edge)) decision.outcome = "flag-blocked";
     if (edge && decision.outcome === "selected" && !nodes.get(edge.to).up) decision.outcome = "target-down";
     const event = { ...decision, node: job.node.id, at: sim.time, traffic: job.msg.traffic, msgId: job.msg.id };
     sim.trafficState.decisions.push(event);
     if (job.span) (job.span.decisions ??= []).push(event);
-    if (!edge || decision.outcome === "flag-blocked") { job.failed = true; return null; }
+    if (!edge || decision.outcome === "flag-blocked") {
+      entities?.end(run, decision.outcome === 'flag-blocked' ? 'flag-skipped' : 'rejected', {flags:structuredClone(job.msg.entityFlags || {})});
+      if (!run?.optional) job.failed = true; return null;
+    }
     return edge;
   }
   // Per-route history at a node: rates, service times, end-to-end latency and errors.
@@ -155,7 +159,11 @@ function createTransport(sim, { tables, logModel, decide }) {
     }
     if (job.span) Object.assign(job.span, { done: true, ok, total: ms, own, end: sim.time });
     if (job.root && job.span && sim.tracing) sim.tracing.done = true;
-    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
+    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms, ...(job.entityResult ? {entityResult:job.entityResult} : {}) });
+    else if (job.op?.entityRun) {
+      entities.accept(job.msg,job.op.entityRun,job.entityResult);
+      entities.end(job.op.entityRun,ok ? 'completed' : 'failed');
+    }
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
 
@@ -167,6 +175,8 @@ function createTransport(sim, { tables, logModel, decide }) {
     if (node.errorRate && rand() < node.errorRate) return respond(job, false);
     // A database replica applies WAL entries; anything else (a CDC connector) passes them on.
     if (job.entry && node.store) return applyEntry(job);
+    const handled = entities?.before(job);
+    if (handled != null) return respond(job, handled);
     const op = tableOp(job);
     if (op) return respond(job, commit(job, op));
     forward(job);
@@ -244,7 +254,8 @@ function createTransport(sim, { tables, logModel, decide }) {
       if (br.state === "open" && sim.time >= br.until) setBreaker(edge, "half");
       if (br.state === "open" || (br.state === "half" && br.trial)) {
         edge.fast++;
-        return finish(job, false, prior);
+        entities?.end(op?.entityRun,'breaker-open');
+        return finish(job, false, prior, op);
       }
       if (br.state === "half") {
         br.trial = true;
@@ -293,17 +304,22 @@ function createTransport(sim, { tables, logModel, decide }) {
       }
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
+      entities?.note(call.op?.entityRun,'retry-waiting',{attempt:call.attempt});
       const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
-      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op) });
+      sim.timers.push({ at: sim.time + wait, run: () => { if (!job.dead && !job.done) callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op); else entities?.end(call.op?.entityRun,'interrupted'); } });
       return;
     }
-    finish(job, ok, spent);
+    if (call.op?.entityRun) {
+      if (ok) entities.accept(job.msg,call.op.entityRun,call.entityResult);
+      entities.end(call.op.entityRun,ok ? 'completed' : 'failed',{attempt:call.attempt});
+    }
+    finish(job, ok, spent, call.op);
   }
 
-  function finish(job, ok, ms) {
+  function finish(job, ok, ms, op) {
     job.waiting--;
     job.cost = Math.max(job.cost, ms);
-    if (!ok) job.failed = true;
+    if (!ok && !op?.entityRun?.optional) job.failed = true;
     if (job.waiting === 0 && job.forwarded) advance(job);
   }
 
@@ -311,22 +327,31 @@ function createTransport(sim, { tables, logModel, decide }) {
   function issue(job, calls) {
     const node = job.node;
     for (const call of calls) {
-      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) continue;
+      const run = call.entityStep ? entities.prepare(job.msg,call.entityStep,node.id,recordOf) : null;
+      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) { entities?.end(run,'condition-skipped'); continue; }
       let edge;
       if (call.routing) {
-        if (rand() >= (call.p ?? 1)) continue;
-        edge = decisionFor(job, call.routing);
+        if (rand() >= (call.p ?? 1)) { entities?.end(run,'probability-skipped'); continue; }
+        edge = decisionFor(job, call.routing, run);
       } else {
         edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-        if (!edge || rand() >= (call.p ?? 1)) continue;
+        if (!edge || rand() >= (call.p ?? 1)) { entities?.end(run,'probability-skipped'); continue; }
+        if (!gateOpen(job.msg,edge)) {
+          entities?.end(run,'flag-skipped',{flags:structuredClone(job.msg.entityFlags || {})});
+          if (!run?.optional) job.failed = true;
+          continue;
+        }
       }
       if (!edge) continue;
-      if (call.table) recordOf(job.msg, call.table);
+      if (run?.invalid) { entities.end(run,'missing-input'); if (!run.optional) job.failed = true; continue; }
+      const op = run ? {...call,entityRun:run} : call;
+      if (call.table && !run) recordOf(job.msg, call.table);
+      if (run) entities.note(run,'dispatched',{to:edge.to,flags:structuredClone(job.msg.entityFlags || {})});
       if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
       else if (edge.sync) {
         job.waiting++;
-        callOut(job, edge, 0, 0, call);
-      } else launch(edge, "request", { msg: job.msg, op: call, parentJob: job });
+        callOut(job, edge, 0, 0, op);
+      } else launch(edge, "request", { msg: job.msg, op, parentJob: job });
     }
   }
   function advance(job) {
@@ -351,10 +376,12 @@ function createTransport(sim, { tables, logModel, decide }) {
         call.timedOut = true;
         return settle(call, false, edge.timeout * 1000);
       }
+      if (packet.entityResult) call.entityResult = packet.entityResult;
       return settle(call, packet.kind === "response", ms);
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
+      if (!packet.call) entities?.end(packet.op?.entityRun,'failed',{node:node.id});
       dropAt(edge, node, packet.msg || packet.call?.job.msg);
       // Connection refused: the caller hears about it straight away.
       if (packet.call) {
@@ -367,12 +394,16 @@ function createTransport(sim, { tables, logModel, decide }) {
       const log = logs.get(node.id);
       const p = logModel.append(log, edge, packet);
       if (p == null) {
+        if (!packet.call) entities?.end(packet.op?.entityRun,'publication-failed',{node:node.id});
         dropAt(edge, node, packet.msg || packet.call?.job.msg);
         if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
         return;
       }
-      const job = startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
-      logModel.remember(log, p, packet.msg || packet.call?.job.msg, job?.span?.id);
+      const op = packet.op || packet.call?.op;
+      const msg = packet.msg || packet.call?.job.msg || newMsg(edge.from);
+      const job = startJob(node, op?.entityRun ? {...msg} : msg, packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p, ...(op?.entityRun ? {op} : {}) });
+      entities?.published(job,log,p);
+      logModel.remember(log, p, job.msg, job?.span?.id);
       return job;
     }
     startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob, ...(packet.traceParent != null ? { traceParent: packet.traceParent } : {}) });
@@ -418,6 +449,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     // In-flight work is lost; callers waiting on it get a reset.
     for (const job of node.jobs) {
       if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
+      if (!job.call) entities?.end(job.op?.entityRun,'interrupted',{node:node.id});
       job.dead = true;
     }
     tables.reset(node);

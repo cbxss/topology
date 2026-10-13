@@ -1,3 +1,4 @@
+import { validateEntities } from "./entity-validation.mjs";
 import { validateRouting } from "./routing-validation.mjs";
 // Validate the public authoring contract before layout, browser packaging or simulation.
 const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
@@ -122,6 +123,7 @@ export function validateSpec(spec, features = {}, kinds) {
       }
     }
   }
+  if (features.entities !== false && features.tables !== false && features.endpoints !== false) validateEntities(spec);
   if (spec.ports != null) {
     object(spec.ports, "ports");
     for (const [port, ids] of Object.entries(spec.ports))

@@ -73,10 +73,11 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   let script = bundleSim() + `\nconst DATA = ${JSON.stringify(data)};\n`;
   // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
   // each wrapped in its own scope so none of their names meet the live code's.
-  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("routing-validation.mjs", "ROUTING_VALIDATION") + scoped("validate.mjs", "VALIDATION", "const { validateRouting } = ROUTING_VALIDATION;") + scoped("labels.mjs", "LABELS") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION; const { CHAR, anchorFor, lineAt, localBox, placeLabels, planBox, wrapLabel } = LABELS;");
+  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("routing-validation.mjs", "ROUTING_VALIDATION") + scoped("entity-validation.mjs", "ENTITY_VALIDATION") + scoped("validate.mjs", "VALIDATION", "const { validateRouting } = ROUTING_VALIDATION; const { validateEntities } = ENTITY_VALIDATION;") + scoped("labels.mjs", "LABELS") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION; const { CHAR, anchorFor, lineAt, localBox, placeLabels, planBox, wrapLabel } = LABELS;");
   script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
   if (spec.traffic) script += "\n" + readFileSync(join(KIT, "topo-traffic.js"), "utf8");
   if (features.tables) script += "\n" + readFileSync(join(KIT, "topo-records.js"), "utf8");
+  if (model.entities) script += "\n" + readFileSync(join(KIT, "topo-entities.js"), "utf8");
   if (features.trace) script += "\n" + readFileSync(join(KIT, "topo-trace.js"), "utf8");
   if (model.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
   if (data.edit) script += "\n" + readFileSync(join(KIT, "topo-edit.js"), "utf8");
@@ -120,6 +121,8 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   sim.quiet = true;
   const per = sim.cfg.per;
   const warnings = [];
+  if (spec.entities && !model.entities) warnings.push('entity execution disabled: entities requires endpoints and tables');
+  if (spec.entities && !model.features.flags) warnings.push('modeled flag gates removed: alternative entity branches may both execute');
   const story = model.features.scenario ? normalizeScenario(model.scenario) : null;
   if (story) seconds = Math.max(seconds, story.length);
   log(`${model.title}: ${model.nodes.length} nodes, ${model.edges.length} edges, ${seconds}s simulated`);
@@ -176,6 +179,11 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   for (const d of sim.routingOf()) log(`  routing ${d.node} / ${d.rule} → ${d.to || "reject"}: ${d.count} ${d.outcome} (last ${sim.cfg.window}s)`);
   const colors = Object.values(spec.traffic || {}).map((c, i) => c.color || ["cyan", "blue", "violet", "magenta", "teal", "lime"][i % 6]);
   if (colors.length > 6 || new Set(colors).size < colors.length) warnings.push("traffic classes reuse colors; use labels and class filters to distinguish them");
+  if (sim.entityState) {
+    const counts = new Map();
+    for (const h of sim.entityState.histories.values()) for (const e of h.events) counts.set(e.outcome,(counts.get(e.outcome)||0)+1);
+    log(`  entity history (retained): ${[...counts].map(([k,v])=>`${k} ${v}`).join(' · ')}; ${sim.entityState.pending.size} pending calls`);
+  }
   // An endpoint's calls ride edges: each must have one.
   for (const node of model.nodes) for (const [name, endpoint] of Object.entries(node.endpoints || {})) for (const call of endpoint.calls || [])
     if (!call.routing && !model.edges.some((edge) => edge.from === node.id && edge.to === call.to)) warnings.push(`endpoint ${name} on ${node.id} calls ${call.to}, but there is no edge ${node.id} → ${call.to}`);

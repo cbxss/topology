@@ -1,3 +1,5 @@
+import {createSim} from '../kit/topo-sim.mjs';
+import {modelOf,simSpec} from '../kit/topo.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -45,4 +47,15 @@ test('documented routing recipe builds and sends classes only to their selected 
     assert.ok(arrivals.every(a => a.traffic === traffic));
   }
   for (const theme of ['dark', 'light']) assert.ok(buildPage(spec, {theme}).html.includes('tp-traffic'));
+});
+
+test('documented entity recipe commits, publishes and maps a saved projection', () => {
+  const source = text.split('<!-- tested: entity-recipe -->')[1].match(/```js\n([\s\S]*?)\n```/)[1];
+  const spec = Function(source.replace('export default','return'))();
+  for (const theme of ['dark','light']) assert.ok(buildPage(spec,{theme}).html.includes('Observed causal history'));
+  spec.sim={speed:4000,jitter:false};
+  const sim=createSim(simSpec(modelOf(spec)));
+  for(let i=0;i<600;i++) sim.step(1/60);
+  const rows=[...sim.nodes.get('search').store.get('documents').rows.values()];
+  assert.ok(rows.length);assert.equal(rows[0].fields.kind,'order');assert.ok(rows[0].fields.state);
 });

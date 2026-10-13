@@ -78,7 +78,7 @@ export function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.entities ? { entities: spec.entities } : {}), ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -1082,6 +1082,7 @@ export function simSpec(model) {
     scenario: model.scenario,
     flags: model.flags,
     records: model.records,
+    ...(model.entities ? { entities: model.entities } : {}),
     ...(model.traffic ? { traffic: model.traffic } : {}),
     ...(model.policies ? { policies: model.policies } : {}),
     features: model.features,
@@ -1089,6 +1090,8 @@ export function simSpec(model) {
 }
 
 export const TOPO_CSS = `
+.tp-entity{margin-top:12px;min-width:0}.tp-entity header{display:flex;gap:8px;align-items:center}.tp-entity details{max-height:260px;overflow:auto;margin-top:10px}.tp-entity-event{font:11px var(--tp-mono);padding:5px 0;overflow-wrap:anywhere}.tp-entity-event small{display:block}.tp-entity .tp-record-copy{overflow-wrap:anywhere}.tp-entity dl{display:grid;grid-template-columns:minmax(65px,1fr) 2fr;gap:3px 10px;margin:6px 0;font:11px var(--tp-mono)}.tp-entity dt{color:var(--tp-mid)}.tp-entity dd{margin:0;overflow-wrap:anywhere}
+
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}

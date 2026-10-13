@@ -6,7 +6,7 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: [], reset: [] };
 // Slowed while following a request.
 let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
@@ -14,6 +14,7 @@ let routeFilter = null;
 let trafficDisplay = null;
 // A selected saved record: keep its request/replication packets visible.
 let recordFilter = null;
+let entityFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -124,7 +125,9 @@ function drawPackets() {
     const matchesRecord = recordFilter && (record?.key === recordFilter.key || (packet.entry?.table === recordFilter.table && packet.entry.key === recordFilter.key));
     trafficDisplay?.paint(slot, packet);
     const classDim = trafficDisplay && !trafficDisplay.matches(packet) ? 0.12 : 1;
-    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
+    const entityMsg = packet.msg || packet.call?.job.msg;
+    const matchesEntity = entityFilter && (packet.entry?.entity?.ref.id === entityFilter || Object.values(entityMsg?.entityRefs || {}).some(ref => ref.id === entityFilter));
+    const dim = entityFilter ? (matchesEntity ? 1 : .08) : recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
@@ -500,6 +503,7 @@ document.querySelectorAll(".tp-views button").forEach((button) => button.addEven
 // Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
 function resetVisuals(next) {
   sim = next;
+  for (const hook of hooks.reset) hook();
   for (const v of viewList) {
     resetView(v);
     for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);

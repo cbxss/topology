@@ -41,8 +41,15 @@ function createScenario(sim, definitions, { resetNode, setEdge, setBroker, rebal
   const flagNode = [...nodes.values()].find((node) => node.kind === "flags");
 
   const decide = (msg, name) => {
+    if (sim.entityState && Object.hasOwn(msg.entityFlags || {}, name)) return msg.entityFlags[name].value;
     const flag = flags.get(name);
     if (!flag) return false;
+    if (sim.entityState) {
+      msg.entityFlags ??= {};
+      const value = flag.sticky ? (hashOf(`${msg.origin ?? msg.source}:${name}`) % 10000) / 10000 < flag.effective : msg.draws?.[name] ?? rand() < flag.effective;
+      msg.entityFlags[name] = {value, effective:flag.effective, at:sim.time};
+      return value;
+    }
     if (flag.sticky) return (hashOf(`${msg.source}:${name}`) % 10000) / 10000 < flag.effective;
     msg.draws ??= {};
     if (msg.draws[name] === undefined) msg.draws[name] = rand() < flag.effective;

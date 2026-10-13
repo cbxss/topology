@@ -1,4 +1,5 @@
 import { SIM_DEFAULTS, SERVICE_MS, rngOf, split } from "./common.mjs";
+import { createEntities } from "./entities.mjs";
 import { createTables } from "./tables.mjs";
 import { createLogs } from "./logs.mjs";
 import { createScenario, normalizeScenario } from "./scenario.mjs";
@@ -89,11 +90,13 @@ function createSim(spec) {
   const logs = new Map();
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
-  const contextual = !!(spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
+  const contextual = !!(spec.entities || spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
   if (contextual) sim.trafficState = { definitions: spec.traffic || {}, policies: spec.policies || {}, emitted: [], arrivals: [], paths: [], decisions: [] };
   // Factories only initialize state. Callbacks run after transport has been wired.
   let transport;
+  const entities = spec.entities ? createEntities(sim, spec.entities) : null;
   const tables = createTables(sim, spec.records || {}, {
+    entities,
     launch: (...args) => transport.launch(...args),
     respond: (...args) => transport.respond(...args),
     begin: (job) => transport.begin(job),
@@ -109,7 +112,7 @@ function createSim(spec) {
     setBroker,
     rebalance: logModel.rebalance,
   });
-  transport = createTransport(sim, { tables, logModel, decide });
+  transport = createTransport(sim, { tables, logModel, decide, entities });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -130,6 +133,7 @@ function createSim(spec) {
         due.forEach((timer) => timer.run());
       }
     }
+    entities?.expire();
     tables.retryReplication();
     transport.tickNodes(dt);
     transport.tickTimeouts();

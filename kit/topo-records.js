@@ -26,6 +26,7 @@ const recordInspector = (() => {
   inspector.sections.push(section);
   panel.addEventListener("click", event => {
     const row = event.target.closest("button.tp-row[data-table]");
+    if (row?.dataset.entityRef) return;
     if (row) {
       selected = { node: inspector.open, table: row.dataset.table, key: Number(row.dataset.key) };
       recordFilter = null;

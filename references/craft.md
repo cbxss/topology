@@ -124,3 +124,18 @@ Kafka/queue stories disclose that offsets advance on dispatch, and show the
 consumer deciding from inherited context after a backlog drains. Check both
 themes, views, phone width and reduced motion; class buttons remain usable when
 animated packets are suppressed.
+
+## Tell one record's story
+
+Use entity bindings when the question is where one logical record was saved.
+Show the authoritative copy, its replica, an event consumer and one or two
+derived representations. Declare tenant scope and field owners explicitly.
+Keep the possible path distinct from observed causal history; an arrow or a
+published event alone does not prove a consumer saved its projection. Make a
+consumer outage, optional flag rollback or cache expiry produce a visible
+difference, then inspect the same scoped key before and after recovery.
+
+Disclose synthetic data, the source/local version distinction, captured flag
+decisions, bounded history and dispatch-only Kafka/queue offsets. Never claim
+atomic publication, exactly-once handling or live database inspection. Use the
+Entity journeys recipe in `spec.md`; avoid custom page logic or transforms.

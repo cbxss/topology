@@ -68,7 +68,7 @@ const inspector = (() => {
           if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
           if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
           const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ");
-          const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}" aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
+          const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}"${r.entity ? ` data-entity-ref="${esc(JSON.stringify(r.entity))}"` : ""} aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.entity ? [...r.entity.scope,r.entity.key].join(" / ") : r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
           // WAL: the newest entries; amber ones haven't reached every replica yet.
           const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
           const cells = t.wal.recent.map((e) => `<i title="lsn ${e.lsn} ${e.op} ${esc(e.key)} v${e.version}"${e.lsn > shipped ? " data-pending" : ""}></i>`).join("");

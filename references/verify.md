@@ -146,3 +146,14 @@ unchanged model state. Inspect dark/light, ISO/2D, 390px and reduced-motion
 captures, including error crosses and retry outlines. Run line ends in both
 views. `verify-sim-browser.mjs` checks new routing browser/Node parity and display
 controls alongside the unchanged 66 legacy cases / 462 frozen checkpoints.
+
+## Entity journeys
+
+Run `node --test tests/entities.test.mjs tests/authoring.test.mjs`, then the full
+suite and `node scripts/verify-sim-browser.mjs`. Check both new examples with
+`--check`. In Chrome, pick a saved row, inspect every representation's actual
+fields and revisions, follow the entity, seek through the outage/rollout, and
+verify that following is cleared on seek. Capture dark/light and iso/flat views
+and run the line-end check. Check entities/tables/endpoints off, trace off, and
+flags off separately. An empty pending-call list is not convergence evidence:
+check queued events, source revisions, missing copies and partial history too.

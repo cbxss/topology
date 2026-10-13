@@ -28,6 +28,8 @@ Start with `references/spec.md` and the closest example. The minimal endpoint/ta
 | Redis, ElastiCache and DynamoDB components | `examples/data-stores/` |
 | Context-based downstream service/database routing and traffic colors | `examples/tenant-routing/` |
 | Context retained through Kafka and consumer routing | `examples/event-routing/` |
+| One scoped record across events, projections and caches | `examples/order-journey/` |
+| Optional projection rollout and captured flag decisions | `examples/flagged-projection-rollout/` |
 | Route mixes, rows and WAL inspection | `examples/orders-api/` |
 | Save then read back from a replica | `examples/read-your-writes/` |
 | Committed writes retried after a timeout | `examples/idempotent-retries/` |
@@ -148,3 +150,16 @@ The output is one self-contained HTML file with no network requests; size depend
 - `references/spec.md`: every spec field, and exactly what the simulation does with it. Read it before writing a spec.
 - `references/craft.md`: the node vocabulary in both views, packet and cursor colours, layout patterns (fan-in, fan-out, replicas, zones, cache-aside, CDC), sizing rates so failures show, anti-patterns, and how to add a node kind.
 - `references/verify.md`: the check, capture and drive commands, a failure-scenario script, and the review checklist.
+
+## Entity journey authoring
+
+For record journeys, read the Entity journeys section in `references/spec.md` and
+start from `examples/order-journey/`. Bind named steps to real endpoint calls;
+never draw a declared path as evidence of a completed write. Distinguish saved
+fields, source revisions, local versions, pending calls, queued events and
+partial retained history. State scope and declared owners. A timed-out write
+may commit without publication; optional flag-disabled projections may remain
+behind. Explain the captured flag-decision rule, TTL and dispatch-only Kafka
+semantics in the caption when relevant. Use `--check`, inspect a saved row in
+both views, and exercise the intended outage or rollout. Authoring requires
+this reference and the examples, not engine internals.

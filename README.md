@@ -97,6 +97,7 @@ Behaviour:
 - routing: `all` with per-edge probability, `roundrobin` with health-check delay, `random`
 - awaited sync calls, endpoint route mixes, and request/span following
 - synthetic records, full saved-field inspection, and following writes across primary/replica copies
+- scoped entity journeys through committed writes, immutable events, projections and explicit caches, with copy divergence and causal history
 - table operations, row locks, stale reads, lost updates, and ordered WAL replication
 - `capacity` + `queue`, timeouts, retries with backoff, circuit breakers
 - Kafka partitions, consumer groups, brokers, RF, min ISR, acks, hot partitions
@@ -140,6 +141,8 @@ agents/openai.yaml       display name and short description for Codex
 - [Reusable data stores](examples/data-stores/data-stores.spec.mjs): Redis, ElastiCache and DynamoDB components with saved-field inspection.
 - [Tenant routing](examples/tenant-routing/tenant-routing.spec.mjs): immutable request context selects services and databases; class colors reveal failure isolation.
 - [Event routing](examples/event-routing/event-routing.spec.mjs): mixed Kafka traffic retains context through backlog and consumer routing.
+- [Order journey](examples/order-journey/order-journey.spec.mjs): scoped identity, saved copies, immutable events and cache expiration.
+- [Flagged projection rollout](examples/flagged-projection-rollout/flagged-projection-rollout.spec.mjs): optional projection gates and captured decisions.
 - [Orders API](examples/orders-api/orders-api.spec.mjs): route mixes, synthetic records and table inspection.
 - [Read your writes](examples/read-your-writes/read-your-writes.spec.mjs): replica lag and stale reads.
 - [Idempotent retries](examples/idempotent-retries/idempotent-retries.spec.mjs): committed writes, timeouts, conflicts and upserts.

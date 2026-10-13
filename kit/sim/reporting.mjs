@@ -19,7 +19,7 @@ function attachReporting(sim) {
         rows: table.touched.slice(0, table.show).map((key) => {
           const row = table.rows.get(key);
           const newest = primary?.rows.get(key)?.version;
-          return { key, version: row?.version ?? null, fields: row?.fields || {}, age: row ? sim.time - row.at : null, behind: newest != null && (row?.version ?? 0) < newest };
+          return { key, ...(row?.entity ? {entity:row.entity.ref} : {}), version: row?.version ?? null, fields: row?.fields || {}, age: row ? sim.time - row.at : null, behind: newest != null && (row?.version ?? 0) < newest };
         }),
         writes: rate(st.writes),
         inserts: rate(st.inserts),

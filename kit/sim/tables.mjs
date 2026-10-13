@@ -1,6 +1,6 @@
 // Tables own record identity, row locks, operations and WAL application.
 // Callbacks preserve transport scheduling without importing the transport module.
-function createTables(sim, records, { launch, respond, begin }) {
+function createTables(sim, records, { launch, respond, begin, entities }) {
   const { nodes, rand } = sim;
   // Tables: rows keyed by a record key, a write-ahead log, and replicas that apply its entries.
   // A replica (a db fed by a replication edge) gets its primary's tables if it declares none.
@@ -30,6 +30,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     }
     return msg.records[table];
   };
+  const recordFor = (job, table) => job.op?.entityRun?.record || recordOf(job.msg, table);
   const WRITES = new Set(["insert", "upsert", "update", "delete", "rmw"]);
   const tableOp = (job) => (job.node.store && job.op?.table && job.node.store.has(job.op.table) ? job.op : null);
 
@@ -38,7 +39,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     // Row locks: a write waits for any other write on the same key to commit.
     const op = tableOp(job);
     if (op && node.locks && WRITES.has(op.op) && !job.holdsLock) {
-      const key = `${op.table}:${recordOf(job.msg, op.table).key}`;
+      const key = `${op.table}:${recordFor(job, op.table).key}`;
       if (node.locked.has(key)) {
         node.locked.get(key).push(job);
         node.tableStats.lockWaits.push(sim.time);
@@ -49,7 +50,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     }
     // An unlocked read-modify-write reads now and writes at commit: anything committed in
     // between is overwritten (a lost update).
-    if (op && op.op === "rmw") job.readVersion = node.store.get(op.table).rows.get(recordOf(job.msg, op.table).key)?.version ?? 0;
+    if (op && op.op === "rmw") job.readVersion = node.store.get(op.table).rows.get(recordFor(job, op.table).key)?.version ?? 0;
     return true;
   }
 
@@ -84,11 +85,12 @@ function createTables(sim, records, { launch, respond, begin }) {
   function commit(job, op) {
     const node = job.node;
     const table = node.store.get(op.table);
-    const record = recordOf(job.msg, op.table);
+    const record = recordFor(job, op.table);
     const key = record.key;
     const row = table.rows.get(key);
     const stats = node.tableStats;
     if (op.op === "select") {
+      entities?.read(job, row);
       if (row) touch(table, key);
       if (!row) {
         const stale = !!node.primary?.store.get(op.table)?.rows.has(key) || (job.msg.wrote?.[`${op.table}:${key}`] ?? 0) > 0;
@@ -121,7 +123,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     const version = (table.versions.get(key) ?? 0) + 1;
     let kind = "delete";
     if (op.op === "delete") {
-      if (!row) return true;
+      if (!row && !op.entityRun) return true;
       table.rows.delete(key);
     } else {
       // An unlocked read-modify-write that read an older version overwrites a newer one.
@@ -136,6 +138,7 @@ function createTables(sim, records, { launch, respond, begin }) {
     if (kind === "update") stats.updates.push(sim.time);
     job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: op.op === "delete" ? -version : version };
     const entry = { lsn: ++node.wal.lsn, table: op.table, key, op: kind, version, fields: record.fields, at: sim.time };
+    entities?.committed(job, entry, table.rows.get(key));
     node.wal.recent = [...node.wal.recent.slice(-23), entry];
     node.wal.applied = entry.lsn;
     rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
@@ -169,7 +172,8 @@ function createTables(sim, records, { launch, respond, begin }) {
           node.wal.received.delete(next.lsn);
           const target = node.store.get(next.table);
           if (next.op === "delete") target.rows.delete(next.key);
-          else target.rows.set(next.key, { key: next.key, version: next.version, fields: next.fields, at: sim.time });
+          else target.rows.set(next.key, { key: next.key, version: next.version, fields: next.fields, at: sim.time, ...(next.entity ? {entity:next.entity} : {}) });
+          entities?.applied(node, next);
           target.versions.set(next.key, next.version);
           touch(target, next.key);
           node.tableStats.applied.push(sim.time);

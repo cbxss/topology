@@ -490,3 +490,147 @@ Display controls consume no random draws and never alter the simulation.
 
 Complete stories: `examples/tenant-routing/` (two routing decisions and tenant
 failure isolation), `examples/event-routing/` (mixed Kafka backlog and context).
+
+## Entity journeys
+
+Use `entities` to explain one scoped record's creation, updates, event snapshots,
+projections, replicas and cache entries. Start from `examples/order-journey/` or
+`examples/flagged-projection-rollout/`. These are synthetic saved records, not
+connections to live databases. Entity definitions describe possible steps;
+**only bound endpoint calls execute them**. They create no hidden network calls.
+
+<!-- tested: entity-recipe -->
+```js
+export default {
+  title: 'Order to read model',
+  records: {orders: {key: 'orderId', keys: 3, fields: {status: ['new','paid']}}},
+  traffic: {tenant: {context: {tenant: 'north'}}},
+  entities: {order: {
+    record: 'orders', scope: ['context.tenant'], owner: 'api',
+    representations: {
+      primary: {node: 'pg', table: 'orders', authoritative: true},
+      search: {node: 'search', table: 'documents', versionPolicy: 'if-newer',
+        fields: {state: {from: 'status'}, kind: {value: 'order'}}, owners: {state: 'api'}},
+    },
+    steps: {
+      save: {kind: 'write', target: 'primary'},
+      publish: {kind: 'publish', event: 'order.saved', input: {step: 'save'}},
+      index: {kind: 'project', target: 'search', input: {event: 'order.saved'}},
+    },
+  }},
+  nodes: [
+    {id: 'app', kind: 'client', workload: [{traffic: 'tenant', endpoint: 'PUT /orders', rate: 2}]},
+    {id: 'api', kind: 'service', endpoints: {'PUT /orders': {calls: [
+      {id: 'save', to: 'pg', op: 'upsert', table: 'orders', entityStep: {entity: 'order', step: 'save'}},
+      {id: 'publish', to: 'events', then: true, entityStep: {entity: 'order', step: 'publish'}},
+    ]}}},
+    {id: 'pg', kind: 'db', tables: {orders: {key: 'orderId'}}},
+    {id: 'events', kind: 'kafka', partitions: 1},
+    {id: 'worker', kind: 'worker', endpoints: {'PUT /orders': {calls: [
+      {id: 'index', to: 'search', op: 'upsert', table: 'documents', entityStep: {entity: 'order', step: 'index', optional: true}},
+    ]}}},
+    {id: 'search', kind: 'db', tables: {documents: {key: 'orderId'}}},
+  ],
+  edges: [['app','api'], ['api','pg'], ['api','events'],
+    {from: 'events', to: 'worker', group: 'views'}, ['worker','search']],
+};
+```
+
+An entity definition has:
+
+| Field | Meaning |
+|---|---|
+| `record` | Existing `records` generator. Logical key and initial write fields come from it. |
+| `scope` | Ordered `context.*` paths; defaults to `[]`. Every value must exist and be a string, number or boolean at runtime. No fallback to an unscoped key. |
+| `owner` | Declared owning service/node ID; explanatory metadata, not access control. |
+| `representations` | Named table or cache copies; exactly one authoritative table. |
+| `steps` | Named operations referenced by `entityStep` on endpoint calls. |
+
+Identity includes entity type, ordered scope values and logical record key.
+Two tenants with order `1001` have distinct physical rows. Entity-owned table
+keys are encoded identities; use the displayed logical key or `row.entity` ref
+instead of treating them as legacy numeric keys. Avoid mixing unbound and
+entity-bound writes to the same logical records.
+
+A table representation names `node` and `table`. A cache representation names
+`node` (cache, Redis or ElastiCache) and `cache` (a descriptive name), optionally
+`ttl` in simulated seconds. A derived table must declare `versionPolicy`:
+`arrival` applies every arriving event, including older ones; `if-newer` ignores
+source revisions no newer than the last applied revision. Local table versions
+and source revisions are separate. Deletes retain revision tombstones, so old
+events cannot resurrect an `if-newer` projection; recreating the authority
+advances its revision.
+
+Omitting `fields` copies saved fields. Otherwise each output field uses exactly
+`{from: 'sourceField'}` or `{value: JSONValue}`. Missing source fields are omitted;
+there are no expressions, joins or callbacks. `owners: {field: nodeId}` declares
+field ownership for the inspector. Ownership is declared, not inferred from
+which service last handled a packet.
+
+| Step kind | Target and execution |
+|---|---|
+| `write` | Authoritative table; bind `insert`, `upsert`, `update`, `delete` or `rmw`. |
+| `read` | Table representation; bind `select`. Returns the actual saved row. |
+| `publish` | No representation target; requires `event` and `input`. Bind a Kafka/queue destination. |
+| `project` | Derived table; requires `input`. Bind a table write; deleted inputs apply a delete. |
+| `cache-get` | Cache representation; reports a real hit or miss. |
+| `cache-fill` | Cache representation; requires `input`, maps its fields and starts TTL. A deleted input removes the entry. |
+| `cache-invalidate` | Cache representation; removes the scoped key. |
+
+`input: {step: 'name'}` requires an acknowledged result of that step in the
+current request lineage. Put dependent calls in later stages with `then: true`.
+`input: {event: 'name'}` consumes the immutable snapshot carried by the current
+Kafka/queue delivery. Publication captures the predecessor's committed result,
+not the latest row at publish time. A timed-out attempt can commit, appear in
+history and replicate, but cannot supply an acknowledged publication result.
+Retries remain separate attempts and can commit multiple revisions. Missing
+required input fails its step. There is no atomic database/event transaction,
+outbox, durable consumer ACK, redelivery or exactly-once guarantee.
+
+Each entity step can be bound once per endpoint; use distinct steps for distinct
+results. Every bound call needs an `id` unique among bound calls in that endpoint and
+`entityStep: {entity, step, optional?: boolean}`. Destinations, including every
+routing alternative, must match the step's representation; publish destinations
+must be logs. Cache/publish calls have no `op` or `table`. Existing routing,
+conditions, probabilities, stage ordering, retries and transport failures still
+apply. Optional rejected/flag-blocked/failed work leaves its parent successful;
+required rejected or flag-blocked work fails it. A skipped condition/probability
+is recorded as such. A missing prerequisite never fabricates a result.
+
+For entity-enabled workloads, each flag decision is captured on first encounter
+and carried through asynchronous envelopes. Already-admitted work retains that
+decision after rollback; new roots use the current rollout. A flag first met in
+a consumer uses its value at that encounter. Sticky evaluation uses the original
+source identity. This applies to direct endpoint calls as well as routed calls;
+inspectors never evaluate flags or draw randomness. `--no-flags` removes gates
+and warns that alternatives can both run.
+
+The tool feature `entities` defaults on but allocates entity state only when
+definitions exist. `--no-entities`, `--no-tables`, or `--no-endpoints` removes
+entity execution and its inspector. `--no-trace` preserves entity behavior.
+Existing specs without entities keep their prior table/cache behavior, including
+probabilistic cache-aside. Entity cache steps never silently replace that model.
+
+Click a saved entity row to inspect all copies, their actual fields, declared
+owners, source/local versions, differences, pending calls and queued events.
+“Possible steps” is the declared plan; observed history contains only executed
+operations and explicit skip/failure outcomes. “Follow entity” highlights its
+packets across requests. Request, operation, attempt, history-event and source
+revision identities are distinct. A replica follows its authority's WAL and is
+included automatically. History keeps at most 256 entities by LRU and 128 events
+per entity; truncated/evicted histories are marked partial. Eviction does not
+remove table rows, caches or queued snapshots. `sim.entityOf(ref)` returns
+a detached inspection snapshot (use the `entity` ref on rows returned by
+`sim.tablesOf(nodeId)`, or `entity.ref` on internal store rows); reading or modifying that snapshot cannot
+change simulation state. A zero pending-call count alone does not imply all
+copies converged: queued events, failures, TTL expiration and disabled branches
+remain visible.
+
+`system(prefix, spec)` namespaces entity definitions, bindings, representation
+nodes and owner references; record generators retain the existing compose rules.
+For explicit shared identity, use `sharedEntities: {localEntity: 'parentEntity'}`.
+This rewrites bindings and omits that child's definition: the parent must supply
+the complete canonical definition with actual composed node IDs. `compose()`
+rejects conflicting definitions; it never guesses that equal numeric keys in
+different systems represent the same entity. Multiple authorities, related
+entities such as order→invoice, joins and schema migrations are outside this model.

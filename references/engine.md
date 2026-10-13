@@ -83,3 +83,17 @@ candidates and obstacles and is the single source for both the renderer and `--c
 warnings, so they cannot disagree. The morph re-renders in the page, so `labels.mjs` is bundled
 as its own scope ahead of `topo.mjs` in `scripts/page.mjs`; morph frames reuse the resting
 view's spots (`model.labelPlans`, `fastLabels`).
+
+Entity execution is opt-in through definitions and call bindings.
+`entity-validation.mjs` owns authoring checks; `sim/entities.mjs` owns scoped
+identity, immutable causal snapshots, bounded history and detached inspection;
+`sim/entity-cache.mjs` owns explicit entries and TTL. Transport prepares steps,
+records routing outcomes and accepts only acknowledged results. Tables report
+actual commits and replica application. Logs carry snapshots in existing
+envelopes without changing dispatch-offset semantics. `topo-entities.js` reads
+inspection projections and never decides flags or consumes RNG. The `entities`
+tool feature depends on endpoints and tables, independently of trace.
+
+Regression coverage lives in `tests/entities.test.mjs`, the executable public
+recipe in `tests/authoring.test.mjs`, and real controls in
+`scripts/verify-sim-browser.mjs`. Legacy release checkpoints remain frozen.
