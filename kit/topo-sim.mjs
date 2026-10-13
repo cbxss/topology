@@ -1,9 +1,18 @@
-// The model behind every figure: a small, seeded, tick-based simulation of messages moving
+// The model behind every figure: a small, seeded, tick-based simulation of requests moving
 // through a system. The page inlines this file (exports stripped) and draws `sim.packets`;
 // `scripts/build.mjs --check` runs the same code in Node and prints what the readout will say.
 // Every number a figure shows comes from here.
+//
+// Time. Sim time is real time for everything the model decides (service time, queue waits,
+// timeouts, backoff, breaker windows, rates), except packet travel, which is slowed down so
+// people can watch it. Latency is therefore built up in model time rather than measured off
+// the clock: a job costs its queue wait plus its service time plus its slowest sync call, and a
+// call costs its network round trip (`ms` on the edge, default `sim.net`) plus the callee's job,
+// plus any earlier failed attempts and their backoff.
 
-export const SIM_DEFAULTS = { speed: 150, latency: 0.03, per: 1, rebalance: 0.9, window: 2, seed: 7 };
+export const SIM_DEFAULTS = { speed: 150, per: 1, rebalance: 0.9, window: 2, seed: 7, refuse: 0.02, net: 0.5, length: 0, loop: true };
+export const SERVICE_MS = { client: 0, lb: 0.3, gateway: 1, service: 8, worker: 15, cache: 0.4, db: 4, storage: 20, kafka: 2, queue: 1, cdn: 0.5, dns: 1, external: 120, flags: 1, scheduler: 0, box: 5 };
+export const DETECT = { lb: 0.6, gateway: 0.6, dns: 3 };
 
 export function rngOf(seed) {
   let s = seed >>> 0 || 1;
@@ -16,32 +25,87 @@ export function rngOf(seed) {
 }
 
 export const isLog = (node) => node.kind === "kafka" || node.kind === "queue";
-export const routeOf = (node) => node.route || (node.kind === "lb" || node.kind === "gateway" ? "roundrobin" : "all");
+export const routeOf = (node) => node.route || (node.kind === "lb" || node.kind === "gateway" || node.kind === "dns" ? "roundrobin" : "all");
 
-// spec: the normalised spec from topo.mjs (nodes with ids, edges with `len` world units).
+export function hashOf(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+// Scenario steps may name a phase instead of a time: { phase: "incident", after: 1.5 }.
+export function normalizeScenario(scenario) {
+  if (!scenario) return null;
+  const phases = (scenario.phases || []).map((phase) => ({ ...phase })).sort((a, b) => a.at - b.at);
+  const byName = new Map(phases.map((phase) => [phase.name, phase]));
+  const steps = (scenario.steps || []).map((step, index) => {
+    let at = step.at;
+    if (at == null && step.phase != null) {
+      const phase = byName.get(step.phase);
+      if (!phase) throw new Error(`scenario step ${index}: unknown phase "${step.phase}"`);
+      at = phase.at + (step.after || 0);
+    }
+    if (at == null) throw new Error(`scenario step ${index}: needs \`at\` or \`phase\``);
+    return { ...step, at, index };
+  });
+  steps.sort((a, b) => a.at - b.at || a.index - b.index);
+  const last = Math.max(0, ...steps.map((step) => step.at), ...phases.map((phase) => phase.at));
+  const length = scenario.length || Math.ceil(last + 8);
+  phases.forEach((phase, index) => (phase.end = phases[index + 1]?.at ?? length));
+  return { length, loop: scenario.loop !== false, steps, phases };
+}
+
+const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
+
+// spec: { nodes, edges (with `len` in world units), sim, scenario, flags, features }.
 export function createSim(spec) {
+  const features = spec.features || {};
+  const on = (name) => features[name] !== false;
   const cfg = { ...SIM_DEFAULTS, ...(spec.sim || {}) };
+  const scenario = on("scenario") ? normalizeScenario(spec.scenario) : null;
+  if (scenario) cfg.length = scenario.length;
   const rand = rngOf(cfg.seed);
   const nodes = new Map();
-  const edges = spec.edges.map((edge, index) => ({ ...edge, index, sent: 0, dropped: 0 }));
+  const edges = spec.edges.map((edge, index) => ({
+    ...edge,
+    index,
+    sent: 0,
+    dropped: 0,
+    failed: 0,
+    fast: 0,
+    recent: [],
+    recentErrors: [],
+    flow: 0,
+    errorRate: 0,
+    breaker: on("breakers") && edge.breaker ? { errors: 0.5, min: 8, window: 2, open: 3, ...(edge.breaker === true ? {} : edge.breaker), state: "closed", outcomes: [], until: 0, trial: false } : null,
+  }));
   for (const node of spec.nodes) {
     nodes.set(node.id, {
       ...node,
       up: node.up !== false,
+      downSince: node.up === false ? 0 : null,
+      ms: node.ms ?? SERVICE_MS[node.kind] ?? 5,
+      queueMax: on("queues") ? node.queue || 0 : 0,
       out: [],
       into: [],
       rr: 0,
       tokens: 0,
-      bucket: node.capacity ? node.capacity : 0,
+      bucket: node.capacity ? node.capacity * (node.burst ?? 0.25) + 1 : 0,
       handled: 0,
-      dropped: 0,
-      errors: 0,
-      clock: rand() / Math.max(node.emit || 1, 0.001),
-      busy: [],
+      jobs: new Set(),
+      working: [],
+      waiting: [],
+      clock: rand() / Math.max(typeof node.emit === "number" ? node.emit : 1, 0.001),
+      nextBurst: 0,
       flow: 0,
       dropRate: 0,
+      errorRate: 0,
       recent: [],
       recentDrops: [],
+      recentErrors: [],
+      service: [],
+      roots: [],
+      hist: [],
       replica: 0,
     });
   }
@@ -49,6 +113,12 @@ export function createSim(spec) {
     nodes.get(edge.from).out.push(edge);
     nodes.get(edge.to).into.push(edge);
   }
+
+  // Feature flags in the modelled system. A service evaluates flags locally from the last
+  // config it got; while the flag service is down, changes don't reach anyone.
+  const flags = new Map();
+  if (on("flags")) for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
+  const flagNode = on("flags") ? [...nodes.values()].find((node) => node.kind === "flags") : null;
 
   // Logs: kafka topics (partitions, consumer groups with exclusive assignment) and queues
   // (one lane, competing consumers).
@@ -65,7 +135,25 @@ export function createSim(spec) {
     logs.set(node.id, { node, partitions, end: Array(partitions).fill(0), rr: 0, groups: [...groups.values()], appended: 0 });
   }
 
-  const sim = { cfg, nodes, edges, logs, packets: [], time: 0, events: [], rand };
+  const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
+  // The animation time a sync call can take before its own timeout starts counting:
+  // its round trip plus the slowest sync call its target makes in turn.
+  const allowance = new Map();
+  const allowanceOf = (edge, seen = new Set()) => {
+    if (allowance.has(edge.index)) return allowance.get(edge.index);
+    if (seen.has(edge.index)) return 0;
+    seen.add(edge.index);
+    const target = nodes.get(edge.to);
+    const below = target.out.filter((e) => e.sync && e.kind !== "replication").map((e) => allowanceOf(e, seen));
+    const value = 2 * durationOf(edge) + Math.max(0, ...below);
+    allowance.set(edge.index, value);
+    return value;
+  };
+  edges.forEach((edge) => allowanceOf(edge));
+
+  const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  let ids = 0;
+  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
 
   function rebalance(log, group, now) {
     const live = group.members.filter((edge) => nodes.get(edge.to).up);
@@ -82,94 +170,326 @@ export function createSim(spec) {
   }
   for (const log of logs.values()) for (const group of log.groups) rebalance(log, group, 0);
 
-  const launch = (edge, kind, extra = {}) => {
-    edge.sent++;
-    sim.packets.push({ edge: edge.index, t: 0, dir: kind === "response" ? -1 : 1, kind, duration: Math.max(edge.len / cfg.speed, 0.08), ...extra });
-  };
-
-  function forward(node) {
-    if (isLog(node)) return;
-    const data = node.out.filter((edge) => edge.kind !== "replication");
-    const repl = node.out.filter((edge) => edge.kind === "replication");
-    for (const edge of repl) launch(edge, "replication");
-    if (!data.length) return;
-    const mode = routeOf(node);
-    if (mode === "roundrobin") {
-      // Skip targets that are down when health checks are on (the default).
-      for (let tries = 0; tries < data.length; tries++) {
-        const edge = data[node.rr++ % data.length];
-        if (nodes.get(edge.to).up || node.health === false) return launch(edge, "request");
-      }
-      node.errors++;
-      return;
+  function launch(edge, kind, extra = {}) {
+    const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    if (packet.dir > 0) {
+      edge.sent++;
+      edge.recent.push(sim.time);
     }
-    if (mode === "random") {
-      const total = data.reduce((sum, edge) => sum + (edge.p ?? 1), 0);
-      let pick = rand() * total;
-      for (const edge of data) if ((pick -= edge.p ?? 1) <= 0) return launch(edge, "request");
-      return launch(data[data.length - 1], "request");
-    }
-    for (const edge of data) if (rand() < (edge.p ?? 1)) launch(edge, "request");
+    sim.packets.push(packet);
+    return packet;
   }
 
-  function admit(node) {
-    if (!node.capacity) return true;
-    if (node.bucket >= 1) {
-      node.bucket -= 1;
-      return true;
-    }
-    return false;
-  }
+  const burst = (edge, at = 1) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1 });
 
-  function arrive(packet) {
-    const edge = edges[packet.edge];
-    if (packet.kind === "response") return;
-    const node = nodes.get(edge.to);
-    if (!node.up || !admit(node)) {
-      node.dropped++;
-      node.recentDrops.push(sim.time);
-      edges[packet.edge].dropped++;
-      sim.packets.push({ ...packet, t: 1, kind: "drop", age: 0 });
-      return;
-    }
+  // --- jobs -----------------------------------------------------------------------------------
+
+  function startJob(node, msg, call, extra = {}) {
+    const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
+    node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
-    sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time, kind: packet.kind });
-    if (isLog(node)) {
-      const log = logs.get(node.id);
-      const p = packet.partition ?? (edge.key != null ? hashOf(String(edge.key)) % log.partitions : log.rr++ % log.partitions);
-      log.end[p]++;
-      log.appended++;
+    sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
+    if (!node.capacity) return begin(job);
+    if (node.bucket >= 1) {
+      node.bucket -= 1;
+      return begin(job);
+    }
+    if (node.waiting.length < node.queueMax) return node.waiting.push(job);
+    reject(job);
+  }
+
+  function begin(job) {
+    const node = job.node;
+    // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
+    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
+    job.readyAt = sim.time + (base * spread) / 1000;
+    node.working.push(job);
+  }
+
+  // Over capacity with a full buffer: answer 503 at once.
+  function reject(job) {
+    const node = job.node;
+    node.recentDrops.push(sim.time);
+    if (job.call) {
+      job.call.edge.dropped++;
+      burst(job.call.edge);
+    } else if (job.via) burst(job.via);
+    respond(job, false);
+  }
+
+  function respond(job, ok) {
+    if (job.dead || job.done) return;
+    job.done = true;
+    const node = job.node;
+    node.jobs.delete(job);
+    if (!ok) node.recentErrors.push(sim.time);
+    const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
+    const ms = own + job.cost;
+    node.service.push({ at: sim.time, ms });
+    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
+    if (job.root) node.roots.push({ at: sim.time, ms, ok });
+  }
+
+  function ready(job) {
+    if (job.dead || job.done) return;
+    const node = job.node;
+    if (!node.up) return;
+    if (isLog(node)) return respond(job, true);
+    if (node.errorRate && rand() < node.errorRate) return respond(job, false);
+    forward(job);
+    job.forwarded = true;
+    if (job.waiting === 0) respond(job, !job.failed);
+  }
+
+  const decide = (msg, name) => {
+    const flag = flags.get(name);
+    if (!flag) return false;
+    if (flag.sticky) return (hashOf(`${msg.source}:${name}`) % 10000) / 10000 < flag.effective;
+    msg.draws ??= {};
+    if (msg.draws[name] === undefined) msg.draws[name] = rand() < flag.effective;
+    return msg.draws[name];
+  };
+  const healthy = (node, router) => node.up || sim.time - node.downSince < (router.detect ?? router.ttl ?? DETECT[router.kind] ?? 0);
+
+  function forward(job) {
+    const node = job.node;
+    const usable = node.out.filter((edge) => (edge.flag && on("flags") ? decide(job.msg, edge.flag) : edge.unless && on("flags") ? !decide(job.msg, edge.unless) : true));
+    for (const edge of usable) if (edge.kind === "replication") {
+      launch(edge, "replication", { msg: job.msg });
+    }
+    const data = usable.filter((edge) => edge.kind !== "replication");
+    if (!data.length) return;
+    const mode = routeOf(node);
+    const chosen = [];
+    if (mode === "roundrobin") {
+      // Health checks notice a dead target only after `detect` seconds (`ttl` for DNS).
+      for (let tries = 0; tries < data.length; tries++) {
+        const edge = data[node.rr++ % data.length];
+        if (node.health === false || healthy(nodes.get(edge.to), node)) {
+          chosen.push(edge);
+          break;
+        }
+      }
+      if (!chosen.length) job.failed = true;
+    } else if (mode === "random") {
+      const total = data.reduce((sum, edge) => sum + (edge.p ?? 1), 0);
+      let pick = rand() * total;
+      chosen.push(data.find((edge) => (pick -= edge.p ?? 1) <= 0) || data[data.length - 1]);
+    } else {
+      for (const edge of data) if (rand() < (edge.p ?? 1)) chosen.push(edge);
+    }
+    for (const edge of chosen) {
+      if (edge.sync) {
+        job.waiting++;
+        callOut(job, edge, 0);
+      } else launch(edge, "request", { msg: job.msg });
+    }
+  }
+
+  // --- calls: one attempt of a sync request ---------------------------------------------------
+
+  const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
+
+  function callOut(job, edge, attempt, prior = 0) {
+    const br = edge.breaker;
+    let trial = false;
+    if (br) {
+      if (br.state === "open" && sim.time >= br.until) setBreaker(edge, "half");
+      if (br.state === "open" || (br.state === "half" && br.trial)) {
+        edge.fast++;
+        return finish(job, false, prior);
+      }
+      if (br.state === "half") {
+        br.trial = true;
+        trial = true;
+      }
+    }
+    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout : Infinity, done: false, packets: [] };
+    sim.calls.add(call);
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+  }
+
+  function setBreaker(edge, state) {
+    const br = edge.breaker;
+    br.state = state;
+    br.trial = false;
+    if (state === "open") br.until = sim.time + br.open;
+    if (state === "closed") br.outcomes = [];
+    sim.events.push({ type: "breaker", edge: edge.index, state, at: sim.time });
+  }
+
+  function settle(call, ok, ms) {
+    if (call.done) return;
+    const spent = call.prior + ms;
+    call.done = true;
+    sim.calls.delete(call);
+    const { edge, job } = call;
+    if (!ok) {
+      edge.failed++;
+      edge.recentErrors.push(sim.time);
+    }
+    const br = edge.breaker;
+    if (br) {
+      if (call.trial) setBreaker(edge, ok ? "closed" : "open");
+      else if (br.state === "closed") {
+        br.outcomes.push({ at: sim.time, ok });
+        while (br.outcomes.length && br.outcomes[0].at < sim.time - br.window) br.outcomes.shift();
+        const bad = br.outcomes.filter((o) => !o.ok).length;
+        if (br.outcomes.length >= br.min && bad / br.outcomes.length >= br.errors) setBreaker(edge, "open");
+      }
+    }
+    if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
+      const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
       return;
     }
-    node.busy.push({ at: sim.time + (node.latency ?? cfg.latency), edge: packet.edge, sync: edge.sync && packet.kind === "request" });
+    finish(job, ok, spent);
   }
+
+  function finish(job, ok, ms) {
+    job.waiting--;
+    job.cost = Math.max(job.cost, ms);
+    if (!ok) job.failed = true;
+    if (job.waiting === 0 && job.forwarded) respond(job, !job.failed);
+  }
+
+  // --- arrivals -------------------------------------------------------------------------------
+
+  function arrive(packet) {
+    const edge = edges[packet.edge];
+    if (packet.dir < 0) {
+      const call = packet.call;
+      if (!call || call.done) return;
+      return settle(call, packet.kind === "response", netOf(edge) + (packet.ms || 0));
+    }
+    const node = nodes.get(edge.to);
+    if (!node.up) {
+      node.recentDrops.push(sim.time);
+      edge.dropped++;
+      burst(edge);
+      // Connection refused: the caller hears about it straight away.
+      if (packet.call) {
+        const call = packet.call;
+        sim.timers.push({ at: sim.time + cfg.refuse, run: () => !call.done && call.packets.push(launch(edge, "error", { call, ms: 0 })) });
+      }
+      return;
+    }
+    if (isLog(node)) {
+      const log = logs.get(node.id);
+      const p = chooseP(log, edge, packet);
+      log.end[p]++;
+      log.appended++;
+    }
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge });
+  }
+
+  function chooseP(log, edge, packet) {
+    if (packet.partition != null) return packet.partition;
+    if (edge.key != null) return hashOf(String(edge.key)) % log.partitions;
+    const skew = log.node.skew;
+    if (skew) {
+      const total = skew.reduce((a, b) => a + b, 0);
+      let pick = rand() * total;
+      for (let p = 0; p < log.partitions; p++) if ((pick -= skew[p] ?? 0) <= 0) return p;
+      return log.partitions - 1;
+    }
+    return log.rr++ % log.partitions;
+  }
+
+  // --- sources --------------------------------------------------------------------------------
+
+  const emitAt = (node, t) => {
+    const emit = node.emit;
+    if (typeof emit === "number") return emit;
+    if (Array.isArray(emit)) {
+      const span = cfg.length || emit[emit.length - 1][0] || 1;
+      const x = cfg.loop && cfg.length ? t % span : t;
+      if (x <= emit[0][0]) return emit[0][1];
+      for (let i = 1; i < emit.length; i++) {
+        const [t1, r1] = emit[i];
+        const [t0, r0] = emit[i - 1];
+        if (x <= t1) return r0 + ((r1 - r0) * (x - t0)) / Math.max(t1 - t0, 1e-6);
+      }
+      return emit[emit.length - 1][1];
+    }
+    return 0;
+  };
+
+  function emitOne(node) {
+    const msg = newMsg(node.id);
+    const job = { node, msg, call: null, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, root: true };
+    node.jobs.add(job);
+    node.handled++;
+    node.recent.push(sim.time);
+    sim.events.push({ type: "handle", node: node.id, replica: 0, at: sim.time });
+    forward(job);
+    job.forwarded = true;
+    if (job.waiting === 0) {
+      job.done = true;
+      node.jobs.delete(job);
+      if (node.out.some((edge) => edge.sync)) node.roots.push({ at: sim.time, ms: 0, ok: !job.failed });
+    }
+  }
+
+  // --- the tick -------------------------------------------------------------------------------
 
   function step(dt) {
     sim.time += dt;
     const now = sim.time;
-    // Sources emit with a little jitter so packets don't march in lockstep.
-    for (const node of nodes.values()) {
-      if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
-      if (!node.emit || !node.up) continue;
-      node.clock -= dt;
-      while (node.clock <= 0) {
-        node.clock += (0.6 + rand() * 0.8) / node.emit;
-        node.handled++;
-        node.recent.push(now);
-        sim.events.push({ type: "handle", node: node.id, replica: 0, at: now, kind: "emit" });
-        forward(node);
+    if (scenario) {
+      while (sim.stepIndex < scenario.steps.length && scenario.steps[sim.stepIndex].at <= now) {
+        const s = scenario.steps[sim.stepIndex++];
+        apply(s);
+        sim.events.push({ type: "step", index: s.index, at: now });
       }
     }
-    // Finished work forwards downstream, and a sync call answers back.
+    if (sim.timers.length) {
+      const due = sim.timers.filter((timer) => timer.at <= now);
+      if (due.length) {
+        sim.timers = sim.timers.filter((timer) => timer.at > now);
+        due.forEach((timer) => timer.run());
+      }
+    }
     for (const node of nodes.values()) {
-      if (!node.busy.length) continue;
-      const done = node.busy.filter((job) => job.at <= now);
-      node.busy = node.busy.filter((job) => job.at > now);
-      for (const job of done) {
-        if (job.sync) launch(edges[job.edge], "response");
-        if (node.up) forward(node);
+      if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
+      if (!node.up) continue;
+      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+        // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
+        if (now >= node.nextBurst) {
+          node.nextBurst = now + node.emit.every;
+          for (let i = 0; i < node.emit.burst; i++) sim.timers.push({ at: now + (i / node.emit.burst) * 0.33, run: () => node.up && emitOne(node) });
+        }
+      } else if (node.emit) {
+        const rate = emitAt(node, now);
+        if (rate > 0) {
+          node.clock -= dt;
+          while (node.clock <= 0) {
+            node.clock += (0.6 + rand() * 0.8) / rate;
+            emitOne(node);
+          }
+        }
+      }
+      while (node.waiting.length && node.bucket >= 1) {
+        node.bucket -= 1;
+        begin(node.waiting.shift());
+      }
+      if (node.working.length) {
+        const due = node.working.filter((job) => job.readyAt <= now);
+        if (due.length) {
+          node.working = node.working.filter((job) => job.readyAt > now);
+          due.forEach(ready);
+        }
+      }
+    }
+    // Timeouts: the caller gives up; a reply still on its way arrives late and is ignored.
+    if (sim.calls.size) {
+      for (const call of [...sim.calls]) if (now >= call.deadline) {
+        for (const packet of call.packets) if (packet.dir < 0) packet.kind = "late";
+        call.timedOut = true;
+        settle(call, false, call.edge.timeout * 1000);
       }
     }
     // Consumers pull from logs at their own rate.
@@ -201,12 +521,12 @@ export function createSim(spec) {
             }
             consumer.tokens -= 1;
             group.committed[best]++;
-            launch(edge, "record", { partition: best, group: group.name });
+            launch(edge, "record", { partition: best, group: group.name, msg: newMsg(log.node.id) });
           }
         }
       }
     }
-    // Move packets; a packet arriving hands off to the next node.
+    // Move packets; an arriving packet hands off.
     const live = [];
     const moving = sim.packets;
     sim.packets = [];
@@ -217,26 +537,103 @@ export function createSim(spec) {
         continue;
       }
       packet.t += dt / packet.duration;
-      if (packet.t >= 1) arrive(packet);
-      else live.push(packet);
+      if (packet.t >= 1) {
+        if (packet.kind !== "late") arrive(packet);
+      } else live.push(packet);
     }
     sim.packets = live.concat(sim.packets);
+    const window = Math.min(cfg.window, Math.max(now, 0.25));
+    const trim = (list, keep = cfg.window) => {
+      while (list.length && (list[0].at ?? list[0]) < now - keep) list.shift();
+    };
     for (const node of nodes.values()) {
-      while (node.recent.length && node.recent[0] < now - cfg.window) node.recent.shift();
-      while (node.recentDrops.length && node.recentDrops[0] < now - cfg.window) node.recentDrops.shift();
-      node.flow = node.recent.length / Math.min(cfg.window, Math.max(now, 0.25));
-      node.dropRate = node.recentDrops.length / Math.min(cfg.window, Math.max(now, 0.25));
+      trim(node.recent);
+      trim(node.recentDrops);
+      trim(node.recentErrors);
+      trim(node.service, 3);
+      trim(node.roots, 3);
+      node.flow = node.recent.length / window;
+      node.dropRate = node.recentDrops.length / window;
+      node.errorRateSeen = node.recentErrors.length / window;
     }
-    if (sim.events.length > 256) sim.events.splice(0, sim.events.length - 256);
+    for (const edge of edges) {
+      trim(edge.recent);
+      trim(edge.recentErrors);
+      edge.flow = edge.recent.length / window;
+      edge.errorRate = edge.recentErrors.length / window;
+    }
+    sim.histClock += dt;
+    if (sim.histClock >= 0.25) {
+      sim.histClock = 0;
+      for (const node of nodes.values()) {
+        node.hist.push(node.flow);
+        if (node.hist.length > 120) node.hist.shift();
+      }
+      sim.hist.push(totalIn());
+      if (sim.hist.length > 120) sim.hist.shift();
+    }
+    if (sim.events.length > 512) sim.events.splice(0, sim.events.length - 512);
   }
+
+  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
 
   function setUp(id, up) {
     const node = nodes.get(id);
     if (!node || node.up === up) return;
     node.up = up;
-    if (!up) node.busy = [];
+    node.downSince = up ? null : sim.time;
+    if (!up) {
+      // In-flight work is lost; callers waiting on it get a reset.
+      for (const job of node.jobs) {
+        if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
+        job.dead = true;
+      }
+      node.jobs.clear();
+      node.working = [];
+      node.waiting = [];
+    }
+    if (up && node === flagNode) for (const flag of flags.values()) syncFlag(flag);
     sim.events.push({ type: up ? "recover" : "fail", node: id, at: sim.time });
     for (const log of logs.values()) for (const group of log.groups) if (group.members.some((edge) => edge.to === id)) rebalance(log, group, sim.time);
+  }
+
+  function syncFlag(flag) {
+    if (flagNode && !flagNode.up) return;
+    if (flag.effective === flag.rollout) return;
+    flag.effective = flag.rollout;
+    sim.events.push({ type: "flag", flag: flag.name, rollout: flag.effective, at: sim.time });
+  }
+
+  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs"]);
+  function apply(step) {
+    if (step.fail) [].concat(step.fail).forEach((id) => setUp(id, false));
+    if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
+    if (step.set) {
+      for (const [id, props] of Object.entries(step.set)) {
+        const node = nodes.get(id);
+        if (!node) throw new Error(`scenario: unknown node "${id}"`);
+        for (const [key, value] of Object.entries(props)) {
+          if (!SETTABLE.has(key)) throw new Error(`scenario: can't set "${key}" (settable: ${[...SETTABLE].join(", ")})`);
+          if (key === "queue") node.queueMax = on("queues") ? value : 0;
+          else node[key] = value;
+          if (key === "emit" && typeof value === "number") node.clock = Math.min(node.clock, 1 / Math.max(value, 0.001));
+        }
+      }
+    }
+    if (on("flags")) {
+      if (step.flag) {
+        const flag = flags.get(step.flag);
+        if (!flag) throw new Error(`scenario: unknown flag "${step.flag}"`);
+        flag.rollout = step.rollout ?? 1;
+        syncFlag(flag);
+      }
+      if (step.kill) {
+        const flag = flags.get(step.kill);
+        if (!flag) throw new Error(`scenario: unknown flag "${step.kill}"`);
+        flag.rollout = 0;
+        syncFlag(flag);
+      }
+    }
   }
 
   sim.step = (dt) => {
@@ -245,34 +642,44 @@ export function createSim(spec) {
     for (let i = 0; i < n; i++) step(dt / n);
   };
   sim.setUp = setUp;
+  sim.apply = apply;
+  sim.totalIn = totalIn;
   sim.lagOf = (id, groupName) => {
     const log = logs.get(id);
     if (!log) return 0;
     const group = groupName ? log.groups.find((g) => g.name === groupName) : log.groups[0];
-    if (!group) return log.end.reduce((a, b) => a + b, 0);
+    if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
   };
+  sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
   return sim;
 }
 
-export function hashOf(text) {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
-  return h >>> 0;
+// p50 / p99 of completed requests started at these sources, over the last 3 s of model time.
+function latencyOf(sources) {
+  const samples = [];
+  let failed = 0;
+  for (const node of sources) for (const root of node?.roots || []) {
+    if (root.ok) samples.push(root.ms);
+    else failed++;
+  }
+  samples.sort((a, b) => a - b);
+  return { p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), count: samples.length, failed };
 }
 
-const fmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(0) : n.toFixed(1));
+const fmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n >= 10 ? n.toFixed(0) : n.toFixed(1));
 export const formatRate = (n, per = 1) => `${fmt(n * per)}/s`;
 export const formatCount = (n, per = 1) => fmt(n * per).replace(/\.0$/, "");
+export const formatMs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : ms >= 10 ? `${ms.toFixed(0)}ms` : `${ms.toFixed(1)}ms`);
 
 export function statsOf(sim, id) {
   const node = sim.nodes.get(id);
   if (!node) return "";
   const per = sim.cfg.per;
   const name = node.label || node.id;
-  if (!node.up) return `${name} · down${node.dropRate ? ` · ${formatRate(node.dropRate, per)} lost` : ""}`;
+  if (!node.up) return `${name} · down${node.dropRate ? ` · ${formatRate(node.dropRate, per)} refused` : ""}`;
   const log = sim.logs.get(id);
   if (log) {
     const parts = log.groups.map((group) => {
@@ -282,25 +689,38 @@ export function statsOf(sim, id) {
     });
     return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
   }
+  if (node.kind === "flags") {
+    const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
+    return `${name} · ${list.join(" · ") || "no flags"}`;
+  }
   const bits = [`${name} · ${formatRate(node.flow, per)}`];
+  if (node.roots.length) {
+    const lat = latencyOf([node]);
+    if (lat.count) bits.push(`p50 ${formatMs(lat.p50)} · p99 ${formatMs(lat.p99)}`);
+  } else if (node.service.length) {
+    const sorted = node.service.map((s) => s.ms).sort((a, b) => a - b);
+    bits.push(`${formatMs(quantile(sorted, 0.5))} p50`);
+  }
   if (node.capacity) bits.push(`cap ${formatRate(node.capacity, per)}`);
+  if (node.queueMax) bits.push(`queue ${node.waiting.length}/${node.queueMax}`);
   if (node.dropRate) bits.push(`${formatRate(node.dropRate, per)} rejected`);
+  if (node.errorRateSeen) bits.push(`${formatRate(node.errorRateSeen, per)} errors`);
+  for (const edge of node.out) if (edge.breaker && edge.breaker.state !== "closed") bits.push(`breaker → ${sim.nodes.get(edge.to).label || edge.to} ${edge.breaker.state}`);
   return bits.join(" · ");
 }
 
 export function summaryOf(sim) {
   const per = sim.cfg.per;
-  let sources = 0;
-  let drops = 0;
   let lag = 0;
-  for (const node of sim.nodes.values()) {
-    if (node.emit && node.up) sources += node.flow;
-    drops += node.dropRate;
-  }
+  let drops = 0;
+  for (const node of sim.nodes.values()) drops += node.dropRate;
   for (const id of sim.logs.keys()) lag += sim.lagOf(id);
-  const bits = [`${formatRate(sources, per)} in`];
+  const bits = [`${formatRate(sim.totalIn(), per)} in`];
+  const lat = sim.latencyOf();
+  if (lat.count) bits.push(`p50 ${formatMs(lat.p50)} · p99 ${formatMs(lat.p99)}`);
   if (sim.logs.size) bits.push(`lag ${formatCount(lag, per)}`);
+  const failing = lat.failed / 3;
   const down = [...sim.nodes.values()].filter((node) => !node.up).length;
-  bits.push(drops ? `${formatRate(drops, per)} lost` : down ? `${down} down` : "healthy");
+  bits.push(failing > 0.05 ? `${formatRate(failing, per)} failing` : drops ? `${formatRate(drops, per)} lost` : down ? `${down} down` : "healthy");
   return bits.join(" · ");
 }

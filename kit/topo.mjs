@@ -18,6 +18,11 @@ export const KINDS = {
   kafka: { w: 104, d: 0, h: 6 },
   queue: { w: 104, d: 26, h: 6 },
   box: { w: 52, d: 36, h: 14 },
+  cdn: { w: 50, d: 36, h: 10 },
+  dns: { w: 34, d: 34, h: 26 },
+  external: { w: 54, d: 36, h: 14 },
+  scheduler: { w: 40, d: 34, h: 12 },
+  flags: { w: 48, d: 34, h: 8 },
 };
 export const SLOTS = 12;
 const PITCH = 7;
@@ -57,7 +62,7 @@ export function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys };
+  return { title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, scenario: spec.scenario, flags: spec.flags, features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -732,11 +737,18 @@ function describe(model) {
   return `${model.title}: ${kinds}. Connections: ${links}.`;
 }
 
-export function simSpec(model) {
+const GEOMETRY = new Set(["plan", "cx", "cy", "w", "d", "h", "auto", "at", "labelSpot", "groups", "index", "points", "lens", "corners", "ends", "ports", "channel", "axisOf", "via", "bend", "axis"]);
+const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key, value]) => !GEOMETRY.has(key) && value !== undefined));
+
+// What the sim needs: everything in the spec except geometry, plus each edge's length.
+export function simSpec(model, features) {
   return {
-    nodes: model.nodes.map(({ id, kind, label, replicas, partitions, emit, rate, route, latency, capacity, burst, health, up }) => ({ id, kind, label, replicas, partitions, emit, rate, route, latency, capacity, burst, health, up })),
-    edges: model.edges.map(({ from, to, kind, sync, group, p, key, rate, len, index }) => ({ from, to, kind, sync, group, p, key, rate, len, index })),
+    nodes: model.nodes.map(strip),
+    edges: model.edges.map((edge) => ({ ...strip(edge), len: edge.len })),
     sim: model.sim,
+    scenario: model.scenario,
+    flags: model.flags,
+    features: features || model.features,
   };
 }
 
@@ -788,6 +800,9 @@ export const TOPO_CSS = `
 .tp-pk[data-kind="record"]{--pk:var(--tp-blue)}
 .tp-pk[data-kind="replication"]{--pk:var(--tp-green)}
 .tp-pk[data-kind="drop"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="error"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
+.tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
 .tp-pk .pk-top{fill:var(--pk)}
 .tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
 .tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}

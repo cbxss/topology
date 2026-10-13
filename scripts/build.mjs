@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import * as k from "../kit/iso.mjs";
 import { hiddenBy, labelSpots, prepare, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
 import { createSim } from "../kit/topo-sim.mjs";
+import { describeFeatures, resolveFeatures } from "../kit/topo-features.mjs";
 
 const KIT = join(dirname(fileURLToPath(import.meta.url)), "..", "kit");
 const argv = process.argv.slice(2);
@@ -16,6 +17,8 @@ if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
   --view iso|flat     the view the page opens in (default: spec.view, else iso)
   --out <file>        output path (default: <spec name>.html, or <spec name>-light.html, next to the spec)
   --svg               also write a static <name>-<view>.svg of each view (standalone, themed)
+  --features <list>   turn tool features on or off: "trails,-morph" (see kit/topo-features.mjs)
+  --no-<feature>      the same, for one feature
   --check [seconds]   run the model headless for that long (default 30) and print what the readout
                       will say, per node, plus warnings: growing lag, drops, idle edges. Writes nothing.`);
   process.exit(argv.length ? 0 : 1);
@@ -28,7 +31,10 @@ const value = (name, fallback) => {
 
 const file = resolve(argv[0]);
 const spec = extname(file) === ".json" ? JSON.parse(readFileSync(file, "utf8")) : (await import(pathToFileURL(file).href)).default;
+const cliFeatures = [value("--features", ""), ...argv.filter((arg) => arg.startsWith("--no-")).map((arg) => "-" + arg.slice(5))].filter(Boolean).join(",");
+const features = resolveFeatures(spec.features, cliFeatures);
 const model = prepare(spec);
+model.features = features;
 const name = basename(file).replace(/\.(spec\.)?(mjs|js|json)$/, "");
 
 if (flag("--check")) {
@@ -43,6 +49,7 @@ const strip = (source) => source.replace(/^export /gm, "");
 const data = {
   view,
   slots: SLOTS,
+  features,
   spec: simSpec(model),
   lens: model.edges.map((edge) => edge.lens.map((n) => Math.round(n * 100) / 100)),
   views: { iso: rendered.iso.data, flat: rendered.flat.data },
@@ -94,6 +101,7 @@ function escapeAttr(text) {
 
 function check(seconds) {
   const sim = createSim(simSpec(model));
+  console.log(`features: ${describeFeatures(features)}`);
   const lagAt = [];
   const sentAt = new Map();
   console.log(`${model.title}: ${model.nodes.length} nodes, ${model.edges.length} edges, ${seconds}s simulated`);
