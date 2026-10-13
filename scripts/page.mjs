@@ -43,6 +43,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
     slots: SLOTS,
     features,
     edit: edit && features.edit,
+    labels: model.labels,
     grid: model.grid,
     positions: Object.fromEntries(model.nodes.map((node) => [node.id, node.at || node.auto])),
     spec: simSpec(model),
@@ -123,8 +124,11 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
     const end = lagAt[lagAt.length - 1]?.[index] ?? 0;
     if (end > 40 && end > mid * 1.3) warnings.push(`${id}: lag keeps growing (${mid} → ${end}); its consumers are slower than its producers`);
   });
+  // Drops onto something the story fails on purpose are the point, not a warning.
+  const failedByStory = new Set((story?.steps || []).flatMap((step) => [].concat(step.fail || [])).map((id) => id.replace(/:b\d+$/, "")));
   for (const edge of sim.edges) {
-    if (edge.sent === 0 && !edge.flag) warnings.push(`edge ${edge.from} → ${edge.to} never carried anything`);
+    if (edge.dropped && failedByStory.has(edge.to)) continue;
+    if (edge.sent === 0 && !edge.flag && !edge.unless && edge.kind !== "config") warnings.push(`edge ${edge.from} → ${edge.to} never carried anything`);
     else if (edge.dropped) {
       const target = model.byId.get(edge.to);
       warnings.push(`edge ${edge.from} → ${edge.to}: ${edge.dropped} of ${edge.sent} dropped${target.capacity ? ` (${edge.to} admits ${target.capacity}/s; expected if you meant to show shedding)` : ""}`);
@@ -146,7 +150,10 @@ function storyTimeline(model, story, log, warnings) {
   const per = sim.cfg.per;
   const ids = new Set(model.nodes.map((node) => node.id));
   for (const step of story.steps) {
-    for (const id of [].concat(step.fail || [], step.recover || [], Object.keys(step.set || {}))) if (!ids.has(id)) warnings.push(`scenario step at ${step.at}s names unknown node "${id}"`);
+    for (const id of [].concat(step.fail || [], step.recover || [], Object.keys(step.set || {}))) {
+      const known = ids.has(id) || (/^(.*):b\d+$/.test(id) && ids.has(id.replace(/:b\d+$/, ""))) || (id.includes(">") && model.edges.some((edge) => `${edge.from}>${edge.to}` === id));
+      if (!known) warnings.push(`scenario step at ${step.at}s names unknown node or edge "${id}"`);
+    }
     if (step.at > story.length) warnings.push(`scenario step at ${step.at}s is past the story's length (${story.length}s)`);
   }
   const samples = [];
@@ -158,7 +165,7 @@ function storyTimeline(model, story, log, warnings) {
     const t = i / 60;
     if (i % 15 === 0) {
       const lat = sim.latencyOf();
-      samples.push({ t, in: sim.totalIn(), p50: lat.p50, p99: lat.p99, failing: lat.failed / 3, lag: [...sim.logs.keys()].reduce((sum, id) => sum + sim.lagOf(id), 0) });
+      samples.push({ t, in: sim.totalIn(), p50: lat.count ? lat.p50 : null, p99: lat.count ? lat.p99 : null, failing: lat.failed / 3, lag: [...sim.logs.keys()].reduce((sum, id) => sum + sim.lagOf(id), 0) });
     }
     for (const mark of marks) if (!mark.done && t >= mark.at) {
       mark.done = true;
@@ -168,14 +175,25 @@ function storyTimeline(model, story, log, warnings) {
   const phases = story.phases.length ? story.phases : [{ name: "story", at: 0, end: story.length }];
   for (const phase of phases) {
     const window = samples.filter((s) => s.t > Math.max(phase.at, phase.end - 3) && s.t <= phase.end);
-    const mean = (key) => window.reduce((sum, s) => sum + s[key], 0) / Math.max(1, window.length);
-    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean("in"), per)} in · p50 ${formatMs(mean("p50"))} · p99 ${formatMs(mean("p99"))}${sim.logs.size ? ` · lag ${formatCount(mean("lag"), per)}` : ""} · ${formatRate(mean("failing"), per)} failing`);
+    const mean = (key) => {
+      const values = window.map((s) => s[key]).filter((n) => n != null);
+      return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    };
+    const ms = (n) => (n == null ? "—" : formatMs(n));
+    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean("in"), per)} in · p50 ${ms(mean("p50"))} · p99 ${ms(mean("p99"))}${sim.logs.size ? ` · lag ${formatCount(mean("lag"), per)}` : ""} · ${formatRate(mean("failing"), per)} failing`);
     for (const line of lines) if (line.at >= phase.at - 0.2 && line.at < phase.end - 0.2) log(line.text);
   }
-  const end = samples[samples.length - 1];
-  const start = samples.find((s) => s.t >= 3) || samples[0];
-  if (story.loop && end && end.lag > Math.max(20, start.lag * 3)) warnings.push(`the story ends with lag ${formatCount(end.lag, per)} (it began near ${formatCount(start.lag, per)}); it will jump when it loops`);
-  if (story.loop && end && end.failing > Math.max(0.5, start.failing * 3)) warnings.push("the story ends still failing; it will jump when it loops");
+  // Compare the last second with the first phase's settled state.
+  const first = phases[0];
+  const settled = samples.filter((s) => s.t > Math.max(first.at + 1, first.end - 3) && s.t <= first.end);
+  const tail = samples.filter((s) => s.t > story.length - 1);
+  const avg = (list, key) => list.reduce((sum, s) => sum + s[key], 0) / Math.max(1, list.length);
+  if (story.loop && tail.length) {
+    const [lag0, lag1] = [avg(settled, "lag"), avg(tail, "lag")];
+    const [fail0, fail1] = [avg(settled, "failing"), avg(tail, "failing")];
+    if (lag1 > Math.max(20, lag0 * 3)) warnings.push(`the story ends with lag ${formatCount(lag1, per)} (it settled near ${formatCount(lag0, per)}); it will jump when it loops`);
+    if (fail1 > Math.max(0.5, fail0 * 1.5)) warnings.push(`the story ends failing ${formatRate(fail1, per)} (it settled near ${formatRate(fail0, per)}); it will jump when it loops`);
+  }
 }
 
 const describeStep = (step) =>

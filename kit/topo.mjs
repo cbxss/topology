@@ -41,7 +41,8 @@ export function prepare(spec) {
     const partitions = kind === "kafka" ? raw.partitions || 3 : kind === "queue" ? 1 : 0;
     const d = raw.d ?? (kind === "kafka" ? partitions * LANE + 14 : base.d);
     const replicas = Math.max(1, Math.min(raw.replicas || 1, kind === "service" || kind === "worker" ? 4 : 1));
-    return { ...raw, kind, index, w: raw.w ?? base.w, d, h: base.h, partitions, replicas, label: raw.label ?? raw.id };
+    const w = raw.w ?? (kind === "kafka" && raw.brokers ? base.w + 26 : base.w);
+    return { ...raw, kind, index, w, d, h: base.h, partitions, replicas, label: raw.label ?? raw.id };
   });
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const edges = (spec.edges || []).map((raw, index) => {
@@ -53,6 +54,7 @@ export function prepare(spec) {
   const grid = layout(nodes, edges, spec);
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
+  for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
   for (const node of nodes) {
     if (!isLog(node)) continue;
     const names = [];
@@ -62,7 +64,7 @@ export function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -444,27 +446,100 @@ const ISO = {
     const { plan } = node;
     const out = [c.S(k.slabOf(plan, 0, 6, c.P, 3, 0.8), { tone: "mid" })];
     const fy = plan.y + plan.d;
-    for (let b = 0; b < 3; b++) out.push(c.led(`${node.id}:b${b}`, [plan.x + 6 + b * 5, fy, 3], 1.1));
-    out.push(c.L(c.faceY(plan.x + 24, plan.x + plan.w - 6, fy, 2, 4), { tone: "faint" }));
+    if (node.brokers) {
+      // One small broker unit per broker down the left end; click one to fail it.
+      const n = node.brokers;
+      const span = (plan.d - 8) / n;
+      for (let i = n - 1; i >= 0; i--) {
+        const unit = { x: plan.x + 5, y: plan.y + 4 + i * span + 0.8, w: 12, d: span - 1.6, r: 1 };
+        out.push(`<g class="tp-broker" data-part="broker:${i}">${c.S(k.slabOf(unit, 6, 5, c.P, 2, 0.4), { tone: "mid" })}${c.led(`${node.id}:b${i}`, [unit.x + unit.w, unit.y + unit.d / 2, 8.5], 1)}</g>`);
+      }
+    } else {
+      for (let b = 0; b < 3; b++) out.push(c.led(`${node.id}:b${b}`, [plan.x + 6 + b * 5, fy, 3], 1.1));
+      out.push(c.L(c.faceY(plan.x + 24, plan.x + plan.w - 6, fy, 2, 4), { tone: "faint" }));
+    }
     for (let p = 0; p < node.partitions; p++) {
       const lane = laneOf(node, p);
+      out.push(`<g class="tp-lane" data-lane="${escape(node.id)}:${p}">`);
       out.push(c.S(k.slabOf({ ...lane, x: lane.x - 2, w: lane.w + 4, y: lane.y - 0.5, d: lane.d + 1, r: 1 }, 6, 0.6, c.P, 2), { tone: "lo", crease: "none" }));
       for (let i = 0; i < SLOTS; i++) {
         const cell = { x: lane.x + i * PITCH + 0.7, y: lane.y + 0.8, w: PITCH - 1.4, d: lane.d - 1.6, r: 0.6 };
         out.push(`<g class="tp-cell" data-cell="${escape(node.id)}:${p}:${i}">${c.S(k.slabOf(cell, 6.6, 2.2, c.P, 2), { tone: "lo", crease: "none" })}</g>`);
       }
       (node.groups || ["default"]).slice(0, 3).forEach((_, g) => {
-        const x = lane.x;
-        const post = { x: x - 0.8, y: lane.y - 1.4 + g * 0.0, w: 1.6, d: lane.d + 2.8, r: 0.4 };
+        const post = { x: lane.x - 0.8, y: lane.y - 1.4, w: 1.6, d: lane.d + 2.8, r: 0.4 };
         out.push(`<g class="tp-cursor" data-cursor="${escape(node.id)}:${g}:${p}" data-g="${g}">${c.S(k.slabOf(post, 6.6, 4.4 + g * 1.6, c.P, 1), { tone: "hi", lit: g === 0 })}</g>`);
       });
+      out.push(`</g>`);
     }
+    return out.join("");
+  },
+  cdn(node, c) {
+    const { plan } = node;
+    const r = Math.min(plan.w, plan.d) / 2 - 5;
+    const out = [c.S(k.slabOf(plan, 0, 4, c.P, 3, 0.6), { tone: "mid" })];
+    out.push(c.S(k.cylinder(node.cx, node.cy, r, 4, 6, c.P, 48, 0.6), { tone: "hi", crease: "lo" }));
+    out.push(c.L(k.sideArc(node.cx, node.cy, r, 7, c.P, 32), { tone: "faint" }));
+    out.push(c.L(k.ring(node.cx, node.cy, r * 0.62, 10, c.P, 40) + k.ring(node.cx, node.cy, r * 0.25, 10, c.P, 24), { tone: "lo" }));
+    out.push(c.L(k.lineOnTop([node.cx - r, node.cy], [node.cx + r, node.cy], 10, c.P) + k.lineOnTop([node.cx, node.cy - r], [node.cx, node.cy + r], 10, c.P), { tone: "faint" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, 2]));
+    return out.join("");
+  },
+  dns(node, c) {
+    const out = [c.S(k.slabOf(k.insetPlan(node.plan, 4), 0, 3, c.P, 3, 0.5), { tone: "mid" })];
+    out.push(c.S(k.cylinder(node.cx, node.cy, 3, 3, 17, c.P, 20), { tone: "mid", crease: "none" }));
+    out.push(c.L([8, 13].map((z) => k.sideArc(node.cx, node.cy, 3, z, c.P, 12)).join(""), { tone: "faint" }));
+    out.push(c.S(k.cylinder(node.cx, node.cy, 10, 20, 2.4, c.P, 40, 0.5), { tone: "hi", crease: "lo" }));
+    out.push(c.L(k.ring(node.cx, node.cy, 6, 22.4, c.P, 32), { tone: "lo" }));
+    out.push(c.led(`${node.id}:0`, [node.cx, node.cy, 22.4], 1.3));
+    return out.join("");
+  },
+  external(node, c) {
+    const { plan } = node;
+    const out = [`<g class="tp-ext">${c.S(k.slabOf(plan, 0, 14, c.P, 3, 0.6), { tone: "mid" })}</g>`];
+    out.push(c.L(k.planOutline(k.insetPlan(plan, 4), 14, c.P, 3), { tone: "faint", dashed: true }));
+    out.push(c.dots([0, 1, 2].map((i) => [node.cx - 5 + i * 5, node.cy, 14]), { size: 0.9, tone: "mid" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 6, plan.y + plan.d, 9]));
+    return out.join("");
+  },
+  scheduler(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 6, c.P, 3, 0.6), { tone: "mid" })];
+    const r = Math.min(plan.w, plan.d) / 2 - 4;
+    out.push(c.S(k.cylinder(node.cx, node.cy, r, 6, 2, c.P, 48, 0.5), { tone: "hi", crease: "lo" }));
+    const ticks = k.radialTicks(node.cx, node.cy, r - 1.5, 12, 3, 8, [1.2, 2.4], c.P);
+    out.push(c.L(ticks.minor, { tone: "lo" }), c.L(ticks.major, { tone: "mid" }));
+    out.push(c.L(k.lineOnTop([node.cx, node.cy], [node.cx, node.cy - r * 0.62], 8, c.P) + k.lineOnTop([node.cx, node.cy], [node.cx + r * 0.42, node.cy + r * 0.2], 8, c.P), { tone: "hi", free: "end" }));
+    out.push(c.dots([[node.cx, node.cy, 8]], { size: 0.8, tone: "hi" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, 3]));
+    return out.join("");
+  },
+  flags(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 6, c.P, 3, 0.6), { tone: "mid" })];
+    flagRows(node).forEach(({ name, slot, knob }) => {
+      out.push(c.S(k.slabOf(slot, 6, 0.6, c.P, 2), { tone: "lo", crease: "none" }));
+      out.push(`<g class="tp-knob" data-flag="${escape(name)}">${c.S(k.slabOf(knob, 6.6, 2.2, c.P, 2), { tone: "hi", lit: true })}</g>`);
+      out.push(k.faceTextSvg(k.topMatrix([plan.x + 4, slot.y + slot.d - 0.6], 6, c.P, "x"), name.slice(0, 7), { size: 3.4, tone: "lo" }));
+    });
+    out.push(c.led(`${node.id}:0`, [plan.x + plan.w - 5, plan.y + plan.d, 3]));
     return out.join("");
   },
   queue(node, c) {
     return ISO.kafka(node, c);
   },
 };
+
+// Rows of switches on a flags panel: a slot and a knob that slides with the rollout.
+export function flagRows(node) {
+  const names = node.flagNames || [];
+  const { plan } = node;
+  return names.slice(0, 4).map((name, i) => {
+    const y = plan.y + 4 + i * ((plan.d - 8) / Math.max(1, Math.min(4, names.length)));
+    const slot = { x: plan.x + plan.w - 26, y, w: 22, d: 5, r: 1 };
+    return { name, slot, knob: { x: slot.x + 0.5, y: y + 0.5, w: 8, d: 4, r: 0.8 }, travel: slot.w - 9 };
+  });
+}
 
 export function laneOf(node, p) {
   const top = node.plan.y + 7;
@@ -629,12 +704,56 @@ const FLAT = {
     const s = f.scale;
     for (let p = 0; p < node.partitions; p++) {
       const lb = f.box(laneOf(node, p));
+      out.push(`<g class="tp-lane" data-lane="${escape(node.id)}:${p}">`);
       for (let i = 0; i < SLOTS; i++) out.push(`<rect class="tp-cell tp-fcell" data-cell="${escape(node.id)}:${p}:${i}" x="${r1(lb.x + i * PITCH * s + 0.8)}" y="${r1(lb.y + 0.8)}" width="${r1(PITCH * s - 1.6)}" height="${r1(lb.h - 1.6)}" rx="1"/>`);
       (node.groups || ["default"]).slice(0, 3).forEach((_, g) => {
         out.push(`<path class="tp-cursor tp-fcursor" data-cursor="${escape(node.id)}:${g}:${p}" data-g="${g}" d="M${r1(lb.x)} ${r1(lb.y - 2 - g)}V${r1(lb.y + lb.h + 2 + g)}"/>`);
       });
+      out.push(`</g>`);
     }
-    for (let b2 = 0; b2 < 3; b2++) out.push(f.led(`${node.id}:b${b2}`, b.x + b.w - 4, b.y + 6 + b2 * 4, 1.1));
+    if (node.brokers) {
+      const n = node.brokers;
+      const span = (b.h - 8) / n;
+      for (let i = 0; i < n; i++) {
+        const unit = { x: b.x + 5 * s, y: b.y + 4 * s + i * span + 0.6, w: 12 * s, h: span - 1.2 };
+        out.push(`<g class="tp-broker" data-part="broker:${i}">${f.rect(unit, "tp-f tp-f-chip", 1)}${f.led(`${node.id}:b${i}`, unit.x + unit.w - 3, unit.y + unit.h / 2, 1.2)}</g>`);
+      }
+    } else for (let b2 = 0; b2 < 3; b2++) out.push(f.led(`${node.id}:b${b2}`, b.x + b.w - 4, b.y + 6 + b2 * 4, 1.1));
+    return out.join("");
+  },
+  cdn(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const r = Math.min(b.w, b.h) / 2 - 4;
+    return [f.rect(b, "tp-f", 4), `<circle class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`, `<ellipse class="tp-f-mark" cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(r * 0.45)}" ry="${r1(r)}"/>`, k.lineSvg(`M${r1(cx - r)} ${r1(cy)}H${r1(cx + r)}`, { tone: "faint" }), f.led(`${node.id}:0`, b.x + 5, b.y + b.h - 5, 1.5)].join("");
+  },
+  dns(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    return [`<path class="tp-f" d="M${r1(cx - 9)} ${r1(b.y + b.h - 1)}L${r1(cx - 2)} ${r1(b.y + 8)}H${r1(cx + 2)}L${r1(cx + 9)} ${r1(b.y + b.h - 1)}Z"/>`, `<circle class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(b.y + 7)}" r="5"/>`, f.led(`${node.id}:0`, cx, b.y + 7, 1.6)].join("");
+  },
+  external(node, f) {
+    const b = f.box(node.plan);
+    return [f.rect(b, "tp-f tp-f-ext", 4), ...[0, 1, 2].map((i) => `<circle class="tp-f-dot" cx="${r1(b.x + b.w / 2 - 6 + i * 6)}" cy="${r1(b.y + b.h / 2)}" r="1.3"/>`), f.led(`${node.id}:0`, b.x + 6, b.y + 6, 1.5)].join("");
+  },
+  scheduler(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const r = Math.min(b.w, b.h) / 2 - 3;
+    return [f.rect(b, "tp-f", 4), `<circle class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`, k.lineSvg(`M${r1(cx)} ${r1(cy)}V${r1(cy - r * 0.65)}M${r1(cx)} ${r1(cy)}L${r1(cx + r * 0.45)} ${r1(cy + r * 0.2)}`, { tone: "hi", free: "end" }), f.led(`${node.id}:0`, b.x + 5, b.y + b.h - 5, 1.5)].join("");
+  },
+  flags(node, f) {
+    const b = f.box(node.plan);
+    const out = [f.rect(b, "tp-f", 4)];
+    flagRows(node).forEach(({ name, slot, knob }) => {
+      out.push(f.rect(f.box(slot), "tp-f tp-f-chip", 2));
+      out.push(`<g class="tp-knob" data-flag="${escape(name)}">${f.rect(f.box(knob), "tp-f-knob", 1.5)}</g>`);
+      const sb = f.box(slot);
+      out.push(`<text class="tp-ft tp-ft-dim" x="${r1(b.x + 4)}" y="${r1(sb.y + sb.h - 0.5)}" font-size="5.5" text-anchor="start">${escape(name.slice(0, 6))}</text>`);
+    });
+    out.push(f.led(`${node.id}:0`, b.x + b.w - 5, b.y + b.h - 4, 1.4));
     return out.join("");
   },
   queue(node, f) {
@@ -647,33 +766,33 @@ const FLAT = {
 
 export function renderView(model, view, width = 640) {
   const { P, width: W, height: H } = projectionOf(model, view, width);
+  const features = model.features || {};
   const out = [];
-  const deepest = Math.max(0, ...model.groups.map((group) => group.depth + 1));
-  if (view === "iso") {
-    const c = isoKit(P);
-    for (const group of model.groups) {
+  const iso = view === "iso" ? isoKit(P) : null;
+  const flat = view === "flat" ? flatKit(P) : null;
+
+  // Zones and regions: floor plates (iso) or dashed regions (flat). A region is heavier.
+  for (const group of model.groups) {
+    if (iso) {
       const z0 = -(group.depth + 1);
-      out.push(`<path class="k-halo" d="${k.haloOf(group.box, z0, 1, P)}" style="opacity:calc(var(--tp-halo-opacity) * .5)"/>`);
-      out.push(`<g class="tp-zone" data-depth="${group.depth}">${c.S(k.slabOf(group.box, z0, 1, P, 6, 0.6), { tone: "lo", crease: "faint" })}`);
-      out.push(c.L(k.planOutline(k.insetPlan(group.box, 4), z0 + 1, P, 5), { tone: "faint", dashed: true }));
-      out.push(k.faceTextSvg(k.topMatrix([group.box.x + 8, group.box.y + group.box.d - 6], z0 + 1, P, "x"), String(group.label).toUpperCase(), { size: 6, tone: "mid" }));
+      const h = group.region ? 1.6 : 1;
+      out.push(`<path class="k-halo" d="${k.haloOf(group.box, z0, h, P)}" style="opacity:calc(var(--tp-halo-opacity) * .5)"/>`);
+      out.push(`<g class="tp-zone" data-depth="${group.depth}"${group.region ? ' data-region=""' : ""}>${iso.S(k.slabOf(group.box, z0, h, P, 6, 0.6), { tone: group.region ? "mid" : "lo", crease: "faint" })}`);
+      out.push(iso.L(k.planOutline(k.insetPlan(group.box, 4), z0 + h, P, 5), { tone: "faint", dashed: !group.region }));
+      // Along the plate's left edge, where node labels never sit.
+      out.push(k.faceTextSvg(k.topMatrix([group.box.x + 6.5, group.box.y + 10], z0 + h, P, "y"), String(group.label).toUpperCase(), { size: group.region ? 7 : 6, tone: group.region ? "hi" : "mid" }));
       out.push(`</g>`);
-    }
-  } else {
-    const f = flatKit(P);
-    for (const group of model.groups) {
-      const b = f.box(group.box);
-      out.push(`<g class="tp-zone" data-depth="${group.depth}">${f.rect(b, "tp-fzone", 8)}<text class="tp-ft tp-ft-dim" x="${r1(b.x + 8)}" y="${r1(b.y + b.h - 7)}" font-size="7" text-anchor="start">${escape(String(group.label).toUpperCase())}</text></g>`);
+    } else {
+      const b = flat.box(group.box);
+      out.push(`<g class="tp-zone" data-depth="${group.depth}"${group.region ? ' data-region=""' : ""}>${flat.rect(b, "tp-fzone", 8)}<text class="tp-ft tp-ft-dim" x="${r1(b.x + 8)}" y="${r1(b.y + b.h - 7)}" font-size="${group.region ? 8 : 7}" text-anchor="start">${escape(String(group.label).toUpperCase())}</text></g>`);
     }
   }
-  void deepest;
 
-  // Edges on the floor, with a chevron where they arrive.
-  const lift = view === "iso" ? 1.5 : 0;
-  const pts3 = (list) => list.map(([x, y]) => [x, y, 0]);
+  // Edges on the floor, with a chevron where they arrive and a port ring (or a breaker) at the caller.
+  const labels = [];
   for (const edge of model.edges) {
     const screen = edge.points.map((p) => k.iso([p[0], p[1], 0], P));
-    const dashed = edge.kind === "async" || edge.kind === "replication";
+    const dashed = edge.kind === "async" || edge.kind === "replication" || edge.kind === "config";
     const [a, b] = [edge.points[edge.points.length - 2], edge.points[edge.points.length - 1]];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     const u = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
@@ -684,44 +803,96 @@ export function renderView(model, view, width = 640) {
       tip,
       [tip[0] - u[0] * 5 - v[0] * 3, tip[1] - u[1] * 5 - v[1] * 3],
     ];
-    void pts3;
-    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}"><path class="tp-edge-bed" d="${k.pathOf(screen)}"/>${k.lineSvg(k.pathOf(screen), { tone: "mid", dashed })}${k.lineSvg(k.pathOf(head.map((p) => k.iso([p[0], p[1], 0], P))), { tone: "mid", free: true })}${edge.sync ? `<circle class="tp-port" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="1.4"/>` : ""}</g>`);
+    const tone = edge.kind === "config" ? "lo" : "mid";
+    const port = edge.breaker && features.breakers !== false
+      ? `<circle class="tp-breaker" data-breaker="${edge.index}" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="2.4"/>`
+      : edge.sync ? `<circle class="tp-port" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="1.4"/>` : "";
+    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}"><path class="tp-edge-bed" d="${k.pathOf(screen)}"/>${k.lineSvg(k.pathOf(screen), { tone, dashed })}${k.lineSvg(k.pathOf(head.map((p) => k.iso([p[0], p[1], 0], P))), { tone, free: true })}${port}</g>`);
+    if (features.labels !== false && edge.kind !== "config" && (edge.label || model.labels === "rate" || edge.flag || edge.unless)) labels.push(edgeLabel(edge, P, view));
   }
-  if (view === "iso") {
-    const c = isoKit(P);
-    for (const node of model.nodes) out.push(`<g class="tp-label" data-label="${escape(node.id)}">${isoLabel(node, c, model)}</g>`);
-  } else {
-    const f = flatKit(P);
-    for (const node of model.nodes) {
-      const b = f.box(node.plan);
-      out.push(`<g class="tp-label" data-label="${escape(node.id)}">${f.text(b.x + b.w / 2, b.y + b.h + 10, node.label, 8)}</g>`);
-    }
+  if (iso) for (const node of model.nodes) out.push(`<g class="tp-label" data-label="${escape(node.id)}">${isoLabel(node, iso, model)}</g>`);
+  else for (const node of model.nodes) {
+    const b = flat.box(node.plan);
+    out.push(`<g class="tp-label" data-label="${escape(node.id)}">${flat.text(b.x + b.w / 2, b.y + b.h + 10, node.label, 8)}</g>`);
   }
+  out.push(...labels);
   out.push(`<g class="tp-packets" data-packets=""></g>`);
 
   // Nodes, back to front.
   const order = [...model.nodes].sort((a, b) => k.depthOf([a.cx, a.cy, 0], P) - k.depthOf([b.cx, b.cy, 0], P));
-  const iso = view === "iso" ? isoKit(P) : null;
-  const flat = view === "flat" ? flatKit(P) : null;
   for (const node of order) {
-    const halo = view === "iso" ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
-    const body = view === "iso" ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
-    out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}</g>`);
+    const halo = iso ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
+    const body = iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
+    const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue && features.queues !== false ? queueCellsOf(node, iso, flat) : "");
+    out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}${extra}</g>`);
   }
 
   const svg = k.figureSvg({ width: W, height: H, label: describe(model), body: out, className: `tp-svg tp-${view}` });
+  const lift = iso ? 1.5 : 0;
   const toScreen = (p, z = 0) => k.iso([p[0], p[1], z], P);
+  const vec = (dx, dy) => {
+    const a = toScreen([0, 0]);
+    const b = toScreen([dx, dy]);
+    return [b[0] - a[0], b[1] - a[1]];
+  };
+  const flagNode = model.nodes.find((node) => node.kind === "flags");
   const data = {
     P,
     edges: model.edges.map((edge) => edge.points.map((p) => toScreen(p, lift)).map(([x, y]) => [r1(x), r1(y)])),
-    step: (() => {
-      const a = toScreen([0, 0]);
-      const b = toScreen([PITCH, 0]);
-      return [b[0] - a[0], b[1] - a[1]];
-    })(),
-    packet: view === "iso" ? isoPacket(P) : null,
+    step: vec(PITCH, 0),
+    flagStep: flagNode ? vec(flagRows(flagNode)[0]?.travel || 0, 0) : [0, 0],
+    packet: iso ? isoPacket(P) : null,
   };
   return { svg, data, P, width: W, height: H };
+}
+
+// A live label on an edge: at the middle of its longest leg, set off to one side.
+function edgeLabel(edge, P, view) {
+  let best = 0;
+  let leg = [edge.corners[0], edge.corners[1]];
+  for (let i = 1; i < edge.corners.length; i++) {
+    const [a, b] = [edge.corners[i - 1], edge.corners[i]];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len > best) {
+      best = len;
+      leg = [a, b];
+    }
+  }
+  const along = Math.abs(leg[1][0] - leg[0][0]) >= Math.abs(leg[1][1] - leg[0][1]) ? "x" : "y";
+  const mid = [(leg[0][0] + leg[1][0]) / 2, (leg[0][1] + leg[1][1]) / 2];
+  const text = edge.label || "";
+  if (view === "iso") {
+    const at = along === "x" ? [mid[0], mid[1] - 6] : [mid[0] + 6, mid[1]];
+    return `<g class="tp-elabel" data-elabel="${edge.index}">${k.faceTextSvg(k.topMatrix(at, 0, P, along), text, { size: 6.2, tone: "mid", anchor: "middle" })}</g>`;
+  }
+  const [x, y] = k.iso([mid[0], mid[1], 0], P);
+  return `<g class="tp-elabel" data-elabel="${edge.index}"><text class="tp-ft tp-elabel-text" x="${r1(along === "x" ? x : x + 4)}" y="${r1(along === "x" ? y - 3.5 : y + 2)}" font-size="6.2" text-anchor="${along === "x" ? "middle" : "start"}">${escape(text)}</text></g>`;
+}
+
+// A sidecar proxy: a small box on the service's right-hand side.
+function sidecarOf(node, iso, flat) {
+  const { plan } = node;
+  const box = { x: plan.x + plan.w + 1.5, y: plan.y + plan.d - 14, w: 9, d: 12, r: 1 };
+  if (iso) return `<g class="tp-sidecar">${iso.S(k.slabOf(box, 0, Math.max(6, heightOf(node) * 0.6), iso.P, 2, 0.4), { tone: "mid" })}${iso.led(`${node.id}:s`, [box.x + box.w / 2, box.y + box.d, 3], 0.9)}</g>`;
+  return `<g class="tp-sidecar">${flat.rect(flat.box(box), "tp-f tp-f-chip", 1.5)}</g>`;
+}
+
+// A node's buffer: up to 8 cells along its top, lit by how full the queue is.
+function queueCellsOf(node, iso, flat) {
+  const n = Math.min(8, node.queue);
+  const out = [];
+  if (iso) {
+    const z = heightOf(node);
+    for (let i = 0; i < n; i++) {
+      const cell = { x: node.cx - n * 2.2 + i * 4.4, y: node.cy + 2, w: 3.4, d: 3.4, r: 0.5 };
+      out.push(`<g class="tp-cell tp-qcell" data-qcell="${escape(node.id)}:${i}">${iso.S(k.slabOf(cell, z, 1.4, iso.P, 2), { tone: "lo", crease: "none" })}</g>`);
+    }
+  } else {
+    const b = flat.box(node.plan);
+    const size = Math.min(4, (b.w - 8) / n - 1);
+    for (let i = 0; i < n; i++) out.push(`<rect class="tp-cell tp-fcell tp-qcell" data-qcell="${escape(node.id)}:${i}" x="${r1(b.x + 4 + i * (size + 1))}" y="${r1(b.y + b.h - size - 3)}" width="${r1(size)}" height="${r1(size)}" rx=".6"/>`);
+  }
+  return out.join("");
 }
 
 // A packet is a tiny cube drawn once around the screen origin; the page translates it.
@@ -805,6 +976,24 @@ export const TOPO_CSS = `
 .tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
 .tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
 .k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+.tp-ext .k-edge,.tp-f-ext{stroke-dasharray:2.5 2}
+.tp-f-dot{fill:var(--tp-mid)}
+.tp-f-knob{fill:var(--tp-lit);stroke:none}
+.tp-breaker{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:1px;vector-effect:non-scaling-stroke}
+.tp-breaker[data-state="open"]{fill:var(--tp-red);stroke:var(--tp-red)}
+.tp-breaker[data-state="half"]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-edge[data-breaker="open"] .k-line{stroke:var(--tp-red);stroke-dasharray:1.5 2.5}
+.tp-edge[data-kind="config"] .k-line{stroke-dasharray:1 3}
+.tp-elabel .k-text,.tp-elabel-text{fill:var(--tp-muted);font-variant-numeric:tabular-nums}
+.tp-elabel-text{paint-order:stroke;stroke:var(--tp-card);stroke-width:2.5px;stroke-linejoin:round}
+.tp-elabel[data-bad] .k-text,.tp-elabel[data-bad] .tp-elabel-text{fill:var(--tp-red)}
+.tp-lane{transition:opacity .3s}
+.tp-lane[data-paused]{opacity:.3}
+.tp-broker{cursor:pointer}
+.tp-broker[data-down] .tp-led{fill:var(--tp-red)}
+.tp-broker[data-down]>*:not(.tp-led){opacity:.4}
+.tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
+.tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}

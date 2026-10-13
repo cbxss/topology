@@ -56,7 +56,7 @@
     if (phase !== shown.phase) {
       shown.phase = phase;
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
-      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click a node to take over · 1–${Math.min(9, story.phases.length)} jump · V for 2D` : hintText;
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to take over · 1–${Math.min(9, story.phases.length)} jump` : hintText;
     }
     const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
     if (text !== shown.say) {

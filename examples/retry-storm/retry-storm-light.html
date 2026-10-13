@@ -1,0 +1,1521 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Retry storm</title><style>
+.tp{
+  --tp-page:#0a0a0b;--tp-card:#121214;--tp-text:#a4a4a8;--tp-strong:#e8e8ea;--tp-muted:#6c6c72;
+  --tp-face:#1a1a1d;--tp-top:#1d1d20;--tp-lit-top:#28282c;--tp-lit-shade:#1e1e21;
+  --tp-shade-0:#0e0e10;--tp-shade-1:#111113;--tp-shade-2:#151517;--tp-shade-3:#18181b;
+  --tp-hi:#d6d6da;--tp-mid:#6b6b71;--tp-lo:#3d3d42;--tp-faint:#29292d;--tp-lit:#ffffff;
+  --tp-halo:#040405;--tp-halo-opacity:.9;--tp-dot:#e8e8ea;
+  --tp-red:#ff6b6b;--tp-green:#6be0a0;--tp-blue:#6b9bff;--tp-amber:#f0b64a;
+  --tp-weight:.6px;--tp-ease:cubic-bezier(.32,.72,0,1);
+  --tp-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+.tp[data-theme="light"]{
+  --tp-page:#f1f1ee;--tp-card:#fafaf8;--tp-text:#56565a;--tp-strong:#18181a;--tp-muted:#8b8b90;
+  --tp-face:#ffffff;--tp-top:#ffffff;--tp-lit-top:#ffffff;--tp-lit-shade:#ededea;
+  --tp-shade-0:#dbdbd8;--tp-shade-1:#e4e4e1;--tp-shade-2:#ecece9;--tp-shade-3:#f3f3f0;
+  --tp-hi:#25252a;--tp-mid:#89898e;--tp-lo:#b3b3b7;--tp-faint:#d3d3d5;--tp-lit:#000000;
+  --tp-halo:#88887e;--tp-halo-opacity:.3;--tp-dot:#39393d;
+  --tp-red:#e5484d;--tp-green:#30a46c;--tp-blue:#3e63dd;--tp-amber:#c27c0e;
+}
+.k-svg{display:block;width:100%;height:auto;overflow:visible;margin:0 auto}
+.k-svg path,.k-svg circle{vector-effect:non-scaling-stroke}
+.k-fill{fill:var(--tp-card);stroke:none}
+.k-solid[data-lit]>.k-fill{fill:var(--tp-face)}
+.k-shade,.k-top{stroke:none}
+.k-shade[data-shade="0"]{fill:var(--tp-shade-0)}
+.k-shade[data-shade="1"]{fill:var(--tp-shade-1)}
+.k-shade[data-shade="2"]{fill:var(--tp-shade-2)}
+.k-shade[data-shade="3"]{fill:var(--tp-shade-3)}
+.k-top{fill:var(--tp-top)}
+.k-solid[data-lit]>.k-top{fill:var(--tp-lit-top)}
+.k-solid[data-lit]>.k-shade{fill:var(--tp-lit-shade)}
+.k-solid[data-lit]>.k-edge{stroke:var(--tp-lit)}
+.k-halo{fill:var(--tp-halo);stroke:none;filter:blur(9px);opacity:var(--tp-halo-opacity);transform:translateY(3px)}
+.k-line{fill:none;stroke:var(--tp-lo);stroke-width:var(--tp-weight);stroke-linecap:round;stroke-linejoin:round}
+.k-line[data-tone="hi"]{stroke:var(--tp-hi)}
+.k-line[data-tone="mid"]{stroke:var(--tp-mid)}
+.k-line[data-tone="faint"]{stroke:var(--tp-faint)}
+.k-line[data-tone="lit"]{stroke:var(--tp-lit)}
+.k-line[data-dashed]{stroke-dasharray:3 3}
+.k-dots circle{fill:var(--tp-dot);stroke:none;opacity:.32}
+.k-dots[data-tone="hi"] circle{opacity:.85}
+.k-dots[data-tone="mid"] circle{opacity:.45}
+.k-dots[data-tone="lo"] circle{opacity:.22}
+.k-text{fill:var(--tp-mid);font-family:var(--tp-mono);letter-spacing:.04em}
+.k-text[data-tone="hi"]{fill:var(--tp-hi)}
+.k-text[data-tone="lo"]{fill:var(--tp-lo)}
+.k-figure{margin:32px 0 36px}
+.k-card{position:relative;padding:52px 24px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid)}
+.k-corners{position:absolute;inset:18px 20px;pointer-events:none}
+.k-corner{position:absolute;color:var(--tp-muted);font-family:var(--tp-mono);font-size:10.5px;line-height:1;letter-spacing:.04em;white-space:nowrap}
+.k-corner[data-corner="fig"]{top:0;left:0;color:var(--tp-text)}
+.k-corner[data-corner="title"]{top:0;right:0;text-transform:uppercase;letter-spacing:.1em}
+.k-corner[data-corner="hint"]{bottom:0;left:0;text-transform:uppercase;letter-spacing:.1em}
+.k-corner[data-corner="readout"]{right:0;bottom:0;color:var(--tp-text);font-variant-numeric:tabular-nums}
+.k-legend{display:grid;gap:8px;margin-top:12px;color:var(--tp-muted);font-size:13px;line-height:1.55}
+.k-keys{display:flex;flex-wrap:wrap;gap:6px 18px}
+.k-key{display:inline-flex;align-items:center;gap:7px}
+.k-swatch{width:16px;height:10px;flex:none;overflow:visible}
+.k-swatch path{fill:none;stroke:var(--tp-hi);stroke-width:1;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.k-swatch[data-mark="raised"] path{stroke:var(--tp-mid)}
+.k-swatch[data-mark="lit"] path{stroke:var(--tp-lit)}
+.k-swatch[data-mark="dashed"] path{stroke-dasharray:3 2.5}
+.k-swatch[data-mark="red"] path{stroke:var(--tp-red)}
+.k-swatch[data-mark="green"] path{stroke:var(--tp-green)}
+.k-swatch[data-mark="blue"] path{stroke:var(--tp-blue)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+@media (max-width:560px){.k-card{padding:48px 12px 70px}.k-corner[data-corner="hint"]{bottom:18px}}
+
+*{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
+body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="light"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 3</span><span class="k-corner" data-corner="title">Retry storm</span><span class="k-corner" data-corner="hint">Hover a node · click to fail it · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>190/s in · healthy</span></div><style>
+.tp-stage{position:relative;outline:none;touch-action:manipulation}
+.tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
+.tp-svg[hidden]{display:none}
+.tp-node{cursor:pointer;transition:opacity .25s var(--tp-ease)}
+.tp-edge .k-line{transition:stroke .2s}
+.tp-edge-bed{fill:none;stroke:var(--tp-card);stroke-width:3.4px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.tp-iso .tp-edge-bed{stroke:none}
+.tp-port{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-stage[data-focus] .tp-node:not([data-near]){opacity:.38}
+.tp-stage[data-focus] .tp-edge:not([data-near]) .k-line{stroke:var(--tp-faint)}
+.tp-stage[data-focus] .tp-edge[data-near] .k-line{stroke:var(--tp-hi)}
+.tp-stage[data-focus] .tp-label:not([data-near]) text{fill:var(--tp-lo)}
+.tp-label .tp-ft{fill:var(--tp-text)}
+.tp-node[data-sel] .k-solid>.k-edge{stroke:var(--tp-lit)}
+.tp-node[data-sel] .tp-f{stroke:var(--tp-lit)}
+.tp-led{fill:var(--tp-lo);stroke:none;transition:fill .5s}
+.tp-led[data-on]{fill:var(--tp-green);transition:none}
+.tp-node[data-down] .tp-led{fill:var(--tp-red)}
+.tp-node[data-down]>*:not(.tp-led){opacity:.4}
+.tp-node[data-down] .k-edge,.tp-node[data-down] .tp-f{stroke-dasharray:2 2}
+.tp-screen{fill:var(--tp-shade-0);stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-cell[data-on] .k-top{fill:var(--tp-hi)}
+.tp-cell[data-on] .k-shade{fill:var(--tp-mid)}
+.tp-cell[data-on] .k-edge{stroke:var(--tp-hi)}
+.tp-fcell{fill:var(--tp-card);stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-fcell[data-on]{fill:var(--tp-hi);stroke:var(--tp-hi)}
+.tp-fcursor{fill:none;stroke:var(--tp-lit);stroke-width:1.4px;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.tp-cursor[data-g="1"]{--tp-cur:var(--tp-blue)}
+.tp-fcursor[data-g="1"]{stroke:var(--tp-blue)}
+.tp-fcursor[data-g="2"]{stroke:var(--tp-green)}
+.tp-cursor[data-g="1"] .k-edge{stroke:var(--tp-blue)}
+.tp-cursor[data-g="2"] .k-edge{stroke:var(--tp-green)}
+.tp-f{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-f-back{stroke:var(--tp-lo)}
+.tp-f-top{fill:var(--tp-face)}
+.tp-f-chip{fill:var(--tp-face);stroke:var(--tp-lo)}
+.tp-f-mark{fill:none;stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-fzone{fill:var(--tp-shade-1);stroke:var(--tp-lo);stroke-width:var(--tp-weight);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.tp-ft{fill:var(--tp-hi);font-family:var(--tp-mono);letter-spacing:.02em}
+.tp-ft-dim{fill:var(--tp-muted)}
+.tp-zone .k-text{letter-spacing:.14em}
+.tp-pk{pointer-events:none}
+.tp-pk[data-kind="request"]{--pk:var(--tp-lit)}
+.tp-pk[data-kind="response"]{--pk:var(--tp-mid)}
+.tp-pk[data-kind="record"]{--pk:var(--tp-blue)}
+.tp-pk[data-kind="replication"]{--pk:var(--tp-green)}
+.tp-pk[data-kind="drop"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="error"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
+.tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+.tp-ext .k-edge,.tp-f-ext{stroke-dasharray:2.5 2}
+.tp-f-dot{fill:var(--tp-mid)}
+.tp-f-knob{fill:var(--tp-lit);stroke:none}
+.tp-breaker{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:1px;vector-effect:non-scaling-stroke}
+.tp-breaker[data-state="open"]{fill:var(--tp-red);stroke:var(--tp-red)}
+.tp-breaker[data-state="half"]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-edge[data-breaker="open"] .k-line{stroke:var(--tp-red);stroke-dasharray:1.5 2.5}
+.tp-edge[data-kind="config"] .k-line{stroke-dasharray:1 3}
+.tp-elabel .k-text,.tp-elabel-text{fill:var(--tp-muted);font-variant-numeric:tabular-nums}
+.tp-elabel-text{paint-order:stroke;stroke:var(--tp-card);stroke-width:2.5px;stroke-linejoin:round}
+.tp-elabel[data-bad] .k-text,.tp-elabel[data-bad] .tp-elabel-text{fill:var(--tp-red)}
+.tp-lane{transition:opacity .3s}
+.tp-lane[data-paused]{opacity:.3}
+.tp-broker{cursor:pointer}
+.tp-broker[data-down] .tp-led{fill:var(--tp-red)}
+.tp-broker[data-down]>*:not(.tp-led){opacity:.4}
+.tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
+.tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-story{margin:18px 0 -10px}
+.tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
+.tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-play:focus-visible,.tp-track:focus-visible{outline:1px solid var(--tp-lit);outline-offset:2px}
+.tp-track{position:relative;flex:1;height:28px;cursor:pointer;touch-action:none}
+.tp-track::before{content:"";position:absolute;left:0;right:0;top:20px;height:1px;background:var(--tp-lo)}
+.tp-phase{all:unset;position:absolute;top:0;bottom:0;box-sizing:border-box;border-left:1px solid var(--tp-lo);cursor:pointer}
+.tp-phase span{position:absolute;left:5px;top:2px;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--tp-muted)}
+.tp-phase:hover span,.tp-phase[data-now] span{color:var(--tp-strong)}
+.tp-phase[data-now]{background:color-mix(in srgb,var(--tp-hi) 5%,transparent)}
+.tp-tick{position:absolute;top:16px;width:1px;height:9px;background:var(--tp-mid);pointer-events:none}
+.tp-head{position:absolute;top:12px;height:17px;width:2px;margin-left:-1px;background:var(--tp-lit);pointer-events:none}
+.tp-time{flex:none;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-say{margin:8px 0 0 34px;min-height:3em;font-size:12.5px;line-height:1.5;color:var(--tp-text)}
+.tp-story[data-mode="free"] .tp-track{opacity:.4}
+@media (max-width:560px){.tp-say{margin-left:0}}
+.tp-pk .pk-top{fill:var(--pk)}
+.tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
+.tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
+.tp-pk circle{fill:var(--pk)}
+.tp-views{position:absolute;top:13px;left:50%;transform:translateX(-50%);display:flex;gap:0;z-index:2;font-family:var(--tp-mono);font-size:10px;letter-spacing:.08em}
+.tp-views button{all:unset;cursor:pointer;padding:3px 9px;color:var(--tp-muted);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-views button[aria-pressed="true"]{color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-mid);background:var(--tp-shade-2)}
+.tp-views button:focus-visible{outline:1px solid var(--tp-lit)}
+</style><div class="tp-views" role="group" aria-label="View"><button type="button" data-view="iso" aria-pressed="true">ISO</button><button type="button" data-view="flat" aria-pressed="false">2D</button></div><div class="tp-stage" tabindex="0" role="application" aria-label="Retry storm: hover or arrow keys pick a node, Enter fails or restores it, V switches between isometric and 2D"><svg xmlns="http://www.w3.org/2000/svg" class="k-svg tp-svg tp-iso" viewBox="0 0 640 298" role="img" aria-label="Retry storm: clients (client), gateway (gateway), orders-api (service), inventory (service), inventory-db (db). Connections: clients to gateway; gateway to orders-api; orders-api to inventory; inventory to inventory-db."><g class="tp-edge" data-edge="0" data-kind="sync"><path class="tp-edge-bed" d="M76.7 65.1L169.2 98.2"/><path class="k-line" data-tone="mid" d="M76.7 65.1L169.2 98.2"/><path class="k-line" data-tone="mid" data-free="" d="M161.8 97.5L167.9 97.7L165.3 94.7"/><circle class="tp-port" cx="76.7" cy="65.1" r="1.4"/></g><g class="tp-edge" data-edge="1" data-kind="sync"><path class="tp-edge-bed" d="M211.1 113.1L297.6 144"/><path class="k-line" data-tone="mid" d="M211.1 113.1L297.6 144"/><path class="k-line" data-tone="mid" data-free="" d="M290.1 143.4L296.3 143.6L293.7 140.6"/><circle class="tp-port" cx="211.1" cy="113.1" r="1.4"/></g><g class="tp-edge" data-edge="2" data-kind="sync"><path class="tp-edge-bed" d="M344.7 160.9L428.5 190.8"/><path class="k-line" data-tone="mid" d="M344.7 160.9L428.5 190.8"/><path class="k-line" data-tone="mid" data-free="" d="M421.1 190.2L427.2 190.4L424.6 187.4"/><circle class="tp-port" cx="344.7" cy="160.9" r="1.4"/></g><g class="tp-edge" data-edge="3" data-kind="sync"><path class="tp-edge-bed" d="M475.7 207.7L564.7 239.5"/><path class="k-line" data-tone="mid" d="M475.7 207.7L564.7 239.5"/><path class="k-line" data-tone="mid" data-free="" d="M557.3 238.9L563.4 239L560.8 236.1"/><circle class="tp-port" cx="475.7" cy="207.7" r="1.4"/></g><g class="tp-label" data-label="clients"><text class="k-text" data-tone="hi" transform="matrix(0.8731 0.3121 -0.5889 0.4627 44.4878 70.3959)" font-size="8" text-anchor="middle">clients</text></g><g class="tp-label" data-label="gw"><text class="k-text" data-tone="hi" transform="matrix(0.8731 0.3121 -0.5889 0.4627 174.2715 118.1315)" font-size="8" text-anchor="middle">gateway</text></g><g class="tp-label" data-label="orders"><text class="k-text" data-tone="hi" transform="matrix(0.8731 0.3121 -0.5889 0.4627 304.6441 165.4044)" font-size="8" text-anchor="middle">orders-api</text></g><g class="tp-label" data-label="inventory"><text class="k-text" data-tone="hi" transform="matrix(0.8731 0.3121 -0.5889 0.4627 435.6057 212.2146)" font-size="8" text-anchor="middle">inventory</text></g><g class="tp-label" data-label="pg"><text class="k-text" data-tone="hi" transform="matrix(0.8731 0.3121 -0.5889 0.4627 564.8005 260.4128)" font-size="8" text-anchor="middle">inventory-db</text></g><g class="tp-elabel" data-elabel="0"><text class="k-text" data-tone="mid" transform="matrix(0.8731 0.3121 -0.5889 0.4627 126.4782 78.8344)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="1"><text class="k-text" data-tone="mid" transform="matrix(0.8731 0.3121 -0.5889 0.4627 257.8763 125.8007)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="2"><text class="k-text" data-tone="mid" transform="matrix(0.8731 0.3121 -0.5889 0.4627 390.1474 173.0790)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="3"><text class="k-text" data-tone="mid" transform="matrix(0.8731 0.3121 -0.5889 0.4627 523.7282 220.8255)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-packets" data-packets=""></g><g class="tp-node" data-node="clients" data-kind="client"><path class="k-halo" d="M36.2 50.1L36.3 50L36.3 49.9L36.4 49.8L50.6 38.7L50.7 38.6L50.9 38.6L51 38.5L51.2 38.5L51.4 38.5L51.6 38.5L51.8 38.5L52 38.6L81.7 49.2L81.9 49.3L82 49.3L82.1 49.4L82.2 49.5L82.2 49.7L82.2 58.6L82.2 58.7L82.1 58.8L82 58.9L67.9 70L67.7 70.1L67.6 70.2L67.4 70.2L67.2 70.2L67 70.2L66.8 70.2L66.6 70.2L66.4 70.1L36.7 59.5L36.6 59.5L36.4 59.4L36.3 59.3L36.3 59.2L36.2 59.1Z"/><g class="k-solid"><path class="k-fill" d="M33.7 57L34.1 56.5L44.7 48.1L45.5 47.8L46.6 47.6L47.6 47.8L79 59.1L79.8 59.5L80 60.1L80 62.2L79.6 62.8L69 71.1L68.2 71.5L67.1 71.6L66.1 71.4L34.7 60.2L33.9 59.7L33.7 59.1Z"/><path class="k-shade" data-shade="0" d="M80 60.1L79.6 60.6L79.6 62.8L80 62.2ZM79.6 60.6L69 68.9L69 71.1L79.6 62.8ZM69 68.9L68.2 69.3L68.2 71.5L69 71.1Z"/><path class="k-shade" data-shade="1" d="M68.2 69.3L67.1 69.4L67.1 71.6L68.2 71.5Z"/><path class="k-shade" data-shade="2" d="M67.1 69.4L66.1 69.2L66.1 71.4L67.1 71.6Z"/><path class="k-shade" data-shade="3" d="M66.1 69.2L34.7 58L34.7 60.2L66.1 71.4ZM34.7 58L33.9 57.6L33.9 59.7L34.7 60.2ZM33.9 57.6L33.7 57L33.7 59.1L33.9 59.7Z"/><path class="k-top" d="M79 59.1L79.8 59.5L80 60.1L79.6 60.6L69 68.9L68.2 69.3L67.1 69.4L66.1 69.2L34.7 58L33.9 57.6L33.7 57L34.1 56.5L44.7 48.1L45.5 47.8L46.6 47.6L47.6 47.8Z"/><path class="k-line k-crease" data-tone="faint" d="M80 60.1L79.6 60.6M79.6 60.6L69 68.9M69 68.9L68.2 69.3M68.2 69.3L67.1 69.4M67.1 69.4L66.1 69.2M66.1 69.2L34.7 58M34.7 58L33.9 57.6M33.9 57.6L33.7 57"/><path class="k-line k-bevel" data-tone="faint" d="M79.6 60L79.2 60.6M79.2 60.6L68.8 68.8M68.8 68.8L68 69.1M68 69.1L66.9 69.2M66.9 69.2L65.9 69M65.9 69L35.1 58M35.1 58L34.4 57.6M34.4 57.6L34.2 57"/><path class="k-line k-edge" data-tone="mid" d="M33.7 57L34.1 56.5L44.7 48.1L45.5 47.8L46.6 47.6L47.6 47.8L79 59.1L79.8 59.5L80 60.1L80 62.2L79.6 62.8L69 71.1L68.2 71.5L67.1 71.6L66.1 71.4L34.7 60.2L33.9 59.7L33.7 59.1Z"/></g><path class="k-line" data-tone="faint" d="M74.6 61.5L70.5 64.8L40.8 54.2L45 50.9Z"/><path class="k-line" data-tone="faint" d="M58.3 62.4L58.7 62.8L58.6 63.2L57.4 64.1L56.7 64.3L55.9 64.3L47.2 61.1L46.7 60.8L46.9 60.4L48.1 59.4L48.8 59.2L49.5 59.3Z"/><g class="k-solid"><path class="k-fill" d="M46.9 27.1L47 26.6L47.6 26.2L48.3 25.9L49.1 26L82.3 37.9L82.7 38.2L82.7 57.9L82.6 58.3L82 58.8L81.3 59L80.5 58.9L47.3 47.1L46.9 46.7Z"/><path class="k-shade" data-shade="0" d="M82.7 38.2L82.6 38.7L82.6 58.3L82.7 57.9ZM82.6 38.7L82 39.1L82 58.8L82.6 58.3ZM82 39.1L81.3 39.4L81.3 59L82 58.8Z"/><path class="k-shade" data-shade="2" d="M81.3 39.4L80.5 39.3L80.5 58.9L81.3 59Z"/><path class="k-shade" data-shade="3" d="M80.5 39.3L47.3 27.4L47.3 47.1L80.5 58.9ZM47.3 27.4L46.9 27.1L46.9 46.7L47.3 47.1Z"/><path class="k-top" d="M82.3 37.9L82.7 38.2L82.6 38.7L82 39.1L81.3 39.4L80.5 39.3L47.3 27.4L46.9 27.1L47 26.6L47.6 26.2L48.3 25.9L49.1 26Z"/><path class="k-line k-crease" data-tone="faint" d="M82.7 38.2L82.6 38.7M82.6 38.7L82 39.1M82 39.1L81.3 39.4M81.3 39.4L80.5 39.3M80.5 39.3L47.3 27.4M47.3 27.4L46.9 27.1"/><path class="k-line k-bevel" data-tone="faint" d="M82.4 38.1L82.2 38.5M82.2 38.5L81.6 39M81.6 39L81 39.2M81 39.2L80.2 39.1M80.2 39.1L47.7 27.5M47.7 27.5L47.3 27.2"/><path class="k-line k-edge" data-tone="mid" d="M46.9 27.1L47 26.6L47.6 26.2L48.3 25.9L49.1 26L82.3 37.9L82.7 38.2L82.7 57.9L82.6 58.3L82 58.8L81.3 59L80.5 58.9L47.3 47.1L46.9 46.7Z"/></g><path class="tp-screen" d="M49.1 45.4L78.8 56L78.8 40.8L49.1 30.2Z"/><path class="k-line" data-tone="lo" data-free="" d="M52.6 35L71.8 41.9"/><path class="k-line" data-tone="lo" data-free="" d="M52.6 38.6L66.5 43.6"/><path class="k-line" data-tone="lo" data-free="" d="M52.6 42.1L69.2 48.1"/><circle class="tp-led" data-led="clients:0" cx="75.3" cy="52" r="1.3"/></g><g class="tp-node" data-node="gw" data-kind="gateway"><path class="k-halo" d="M162.5 96.6L162.6 96.5L162.6 96.4L162.7 96.3L179.2 83.4L179.3 83.3L179.5 83.2L179.7 83.2L179.9 83.1L180.1 83.1L180.3 83.1L180.5 83.2L180.7 83.2L217.3 96.3L217.5 96.4L217.6 96.5L217.7 96.6L217.8 96.7L217.8 96.8L217.8 105.7L217.8 105.8L217.7 105.9L217.6 106L201.1 119L201 119.1L200.8 119.1L200.7 119.2L200.5 119.2L200.3 119.2L200.1 119.2L199.9 119.2L199.7 119.1L163 106L162.8 106L162.7 105.9L162.6 105.8L162.6 105.7L162.5 105.6Z"/><g class="k-solid"><path class="k-fill" d="M160.4 101.9L161 101.1L177.5 88.1L178.7 87.5L180.3 87.4L181.8 87.6L218.5 100.8L219.6 101.4L219.9 102.3L219.9 105.8L219.4 106.7L202.9 119.6L201.6 120.2L200 120.3L198.5 120.1L161.8 107L160.8 106.3L160.4 105.4Z"/><path class="k-shade" data-shade="0" d="M219.9 102.3L219.4 103.1L219.4 106.7L219.9 105.8ZM219.4 103.1L202.9 116L202.9 119.6L219.4 106.7ZM202.9 116L201.6 116.6L201.6 120.2L202.9 119.6Z"/><path class="k-shade" data-shade="1" d="M201.6 116.6L200 116.8L200 120.3L201.6 120.2Z"/><path class="k-shade" data-shade="2" d="M200 116.8L198.5 116.5L198.5 120.1L200 120.3Z"/><path class="k-shade" data-shade="3" d="M198.5 116.5L161.8 103.4L161.8 107L198.5 120.1ZM161.8 103.4L160.8 102.7L160.8 106.3L161.8 107ZM160.8 102.7L160.4 101.9L160.4 105.4L160.8 106.3Z"/><path class="k-top" d="M218.5 100.8L219.6 101.4L219.9 102.3L219.4 103.1L202.9 116L201.6 116.6L200 116.8L198.5 116.5L161.8 103.4L160.8 102.7L160.4 101.9L161 101.1L177.5 88.1L178.7 87.5L180.3 87.4L181.8 87.6Z"/><path class="k-line k-crease" data-tone="faint" d="M219.9 102.3L219.4 103.1M219.4 103.1L202.9 116M202.9 116L201.6 116.6M201.6 116.6L200 116.8M200 116.8L198.5 116.5M198.5 116.5L161.8 103.4M161.8 103.4L160.8 102.7M160.8 102.7L160.4 101.9"/><path class="k-line k-bevel" data-tone="faint" d="M219.3 102.3L218.7 103.1M218.7 103.1L202.6 115.7M202.6 115.7L201.4 116.3M201.4 116.3L199.8 116.5M199.8 116.5L198.3 116.2M198.3 116.2L162.5 103.3M162.5 103.3L161.4 102.7M161.4 102.7L161.1 101.9"/><path class="k-line k-edge" data-tone="mid" d="M160.4 101.9L161 101.1L177.5 88.1L178.7 87.5L180.3 87.4L181.8 87.6L218.5 100.8L219.6 101.4L219.9 102.3L219.9 105.8L219.4 106.7L202.9 119.6L201.6 120.2L200 120.3L198.5 120.1L161.8 107L160.8 106.3L160.4 105.4Z"/></g><g class="k-solid"><path class="k-fill" d="M165.5 93.8L165.6 93.3L179.8 82.2L180.4 82L181.2 82.1L187.4 84.3L187.8 84.6L187.8 92.7L187.6 93.1L173.5 104.2L172.8 104.4L172 104.3L165.9 102.2L165.5 101.8Z"/><path class="k-shade" data-shade="0" d="M187.8 84.6L187.6 85L187.6 93.1L187.8 92.7ZM187.6 85L173.5 96.1L173.5 104.2L187.6 93.1ZM173.5 96.1L172.8 96.4L172.8 104.4L173.5 104.2Z"/><path class="k-shade" data-shade="2" d="M172.8 96.4L172 96.3L172 104.3L172.8 104.4Z"/><path class="k-shade" data-shade="3" d="M172 96.3L165.9 94.1L165.9 102.2L172 104.3ZM165.9 94.1L165.5 93.8L165.5 101.8L165.9 102.2Z"/><path class="k-top" d="M187.4 84.3L187.8 84.6L187.6 85L173.5 96.1L172.8 96.4L172 96.3L165.9 94.1L165.5 93.8L165.6 93.3L179.8 82.2L180.4 82L181.2 82.1Z"/><path class="k-line k-crease" data-tone="faint" d="M187.8 84.6L187.6 85M187.6 85L173.5 96.1M173.5 96.1L172.8 96.4M172.8 96.4L172 96.3M172 96.3L165.9 94.1M165.9 94.1L165.5 93.8"/><path class="k-line k-bevel" data-tone="faint" d="M187.5 84.8L187.3 85.2M187.3 85.2L173.6 95.9M173.6 95.9L172.9 96.2M172.9 96.2L172.2 96.1M172.2 96.1L166.2 94M166.2 94L165.8 93.6"/><path class="k-line k-edge" data-tone="mid" d="M165.5 93.8L165.6 93.3L179.8 82.2L180.4 82L181.2 82.1L187.4 84.3L187.8 84.6L187.8 92.7L187.6 93.1L173.5 104.2L172.8 104.4L172 104.3L165.9 102.2L165.5 101.8Z"/></g><g class="k-solid"><path class="k-fill" d="M192.5 103.4L192.7 103L206.8 91.9L207.5 91.7L208.3 91.8L214.4 93.9L214.9 94.3L214.9 102.3L214.7 102.8L200.6 113.9L199.9 114.1L199.1 114L193 111.8L192.5 111.5Z"/><path class="k-shade" data-shade="0" d="M214.9 94.3L214.7 94.7L214.7 102.8L214.9 102.3ZM214.7 94.7L200.6 105.8L200.6 113.9L214.7 102.8ZM200.6 105.8L199.9 106.1L199.9 114.1L200.6 113.9Z"/><path class="k-shade" data-shade="2" d="M199.9 106.1L199.1 106L199.1 114L199.9 114.1Z"/><path class="k-shade" data-shade="3" d="M199.1 106L193 103.8L193 111.8L199.1 114ZM193 103.8L192.5 103.4L192.5 111.5L193 111.8Z"/><path class="k-top" d="M214.4 93.9L214.9 94.3L214.7 94.7L200.6 105.8L199.9 106.1L199.1 106L193 103.8L192.5 103.4L192.7 103L206.8 91.9L207.5 91.7L208.3 91.8Z"/><path class="k-line k-crease" data-tone="faint" d="M214.9 94.3L214.7 94.7M214.7 94.7L200.6 105.8M200.6 105.8L199.9 106.1M199.9 106.1L199.1 106M199.1 106L193 103.8M193 103.8L192.5 103.4"/><path class="k-line k-bevel" data-tone="faint" d="M214.5 94.4L214.4 94.8M214.4 94.8L200.7 105.6M200.7 105.6L200 105.8M200 105.8L199.2 105.8M199.2 105.8L193.3 103.6M193.3 103.6L192.9 103.3"/><path class="k-line k-edge" data-tone="mid" d="M192.5 103.4L192.7 103L206.8 91.9L207.5 91.7L208.3 91.8L214.4 93.9L214.9 94.3L214.9 102.3L214.7 102.8L200.6 113.9L199.9 114.1L199.1 114L193 111.8L192.5 111.5Z"/></g><g class="k-solid"><path class="k-fill" d="M163.3 90.7L163.6 90.3L178.3 78.7L178.9 78.4L179.7 78.3L180.5 78.5L216.3 91.3L216.9 91.6L217 92L217 94.7L216.7 95.1L202 106.7L201.4 107L200.6 107L199.8 106.9L164 94.1L163.5 93.8L163.3 93.4Z"/><path class="k-shade" data-shade="0" d="M217 92L216.7 92.4L216.7 95.1L217 94.7ZM216.7 92.4L202 104L202 106.7L216.7 95.1ZM202 104L201.4 104.3L201.4 107L202 106.7Z"/><path class="k-shade" data-shade="1" d="M201.4 104.3L200.6 104.4L200.6 107L201.4 107Z"/><path class="k-shade" data-shade="2" d="M200.6 104.4L199.8 104.2L199.8 106.9L200.6 107Z"/><path class="k-shade" data-shade="3" d="M199.8 104.2L164 91.4L164 94.1L199.8 106.9ZM164 91.4L163.5 91.1L163.5 93.8L164 94.1ZM163.5 91.1L163.3 90.7L163.3 93.4L163.5 93.8Z"/><path class="k-top" d="M216.3 91.3L216.9 91.6L217 92L216.7 92.4L202 104L201.4 104.3L200.6 104.4L199.8 104.2L164 91.4L163.5 91.1L163.3 90.7L163.6 90.3L178.3 78.7L178.9 78.4L179.7 78.3L180.5 78.5Z"/><path class="k-line k-crease" data-tone="lo" d="M217 92L216.7 92.4M216.7 92.4L202 104M202 104L201.4 104.3M201.4 104.3L200.6 104.4M200.6 104.4L199.8 104.2M199.8 104.2L164 91.4M164 91.4L163.5 91.1M163.5 91.1L163.3 90.7"/><path class="k-line k-bevel" data-tone="lo" d="M216.4 92L216.1 92.4M216.1 92.4L201.7 103.7M201.7 103.7L201.1 104M201.1 104L200.4 104.1M200.4 104.1L199.6 103.9M199.6 103.9L164.7 91.4M164.7 91.4L164.1 91.1M164.1 91.1L164 90.7"/><path class="k-line k-edge" data-tone="hi" d="M163.3 90.7L163.6 90.3L178.3 78.7L178.9 78.4L179.7 78.3L180.5 78.5L216.3 91.3L216.9 91.6L217 92L217 94.7L216.7 95.1L202 106.7L201.4 107L200.6 107L199.8 106.9L164 94.1L163.5 93.8L163.3 93.4Z"/></g><path class="k-line" data-tone="faint" d="M213.2 92.2L200.3 102.4L167.1 90.5L180.1 80.3Z"/><circle class="tp-led" data-led="gw:0" cx="181.9" cy="99.2" r="1.3"/></g><g class="tp-node" data-node="orders" data-kind="service"><path class="k-halo" d="M290.3 143L290.3 142.9L290.4 142.8L290.5 142.7L308.1 128.8L308.3 128.7L308.4 128.6L308.6 128.6L308.8 128.5L309 128.5L309.2 128.5L309.4 128.6L309.6 128.6L351.5 143.6L351.7 143.7L351.8 143.8L351.9 143.9L352 144L352 144.1L352 153L352 153.1L351.9 153.2L351.8 153.3L334.1 167.2L334 167.3L333.8 167.3L333.7 167.4L333.5 167.4L333.2 167.4L333 167.4L332.8 167.4L332.7 167.3L290.8 152.4L290.6 152.3L290.5 152.2L290.4 152.1L290.3 152L290.3 151.9Z"/><g class="k-solid"><path class="k-fill" d="M288.2 144.6L288.7 143.8L306.4 129.9L307.6 129.4L309.2 129.2L310.8 129.5L352.7 144.5L353.8 145.1L354.1 146L354.1 153.1L353.5 153.9L335.9 167.8L334.6 168.4L333 168.5L331.5 168.3L289.6 153.3L288.5 152.6L288.2 151.8Z"/><path class="k-shade" data-shade="0" d="M354.1 146L353.5 146.8L353.5 153.9L354.1 153.1ZM353.5 146.8L335.9 160.7L335.9 167.8L353.5 153.9ZM335.9 160.7L334.6 161.2L334.6 168.4L335.9 167.8Z"/><path class="k-shade" data-shade="1" d="M334.6 161.2L333 161.4L333 168.5L334.6 168.4Z"/><path class="k-shade" data-shade="2" d="M333 161.4L331.5 161.1L331.5 168.3L333 168.5Z"/><path class="k-shade" data-shade="3" d="M331.5 161.1L289.6 146.1L289.6 153.3L331.5 168.3ZM289.6 146.1L288.5 145.5L288.5 152.6L289.6 153.3ZM288.5 145.5L288.2 144.6L288.2 151.8L288.5 152.6Z"/><path class="k-top" d="M352.7 144.5L353.8 145.1L354.1 146L353.5 146.8L335.9 160.7L334.6 161.2L333 161.4L331.5 161.1L289.6 146.1L288.5 145.5L288.2 144.6L288.7 143.8L306.4 129.9L307.6 129.4L309.2 129.2L310.8 129.5Z"/><path class="k-line k-crease" data-tone="faint" d="M354.1 146L353.5 146.8M353.5 146.8L335.9 160.7M335.9 160.7L334.6 161.2M334.6 161.2L333 161.4M333 161.4L331.5 161.1M331.5 161.1L289.6 146.1M289.6 146.1L288.5 145.5M288.5 145.5L288.2 144.6"/><path class="k-line k-bevel" data-tone="faint" d="M353.4 146L352.9 146.8M352.9 146.8L335.6 160.4M335.6 160.4L334.4 160.9M334.4 160.9L332.8 161.1M332.8 161.1L331.3 160.8M331.3 160.8L290.2 146.1M290.2 146.1L289.1 145.5M289.1 145.5L288.8 144.7"/><path class="k-line k-edge" data-tone="mid" d="M288.2 144.6L288.7 143.8L306.4 129.9L307.6 129.4L309.2 129.2L310.8 129.5L352.7 144.5L353.8 145.1L354.1 146L354.1 153.1L353.5 153.9L335.9 167.8L334.6 168.4L333 168.5L331.5 168.3L289.6 153.3L288.5 152.6L288.2 151.8Z"/></g><path class="k-line" data-tone="lo" d="M299.2 154.6L307 157.4L307 154.5L299.2 151.7Z"/><path class="k-line" data-tone="lo" d="M308.8 158L316.6 160.8L316.6 158L308.8 155.2Z"/><path class="k-line" data-tone="lo" d="M318.4 161.4L326.2 164.3L326.2 161.4L318.4 158.6Z"/><path class="k-line" data-tone="faint" d="M351.8 152.5L337.6 163.6L337.6 162.1L351.8 151Z"/><circle class="tp-led" data-led="orders:0" cx="292.2" cy="150.7" r="1.3"/><g class="k-solid"><path class="k-fill" d="M288.2 136.8L288.7 136L306.4 122.1L307.6 121.5L309.2 121.3L310.8 121.6L352.7 136.6L353.8 137.3L354.1 138.1L354.1 145.3L353.5 146.1L335.9 160L334.6 160.5L333 160.7L331.5 160.4L289.6 145.4L288.5 144.8L288.2 143.9Z"/><path class="k-shade" data-shade="0" d="M354.1 138.1L353.5 138.9L353.5 146.1L354.1 145.3ZM353.5 138.9L335.9 152.8L335.9 160L353.5 146.1ZM335.9 152.8L334.6 153.4L334.6 160.5L335.9 160Z"/><path class="k-shade" data-shade="1" d="M334.6 153.4L333 153.5L333 160.7L334.6 160.5Z"/><path class="k-shade" data-shade="2" d="M333 153.5L331.5 153.3L331.5 160.4L333 160.7Z"/><path class="k-shade" data-shade="3" d="M331.5 153.3L289.6 138.3L289.6 145.4L331.5 160.4ZM289.6 138.3L288.5 137.6L288.5 144.8L289.6 145.4ZM288.5 137.6L288.2 136.8L288.2 143.9L288.5 144.8Z"/><path class="k-top" d="M352.7 136.6L353.8 137.3L354.1 138.1L353.5 138.9L335.9 152.8L334.6 153.4L333 153.5L331.5 153.3L289.6 138.3L288.5 137.6L288.2 136.8L288.7 136L306.4 122.1L307.6 121.5L309.2 121.3L310.8 121.6Z"/><path class="k-line k-crease" data-tone="faint" d="M354.1 138.1L353.5 138.9M353.5 138.9L335.9 152.8M335.9 152.8L334.6 153.4M334.6 153.4L333 153.5M333 153.5L331.5 153.3M331.5 153.3L289.6 138.3M289.6 138.3L288.5 137.6M288.5 137.6L288.2 136.8"/><path class="k-line k-bevel" data-tone="faint" d="M353.4 138.1L352.9 138.9M352.9 138.9L335.6 152.5M335.6 152.5L334.4 153.1M334.4 153.1L332.8 153.2M332.8 153.2L331.3 152.9M331.3 152.9L290.2 138.3M290.2 138.3L289.1 137.6M289.1 137.6L288.8 136.8"/><path class="k-line k-edge" data-tone="mid" d="M288.2 136.8L288.7 136L306.4 122.1L307.6 121.5L309.2 121.3L310.8 121.6L352.7 136.6L353.8 137.3L354.1 138.1L354.1 145.3L353.5 146.1L335.9 160L334.6 160.5L333 160.7L331.5 160.4L289.6 145.4L288.5 144.8L288.2 143.9Z"/></g><path class="k-line" data-tone="lo" d="M299.2 146.7L307 149.5L307 146.7L299.2 143.9Z"/><path class="k-line" data-tone="lo" d="M308.8 150.2L316.6 153L316.6 150.1L308.8 147.3Z"/><path class="k-line" data-tone="lo" d="M318.4 153.6L326.2 156.4L326.2 153.5L318.4 150.7Z"/><path class="k-line" data-tone="faint" d="M351.8 144.6L337.6 155.7L337.6 154.3L351.8 143.2Z"/><circle class="tp-led" data-led="orders:1" cx="292.2" cy="142.8" r="1.3"/><path class="k-line" data-tone="faint" d="M349.5 138.1L333 151.1L292.8 136.7L309.3 123.8Z"/><g class="k-dots" data-tone="lo"><circle cx="308.8" cy="122.4" r="0.5"/><circle cx="352.1" cy="137.9" r="0.5"/><circle cx="290.2" cy="137" r="0.5"/><circle cx="333.5" cy="152.5" r="0.5"/></g></g><g class="tp-node" data-node="inventory" data-kind="service"><path class="k-halo" d="M421.3 190L421.3 189.8L421.3 189.7L421.4 189.6L439.1 175.8L439.2 175.7L439.4 175.6L439.6 175.6L439.8 175.5L440 175.5L440.2 175.5L440.4 175.6L440.6 175.6L482.5 190.6L482.6 190.7L482.8 190.7L482.9 190.8L482.9 191L482.9 191.1L482.9 199.8L482.9 199.9L482.9 200L482.8 200.1L465.1 214L465 214.1L464.8 214.2L464.6 214.2L464.4 214.2L464.2 214.2L464 214.2L463.8 214.2L463.6 214.2L421.7 199.2L421.6 199.1L421.4 199L421.3 198.9L421.3 198.8L421.3 198.7Z"/><g class="k-solid"><path class="k-fill" d="M419.2 191.4L419.7 190.6L437.4 176.7L438.6 176.2L440.2 176L441.7 176.3L483.6 191.3L484.7 191.9L485 192.8L485 199.9L484.5 200.7L466.8 214.6L465.6 215.2L464 215.4L462.4 215.1L420.5 200.1L419.5 199.4L419.2 198.6Z"/><path class="k-shade" data-shade="0" d="M485 192.8L484.5 193.6L484.5 200.7L485 199.9ZM484.5 193.6L466.8 207.5L466.8 214.6L484.5 200.7ZM466.8 207.5L465.6 208L465.6 215.2L466.8 214.6Z"/><path class="k-shade" data-shade="1" d="M465.6 208L464 208.2L464 215.4L465.6 215.2Z"/><path class="k-shade" data-shade="2" d="M464 208.2L462.4 207.9L462.4 215.1L464 215.4Z"/><path class="k-shade" data-shade="3" d="M462.4 207.9L420.5 193L420.5 200.1L462.4 215.1ZM420.5 193L419.5 192.3L419.5 199.4L420.5 200.1ZM419.5 192.3L419.2 191.4L419.2 198.6L419.5 199.4Z"/><path class="k-top" d="M483.6 191.3L484.7 191.9L485 192.8L484.5 193.6L466.8 207.5L465.6 208L464 208.2L462.4 207.9L420.5 193L419.5 192.3L419.2 191.4L419.7 190.6L437.4 176.7L438.6 176.2L440.2 176L441.7 176.3Z"/><path class="k-line k-crease" data-tone="faint" d="M485 192.8L484.5 193.6M484.5 193.6L466.8 207.5M466.8 207.5L465.6 208M465.6 208L464 208.2M464 208.2L462.4 207.9M462.4 207.9L420.5 193M420.5 193L419.5 192.3M419.5 192.3L419.2 191.4"/><path class="k-line k-bevel" data-tone="faint" d="M484.4 192.8L483.9 193.6M483.9 193.6L466.5 207.2M466.5 207.2L465.3 207.7M465.3 207.7L463.8 207.9M463.8 207.9L462.2 207.6M462.2 207.6L421.2 192.9M421.2 192.9L420.1 192.3M420.1 192.3L419.8 191.5"/><path class="k-line k-edge" data-tone="mid" d="M419.2 191.4L419.7 190.6L437.4 176.7L438.6 176.2L440.2 176L441.7 176.3L483.6 191.3L484.7 191.9L485 192.8L485 199.9L484.5 200.7L466.8 214.6L465.6 215.2L464 215.4L462.4 215.1L420.5 200.1L419.5 199.4L419.2 198.6Z"/></g><path class="k-line" data-tone="lo" d="M430.1 201.4L438 204.2L438 201.3L430.1 198.5Z"/><path class="k-line" data-tone="lo" d="M439.7 204.8L447.6 207.6L447.6 204.8L439.7 202Z"/><path class="k-line" data-tone="lo" d="M449.4 208.3L457.2 211.1L457.2 208.2L449.4 205.4Z"/><path class="k-line" data-tone="faint" d="M482.7 199.3L468.6 210.4L468.6 209L482.7 197.8Z"/><circle class="tp-led" data-led="inventory:0" cx="423.2" cy="197.5" r="1.3"/><path class="k-line" data-tone="faint" d="M480.4 192.8L463.9 205.8L423.8 191.4L440.3 178.5Z"/><g class="k-dots" data-tone="lo"><circle cx="439.7" cy="177.1" r="0.5"/><circle cx="483.1" cy="192.5" r="0.5"/><circle cx="421.1" cy="191.7" r="0.5"/><circle cx="464.4" cy="207.2" r="0.5"/></g><g class="tp-cell tp-qcell" data-qcell="inventory:0"><g class="k-solid"><path class="k-fill" d="M437.6 187.6L437.7 187.4L439.1 186.3L439.4 186.2L439.8 186.2L441.9 187L442.1 187.1L442.1 188.4L442.1 188.6L440.7 189.7L440.3 189.8L439.9 189.8L437.8 189L437.6 188.9Z"/><path class="k-shade" data-shade="0" d="M442.1 187.1L442.1 187.4L442.1 188.6L442.1 188.4ZM442.1 187.4L440.7 188.5L440.7 189.7L442.1 188.6ZM440.7 188.5L440.3 188.6L440.3 189.8L440.7 189.7Z"/><path class="k-shade" data-shade="2" d="M440.3 188.6L439.9 188.5L439.9 189.8L440.3 189.8Z"/><path class="k-shade" data-shade="3" d="M439.9 188.5L437.8 187.8L437.8 189L439.9 189.8ZM437.8 187.8L437.6 187.6L437.6 188.9L437.8 189Z"/><path class="k-top" d="M441.9 187L442.1 187.1L442.1 187.4L440.7 188.5L440.3 188.6L439.9 188.5L437.8 187.8L437.6 187.6L437.7 187.4L439.1 186.3L439.4 186.2L439.8 186.2Z"/><path class="k-line k-edge" data-tone="lo" d="M437.6 187.6L437.7 187.4L439.1 186.3L439.4 186.2L439.8 186.2L441.9 187L442.1 187.1L442.1 188.4L442.1 188.6L440.7 189.7L440.3 189.8L439.9 189.8L437.8 189L437.6 188.9Z"/></g></g><g class="tp-cell tp-qcell" data-qcell="inventory:1"><g class="k-solid"><path class="k-fill" d="M441.4 189L441.5 188.8L442.9 187.7L443.3 187.6L443.7 187.6L445.8 188.3L446 188.5L446 189.8L445.9 190L444.5 191.1L444.2 191.2L443.8 191.2L441.7 190.4L441.4 190.2Z"/><path class="k-shade" data-shade="0" d="M446 188.5L445.9 188.7L445.9 190L446 189.8ZM445.9 188.7L444.5 189.8L444.5 191.1L445.9 190ZM444.5 189.8L444.2 190L444.2 191.2L444.5 191.1Z"/><path class="k-shade" data-shade="2" d="M444.2 190L443.8 189.9L443.8 191.2L444.2 191.2Z"/><path class="k-shade" data-shade="3" d="M443.8 189.9L441.7 189.2L441.7 190.4L443.8 191.2ZM441.7 189.2L441.4 189L441.4 190.2L441.7 190.4Z"/><path class="k-top" d="M445.8 188.3L446 188.5L445.9 188.7L444.5 189.8L444.2 190L443.8 189.9L441.7 189.2L441.4 189L441.5 188.8L442.9 187.7L443.3 187.6L443.7 187.6Z"/><path class="k-line k-edge" data-tone="lo" d="M441.4 189L441.5 188.8L442.9 187.7L443.3 187.6L443.7 187.6L445.8 188.3L446 188.5L446 189.8L445.9 190L444.5 191.1L444.2 191.2L443.8 191.2L441.7 190.4L441.4 190.2Z"/></g></g><g class="tp-cell tp-qcell" data-qcell="inventory:2"><g class="k-solid"><path class="k-fill" d="M445.3 190.4L445.4 190.2L446.8 189L447.1 188.9L447.5 189L449.6 189.7L449.8 189.9L449.8 191.1L449.7 191.4L448.3 192.5L448 192.6L447.6 192.5L445.5 191.8L445.3 191.6Z"/><path class="k-shade" data-shade="0" d="M449.8 189.9L449.7 190.1L449.7 191.4L449.8 191.1ZM449.7 190.1L448.3 191.2L448.3 192.5L449.7 191.4ZM448.3 191.2L448 191.3L448 192.6L448.3 192.5Z"/><path class="k-shade" data-shade="2" d="M448 191.3L447.6 191.3L447.6 192.5L448 192.6Z"/><path class="k-shade" data-shade="3" d="M447.6 191.3L445.5 190.5L445.5 191.8L447.6 192.5ZM445.5 190.5L445.3 190.4L445.3 191.6L445.5 191.8Z"/><path class="k-top" d="M449.6 189.7L449.8 189.9L449.7 190.1L448.3 191.2L448 191.3L447.6 191.3L445.5 190.5L445.3 190.4L445.4 190.2L446.8 189L447.1 188.9L447.5 189Z"/><path class="k-line k-edge" data-tone="lo" d="M445.3 190.4L445.4 190.2L446.8 189L447.1 188.9L447.5 189L449.6 189.7L449.8 189.9L449.8 191.1L449.7 191.4L448.3 192.5L448 192.6L447.6 192.5L445.5 191.8L445.3 191.6Z"/></g></g><g class="tp-cell tp-qcell" data-qcell="inventory:3"><g class="k-solid"><path class="k-fill" d="M449.1 191.7L449.2 191.5L450.6 190.4L451 190.3L451.4 190.3L453.4 191.1L453.7 191.3L453.7 192.5L453.6 192.7L452.2 193.8L451.8 194L451.4 193.9L449.4 193.2L449.1 193Z"/><path class="k-shade" data-shade="0" d="M453.7 191.3L453.6 191.5L453.6 192.7L453.7 192.5ZM453.6 191.5L452.2 192.6L452.2 193.8L453.6 192.7ZM452.2 192.6L451.8 192.7L451.8 194L452.2 193.8Z"/><path class="k-shade" data-shade="2" d="M451.8 192.7L451.4 192.7L451.4 193.9L451.8 194Z"/><path class="k-shade" data-shade="3" d="M451.4 192.7L449.4 191.9L449.4 193.2L451.4 193.9ZM449.4 191.9L449.1 191.7L449.1 193L449.4 193.2Z"/><path class="k-top" d="M453.4 191.1L453.7 191.3L453.6 191.5L452.2 192.6L451.8 192.7L451.4 192.7L449.4 191.9L449.1 191.7L449.2 191.5L450.6 190.4L451 190.3L451.4 190.3Z"/><path class="k-line k-edge" data-tone="lo" d="M449.1 191.7L449.2 191.5L450.6 190.4L451 190.3L451.4 190.3L453.4 191.1L453.7 191.3L453.7 192.5L453.6 192.7L452.2 193.8L451.8 194L451.4 193.9L449.4 193.2L449.1 193Z"/></g></g><g class="tp-cell tp-qcell" data-qcell="inventory:4"><g class="k-solid"><path class="k-fill" d="M453 193.1L453.1 192.9L454.5 191.8L454.8 191.7L455.2 191.7L457.3 192.5L457.5 192.6L457.5 193.9L457.4 194.1L456 195.2L455.7 195.3L455.3 195.3L453.2 194.5L453 194.4Z"/><path class="k-shade" data-shade="0" d="M457.5 192.6L457.4 192.8L457.4 194.1L457.5 193.9ZM457.4 192.8L456 194L456 195.2L457.4 194.1ZM456 194L455.7 194.1L455.7 195.3L456 195.2Z"/><path class="k-shade" data-shade="2" d="M455.7 194.1L455.3 194L455.3 195.3L455.7 195.3Z"/><path class="k-shade" data-shade="3" d="M455.3 194L453.2 193.3L453.2 194.5L455.3 195.3ZM453.2 193.3L453 193.1L453 194.4L453.2 194.5Z"/><path class="k-top" d="M457.3 192.5L457.5 192.6L457.4 192.8L456 194L455.7 194.1L455.3 194L453.2 193.3L453 193.1L453.1 192.9L454.5 191.8L454.8 191.7L455.2 191.7Z"/><path class="k-line k-edge" data-tone="lo" d="M453 193.1L453.1 192.9L454.5 191.8L454.8 191.7L455.2 191.7L457.3 192.5L457.5 192.6L457.5 193.9L457.4 194.1L456 195.2L455.7 195.3L455.3 195.3L453.2 194.5L453 194.4Z"/></g></g><g class="tp-cell tp-qcell" data-qcell="inventory:5"><g class="k-solid"><path class="k-fill" d="M456.8 194.5L456.9 194.3L458.3 193.2L458.6 193L459 193.1L461.1 193.8L461.4 194L461.4 195.3L461.3 195.5L459.9 196.6L459.5 196.7L459.1 196.7L457 195.9L456.8 195.7Z"/><path class="k-shade" data-shade="0" d="M461.4 194L461.3 194.2L461.3 195.5L461.4 195.3ZM461.3 194.2L459.9 195.3L459.9 196.6L461.3 195.5ZM459.9 195.3L459.5 195.4L459.5 196.7L459.9 196.6Z"/><path class="k-shade" data-shade="2" d="M459.5 195.4L459.1 195.4L459.1 196.7L459.5 196.7Z"/><path class="k-shade" data-shade="3" d="M459.1 195.4L457 194.7L457 195.9L459.1 196.7ZM457 194.7L456.8 194.5L456.8 195.7L457 195.9Z"/><path class="k-top" d="M461.1 193.8L461.4 194L461.3 194.2L459.9 195.3L459.5 195.4L459.1 195.4L457 194.7L456.8 194.5L456.9 194.3L458.3 193.2L458.6 193L459 193.1Z"/><path class="k-line k-edge" data-tone="lo" d="M456.8 194.5L456.9 194.3L458.3 193.2L458.6 193L459 193.1L461.1 193.8L461.4 194L461.4 195.3L461.3 195.5L459.9 196.6L459.5 196.7L459.1 196.7L457 195.9L456.8 195.7Z"/></g></g></g><g class="tp-node" data-node="pg" data-kind="db"><path class="k-halo" d="M555.7 239.8L555.7 239.7L555.8 239.6L555.9 239.5L577.1 222.9L577.2 222.8L577.4 222.7L577.5 222.7L577.7 222.6L577.9 222.6L578.2 222.6L578.3 222.7L578.5 222.7L610 234L610.1 234L610.3 234.1L610.3 234.2L610.4 234.3L610.4 234.4L610.4 243.4L610.4 243.5L610.3 243.6L610.2 243.7L589 260.3L588.9 260.4L588.8 260.5L588.6 260.5L588.4 260.6L588.2 260.6L588 260.6L587.8 260.5L587.6 260.5L556.2 249.2L556 249.2L555.9 249.1L555.8 249L555.7 248.9L555.7 248.8Z"/><g class="k-solid"><path class="k-fill" d="M562 238.7L562 237.3L562.4 235.8L563.1 234.4L564.2 233.1L565.6 231.8L567.3 230.6L569.2 229.6L571.4 228.7L573.8 228L576.4 227.4L579 227.1L581.8 226.9L584.5 226.9L587.3 227.1L589.9 227.5L592.5 228L594.8 228.8L597 229.7L599 230.7L600.6 231.9L602 233.1L603 234.5L603.7 235.9L604.1 237.4L604.1 245.4L604.1 246.8L603.7 248.3L603 249.7L601.9 251.1L600.5 252.3L598.8 253.5L596.9 254.5L594.7 255.4L592.3 256.1L589.7 256.7L587.1 257L584.3 257.2L581.6 257.2L578.9 257L576.2 256.6L573.7 256.1L571.3 255.3L569.1 254.4L567.2 253.4L565.5 252.2L564.1 251L563.1 249.6L562.4 248.2L562 246.8Z"/><path class="k-shade" data-shade="0" d="M600.5 244.3L598.8 245.4L598.8 253.5L600.5 252.3ZM598.8 245.4L596.9 246.5L596.9 254.5L598.8 253.5ZM596.9 246.5L594.7 247.3L594.7 255.4L596.9 254.5ZM604.1 237.4L604.1 238.8L604.1 246.8L604.1 245.4ZM604.1 238.8L603.7 240.3L603.7 248.3L604.1 246.8ZM603.7 240.3L603 241.7L603 249.7L603.7 248.3ZM603 241.7L601.9 243L601.9 251.1L603 249.7ZM601.9 243L600.5 244.3L600.5 252.3L601.9 251.1Z"/><path class="k-shade" data-shade="1" d="M594.7 247.3L592.3 248.1L592.3 256.1L594.7 255.4ZM592.3 248.1L589.7 248.6L589.7 256.7L592.3 256.1ZM589.7 248.6L587.1 249L587.1 257L589.7 256.7ZM587.1 249L584.3 249.2L584.3 257.2L587.1 257Z"/><path class="k-shade" data-shade="2" d="M584.3 249.2L581.6 249.2L581.6 257.2L584.3 257.2ZM581.6 249.2L578.9 249L578.9 257L581.6 257.2ZM578.9 249L576.2 248.6L576.2 256.6L578.9 257ZM576.2 248.6L573.7 248L573.7 256.1L576.2 256.6Z"/><path class="k-shade" data-shade="3" d="M573.7 248L571.3 247.3L571.3 255.3L573.7 256.1ZM571.3 247.3L569.1 246.4L569.1 254.4L571.3 255.3ZM569.1 246.4L567.2 245.4L567.2 253.4L569.1 254.4ZM567.2 245.4L565.5 244.2L565.5 252.2L567.2 253.4ZM565.5 244.2L564.1 242.9L564.1 251L565.5 252.2ZM564.1 242.9L563.1 241.6L563.1 249.6L564.1 251ZM563.1 241.6L562.4 240.2L562.4 248.2L563.1 249.6ZM562.4 240.2L562 238.7L562 246.8L562.4 248.2Z"/><path class="k-top" d="M600.5 244.3L598.8 245.4L596.9 246.5L594.7 247.3L592.3 248.1L589.7 248.6L587.1 249L584.3 249.2L581.6 249.2L578.9 249L576.2 248.6L573.7 248L571.3 247.3L569.1 246.4L567.2 245.4L565.5 244.2L564.1 242.9L563.1 241.6L562.4 240.2L562 238.7L562 237.3L562.4 235.8L563.1 234.4L564.2 233.1L565.6 231.8L567.3 230.6L569.2 229.6L571.4 228.7L573.8 228L576.4 227.4L579 227.1L581.8 226.9L584.5 226.9L587.3 227.1L589.9 227.5L592.5 228L594.8 228.8L597 229.7L599 230.7L600.6 231.9L602 233.1L603 234.5L603.7 235.9L604.1 237.4L604.1 238.8L603.7 240.3L603 241.7L601.9 243Z"/><path class="k-line k-crease" data-tone="faint" d="M600.5 244.3L598.8 245.4M598.8 245.4L596.9 246.5M596.9 246.5L594.7 247.3M594.7 247.3L592.3 248.1M592.3 248.1L589.7 248.6M589.7 248.6L587.1 249M587.1 249L584.3 249.2M584.3 249.2L581.6 249.2M581.6 249.2L578.9 249M578.9 249L576.2 248.6M576.2 248.6L573.7 248M573.7 248L571.3 247.3M571.3 247.3L569.1 246.4M569.1 246.4L567.2 245.4M567.2 245.4L565.5 244.2M565.5 244.2L564.1 242.9M564.1 242.9L563.1 241.6M563.1 241.6L562.4 240.2M562.4 240.2L562 238.7M604.1 237.4L604.1 238.8M604.1 238.8L603.7 240.3M603.7 240.3L603 241.7M603 241.7L601.9 243M601.9 243L600.5 244.3"/><path class="k-line k-edge" data-tone="mid" d="M562 238.7L562 237.3L562.4 235.8L563.1 234.4L564.2 233.1L565.6 231.8L567.3 230.6L569.2 229.6L571.4 228.7L573.8 228L576.4 227.4L579 227.1L581.8 226.9L584.5 226.9L587.3 227.1L589.9 227.5L592.5 228L594.8 228.8L597 229.7L599 230.7L600.6 231.9L602 233.1L603 234.5L603.7 235.9L604.1 237.4L604.1 245.4L604.1 246.8L603.7 248.3L603 249.7L601.9 251.1L600.5 252.3L598.8 253.5L596.9 254.5L594.7 255.4L592.3 256.1L589.7 256.7L587.1 257L584.3 257.2L581.6 257.2L578.9 257L576.2 256.6L573.7 256.1L571.3 255.3L569.1 254.4L567.2 253.4L565.5 252.2L564.1 251L563.1 249.6L562.4 248.2L562 246.8Z"/></g><path class="k-line" data-tone="faint" d="M604.1 242.1L604 243.1L603.7 244.2L603.2 245.3L602.5 246.3L601.6 247.3L600.6 248.3L599.3 249.1L597.9 249.9L596.4 250.7L594.8 251.3L593 251.9L591.1 252.4L589.2 252.7L587.2 253L585.1 253.2L583.1 253.2L581 253.2L578.9 253L576.9 252.7L575 252.4L573.1 251.9L571.4 251.3L569.7 250.7L568.2 249.9L566.8 249.1L565.5 248.3L564.5 247.3L563.6 246.3L562.9 245.3L562.4 244.2L562.1 243.1L562 242.1"/><circle class="tp-led" data-led="pg:x0" cx="587.1" cy="253" r="1.1"/><g class="k-solid"><path class="k-fill" d="M562 229.8L562 228.3L562.4 226.9L563.1 225.5L564.2 224.1L565.6 222.9L567.3 221.7L569.2 220.7L571.4 219.8L573.8 219.1L576.4 218.5L579 218.1L581.8 218L584.5 218L587.3 218.2L589.9 218.5L592.5 219.1L594.8 219.8L597 220.7L599 221.8L600.6 222.9L602 224.2L603 225.6L603.7 227L604.1 228.4L604.1 236.5L604.1 237.9L603.7 239.4L603 240.8L601.9 242.1L600.5 243.4L598.8 244.5L596.9 245.6L594.7 246.4L592.3 247.2L589.7 247.7L587.1 248.1L584.3 248.3L581.6 248.3L578.9 248.1L576.2 247.7L573.7 247.1L571.3 246.4L569.1 245.5L567.2 244.5L565.5 243.3L564.1 242L563.1 240.7L562.4 239.3L562 237.8Z"/><path class="k-shade" data-shade="0" d="M600.5 235.3L598.8 236.5L598.8 244.5L600.5 243.4ZM598.8 236.5L596.9 237.5L596.9 245.6L598.8 244.5ZM596.9 237.5L594.7 238.4L594.7 246.4L596.9 245.6ZM604.1 228.4L604.1 229.9L604.1 237.9L604.1 236.5ZM604.1 229.9L603.7 231.3L603.7 239.4L604.1 237.9ZM603.7 231.3L603 232.7L603 240.8L603.7 239.4ZM603 232.7L601.9 234.1L601.9 242.1L603 240.8ZM601.9 234.1L600.5 235.3L600.5 243.4L601.9 242.1Z"/><path class="k-shade" data-shade="1" d="M594.7 238.4L592.3 239.1L592.3 247.2L594.7 246.4ZM592.3 239.1L589.7 239.7L589.7 247.7L592.3 247.2ZM589.7 239.7L587.1 240.1L587.1 248.1L589.7 247.7ZM587.1 240.1L584.3 240.2L584.3 248.3L587.1 248.1Z"/><path class="k-shade" data-shade="2" d="M584.3 240.2L581.6 240.2L581.6 248.3L584.3 248.3ZM581.6 240.2L578.9 240L578.9 248.1L581.6 248.3ZM578.9 240L576.2 239.7L576.2 247.7L578.9 248.1ZM576.2 239.7L573.7 239.1L573.7 247.1L576.2 247.7Z"/><path class="k-shade" data-shade="3" d="M573.7 239.1L571.3 238.4L571.3 246.4L573.7 247.1ZM571.3 238.4L569.1 237.5L569.1 245.5L571.3 246.4ZM569.1 237.5L567.2 236.4L567.2 244.5L569.1 245.5ZM567.2 236.4L565.5 235.3L565.5 243.3L567.2 244.5ZM565.5 235.3L564.1 234L564.1 242L565.5 243.3ZM564.1 234L563.1 232.6L563.1 240.7L564.1 242ZM563.1 232.6L562.4 231.2L562.4 239.3L563.1 240.7ZM562.4 231.2L562 229.8L562 237.8L562.4 239.3Z"/><path class="k-top" d="M600.5 235.3L598.8 236.5L596.9 237.5L594.7 238.4L592.3 239.1L589.7 239.7L587.1 240.1L584.3 240.2L581.6 240.2L578.9 240L576.2 239.7L573.7 239.1L571.3 238.4L569.1 237.5L567.2 236.4L565.5 235.3L564.1 234L563.1 232.6L562.4 231.2L562 229.8L562 228.3L562.4 226.9L563.1 225.5L564.2 224.1L565.6 222.9L567.3 221.7L569.2 220.7L571.4 219.8L573.8 219.1L576.4 218.5L579 218.1L581.8 218L584.5 218L587.3 218.2L589.9 218.5L592.5 219.1L594.8 219.8L597 220.7L599 221.8L600.6 222.9L602 224.2L603 225.6L603.7 227L604.1 228.4L604.1 229.9L603.7 231.3L603 232.7L601.9 234.1Z"/><path class="k-line k-crease" data-tone="faint" d="M600.5 235.3L598.8 236.5M598.8 236.5L596.9 237.5M596.9 237.5L594.7 238.4M594.7 238.4L592.3 239.1M592.3 239.1L589.7 239.7M589.7 239.7L587.1 240.1M587.1 240.1L584.3 240.2M584.3 240.2L581.6 240.2M581.6 240.2L578.9 240M578.9 240L576.2 239.7M576.2 239.7L573.7 239.1M573.7 239.1L571.3 238.4M571.3 238.4L569.1 237.5M569.1 237.5L567.2 236.4M567.2 236.4L565.5 235.3M565.5 235.3L564.1 234M564.1 234L563.1 232.6M563.1 232.6L562.4 231.2M562.4 231.2L562 229.8M604.1 228.4L604.1 229.9M604.1 229.9L603.7 231.3M603.7 231.3L603 232.7M603 232.7L601.9 234.1M601.9 234.1L600.5 235.3"/><path class="k-line k-edge" data-tone="mid" d="M562 229.8L562 228.3L562.4 226.9L563.1 225.5L564.2 224.1L565.6 222.9L567.3 221.7L569.2 220.7L571.4 219.8L573.8 219.1L576.4 218.5L579 218.1L581.8 218L584.5 218L587.3 218.2L589.9 218.5L592.5 219.1L594.8 219.8L597 220.7L599 221.8L600.6 222.9L602 224.2L603 225.6L603.7 227L604.1 228.4L604.1 236.5L604.1 237.9L603.7 239.4L603 240.8L601.9 242.1L600.5 243.4L598.8 244.5L596.9 245.6L594.7 246.4L592.3 247.2L589.7 247.7L587.1 248.1L584.3 248.3L581.6 248.3L578.9 248.1L576.2 247.7L573.7 247.1L571.3 246.4L569.1 245.5L567.2 244.5L565.5 243.3L564.1 242L563.1 240.7L562.4 239.3L562 237.8Z"/></g><path class="k-line" data-tone="faint" d="M604.1 233.1L604 234.2L603.7 235.3L603.2 236.4L602.5 237.4L601.6 238.4L600.6 239.3L599.3 240.2L597.9 241L596.4 241.7L594.8 242.4L593 243L591.1 243.4L589.2 243.8L587.2 244.1L585.1 244.2L583.1 244.3L581 244.2L578.9 244.1L576.9 243.8L575 243.4L573.1 243L571.4 242.4L569.7 241.7L568.2 241L566.8 240.2L565.5 239.3L564.5 238.4L563.6 237.4L562.9 236.4L562.4 235.3L562.1 234.2L562 233.1"/><circle class="tp-led" data-led="pg:x1" cx="587.1" cy="244.1" r="1.1"/><g class="k-solid"><path class="k-fill" d="M562 220.9L562 219.4L562.4 217.9L563.1 216.5L564.2 215.2L565.6 213.9L567.3 212.8L569.2 211.7L571.4 210.9L573.8 210.1L576.4 209.6L579 209.2L581.8 209L584.5 209L587.3 209.2L589.9 209.6L592.5 210.2L594.8 210.9L597 211.8L599 212.8L600.6 214L602 215.3L603 216.6L603.7 218L604.1 219.5L604.1 227.5L604.1 229L603.7 230.4L603 231.8L601.9 233.2L600.5 234.4L598.8 235.6L596.9 236.6L594.7 237.5L592.3 238.2L589.7 238.8L587.1 239.2L584.3 239.3L581.6 239.3L578.9 239.1L576.2 238.8L573.7 238.2L571.3 237.5L569.1 236.6L567.2 235.5L565.5 234.4L564.1 233.1L563.1 231.7L562.4 230.3L562 228.9Z"/><path class="k-shade" data-shade="0" d="M600.5 226.4L598.8 227.6L598.8 235.6L600.5 234.4ZM598.8 227.6L596.9 228.6L596.9 236.6L598.8 235.6ZM596.9 228.6L594.7 229.5L594.7 237.5L596.9 236.6ZM604.1 219.5L604.1 220.9L604.1 229L604.1 227.5ZM604.1 220.9L603.7 222.4L603.7 230.4L604.1 229ZM603.7 222.4L603 223.8L603 231.8L603.7 230.4ZM603 223.8L601.9 225.2L601.9 233.2L603 231.8ZM601.9 225.2L600.5 226.4L600.5 234.4L601.9 233.2Z"/><path class="k-shade" data-shade="1" d="M594.7 229.5L592.3 230.2L592.3 238.2L594.7 237.5ZM592.3 230.2L589.7 230.8L589.7 238.8L592.3 238.2ZM589.7 230.8L587.1 231.1L587.1 239.2L589.7 238.8ZM587.1 231.1L584.3 231.3L584.3 239.3L587.1 239.2Z"/><path class="k-shade" data-shade="2" d="M584.3 231.3L581.6 231.3L581.6 239.3L584.3 239.3ZM581.6 231.3L578.9 231.1L578.9 239.1L581.6 239.3ZM578.9 231.1L576.2 230.7L576.2 238.8L578.9 239.1ZM576.2 230.7L573.7 230.2L573.7 238.2L576.2 238.8Z"/><path class="k-shade" data-shade="3" d="M573.7 230.2L571.3 229.4L571.3 237.5L573.7 238.2ZM571.3 229.4L569.1 228.5L569.1 236.6L571.3 237.5ZM569.1 228.5L567.2 227.5L567.2 235.5L569.1 236.6ZM567.2 227.5L565.5 226.3L565.5 234.4L567.2 235.5ZM565.5 226.3L564.1 225.1L564.1 233.1L565.5 234.4ZM564.1 225.1L563.1 223.7L563.1 231.7L564.1 233.1ZM563.1 223.7L562.4 222.3L562.4 230.3L563.1 231.7ZM562.4 222.3L562 220.9L562 228.9L562.4 230.3Z"/><path class="k-top" d="M600.5 226.4L598.8 227.6L596.9 228.6L594.7 229.5L592.3 230.2L589.7 230.8L587.1 231.1L584.3 231.3L581.6 231.3L578.9 231.1L576.2 230.7L573.7 230.2L571.3 229.4L569.1 228.5L567.2 227.5L565.5 226.3L564.1 225.1L563.1 223.7L562.4 222.3L562 220.9L562 219.4L562.4 217.9L563.1 216.5L564.2 215.2L565.6 213.9L567.3 212.8L569.2 211.7L571.4 210.9L573.8 210.1L576.4 209.6L579 209.2L581.8 209L584.5 209L587.3 209.2L589.9 209.6L592.5 210.2L594.8 210.9L597 211.8L599 212.8L600.6 214L602 215.3L603 216.6L603.7 218L604.1 219.5L604.1 220.9L603.7 222.4L603 223.8L601.9 225.2Z"/><path class="k-line k-crease" data-tone="faint" d="M600.5 226.4L598.8 227.6M598.8 227.6L596.9 228.6M596.9 228.6L594.7 229.5M594.7 229.5L592.3 230.2M592.3 230.2L589.7 230.8M589.7 230.8L587.1 231.1M587.1 231.1L584.3 231.3M584.3 231.3L581.6 231.3M581.6 231.3L578.9 231.1M578.9 231.1L576.2 230.7M576.2 230.7L573.7 230.2M573.7 230.2L571.3 229.4M571.3 229.4L569.1 228.5M569.1 228.5L567.2 227.5M567.2 227.5L565.5 226.3M565.5 226.3L564.1 225.1M564.1 225.1L563.1 223.7M563.1 223.7L562.4 222.3M562.4 222.3L562 220.9M604.1 219.5L604.1 220.9M604.1 220.9L603.7 222.4M603.7 222.4L603 223.8M603 223.8L601.9 225.2M601.9 225.2L600.5 226.4"/><path class="k-line k-bevel" data-tone="faint" d="M599.8 226.2L598.2 227.3M598.2 227.3L596.3 228.3M596.3 228.3L594.2 229.1M594.2 229.1L591.9 229.8M591.9 229.8L589.5 230.3M589.5 230.3L586.9 230.7M586.9 230.7L584.3 230.9M584.3 230.9L581.6 230.9M581.6 230.9L579 230.7M579 230.7L576.5 230.3M576.5 230.3L574 229.8M574 229.8L571.7 229.1M571.7 229.1L569.7 228.2M569.7 228.2L567.8 227.2M567.8 227.2L566.2 226.1M566.2 226.1L564.9 224.9M564.9 224.9L563.9 223.6M563.9 223.6L563.2 222.2M563.2 222.2L562.9 220.8M603.2 219.5L603.2 220.9M603.2 220.9L602.9 222.3M602.9 222.3L602.2 223.7M602.2 223.7L601.2 225M601.2 225L599.8 226.2"/><path class="k-line k-edge" data-tone="mid" d="M562 220.9L562 219.4L562.4 217.9L563.1 216.5L564.2 215.2L565.6 213.9L567.3 212.8L569.2 211.7L571.4 210.9L573.8 210.1L576.4 209.6L579 209.2L581.8 209L584.5 209L587.3 209.2L589.9 209.6L592.5 210.2L594.8 210.9L597 211.8L599 212.8L600.6 214L602 215.3L603 216.6L603.7 218L604.1 219.5L604.1 227.5L604.1 229L603.7 230.4L603 231.8L601.9 233.2L600.5 234.4L598.8 235.6L596.9 236.6L594.7 237.5L592.3 238.2L589.7 238.8L587.1 239.2L584.3 239.3L581.6 239.3L578.9 239.1L576.2 238.8L573.7 238.2L571.3 237.5L569.1 236.6L567.2 235.5L565.5 234.4L564.1 233.1L563.1 231.7L562.4 230.3L562 228.9Z"/></g><path class="k-line" data-tone="faint" d="M604.1 224.2L604 225.3L603.7 226.4L603.2 227.4L602.5 228.5L601.6 229.5L600.6 230.4L599.3 231.3L597.9 232.1L596.4 232.8L594.8 233.5L593 234L591.1 234.5L589.2 234.9L587.2 235.1L585.1 235.3L583.1 235.4L581 235.3L578.9 235.1L576.9 234.9L575 234.5L573.1 234L571.4 233.5L569.7 232.8L568.2 232.1L566.8 231.3L565.5 230.4L564.5 229.5L563.6 228.5L562.9 227.4L562.4 226.4L562.1 225.3L562 224.2"/><circle class="tp-led" data-led="pg:0" cx="587.1" cy="235.1" r="1.1"/><path class="k-line" data-tone="lo" d="M597 225.2L595.4 226.3L593.4 227.2L591.2 228L588.8 228.6L586.3 228.9L583.6 229.1L581 229L578.4 228.8L575.9 228.3L573.6 227.6L571.6 226.7L569.8 225.7L568.3 224.5L567.2 223.2L566.5 221.9L566.2 220.5L566.3 219.1L566.9 217.7L567.8 216.4L569.1 215.2L570.7 214.1L572.7 213.1L574.9 212.4L577.3 211.8L579.8 211.4L582.5 211.2L585.1 211.3L587.7 211.6L590.2 212.1L592.5 212.8L594.5 213.6L596.3 214.7L597.8 215.8L598.9 217.1L599.6 218.5L599.9 219.9L599.8 221.3L599.3 222.6L598.3 223.9Z"/><g class="k-dots" data-tone="mid"><circle cx="583.1" cy="220.2" r="0.8"/></g></g></svg><svg hidden xmlns="http://www.w3.org/2000/svg" class="k-svg tp-svg tp-flat" viewBox="0 0 640 240" role="img" aria-label="Retry storm: clients (client), gateway (gateway), orders-api (service), inventory (service), inventory-db (db). Connections: clients to gateway; gateway to orders-api; orders-api to inventory; inventory to inventory-db."><g class="tp-edge" data-edge="0" data-kind="sync"><path class="tp-edge-bed" d="M62.1 113.7L157.8 113.7"/><path class="k-line" data-tone="mid" d="M62.1 113.7L157.8 113.7"/><path class="k-line" data-tone="mid" data-free="" d="M152 116.4L156.5 113.7L152 111"/><circle class="tp-port" cx="62.1" cy="113.7" r="1.4"/></g><g class="tp-edge" data-edge="1" data-kind="sync"><path class="tp-edge-bed" d="M201.2 113.7L290.6 113.7"/><path class="k-line" data-tone="mid" d="M201.2 113.7L290.6 113.7"/><path class="k-line" data-tone="mid" data-free="" d="M284.7 116.4L289.2 113.7L284.7 111"/><circle class="tp-port" cx="201.2" cy="113.7" r="1.4"/></g><g class="tp-edge" data-edge="2" data-kind="sync"><path class="tp-edge-bed" d="M339.3 113.7L426 113.7"/><path class="k-line" data-tone="mid" d="M339.3 113.7L426 113.7"/><path class="k-line" data-tone="mid" data-free="" d="M420.1 116.4L424.7 113.7L420.1 111"/><circle class="tp-port" cx="339.3" cy="113.7" r="1.4"/></g><g class="tp-edge" data-edge="3" data-kind="sync"><path class="tp-edge-bed" d="M474.8 113.7L566.9 113.7"/><path class="k-line" data-tone="mid" d="M474.8 113.7L566.9 113.7"/><path class="k-line" data-tone="mid" data-free="" d="M561 116.4L565.5 113.7L561 111"/><circle class="tp-port" cx="474.8" cy="113.7" r="1.4"/></g><g class="tp-label" data-label="clients"><text class="tp-ft" x="44.1" y="137.2" font-size="8" text-anchor="middle">clients</text></g><g class="tp-label" data-label="gw"><text class="tp-ft" x="179.5" y="139" font-size="8" text-anchor="middle">gateway</text></g><g class="tp-label" data-label="orders"><text class="tp-ft" x="314.9" y="139.9" font-size="8" text-anchor="middle">orders-api</text></g><g class="tp-label" data-label="inventory"><text class="tp-ft" x="450.4" y="139.9" font-size="8" text-anchor="middle">inventory</text></g><g class="tp-label" data-label="pg"><text class="tp-ft" x="585.8" y="142.6" font-size="8" text-anchor="middle">inventory-db</text></g><g class="tp-elabel" data-elabel="0"><text class="tp-ft tp-elabel-text" x="110" y="110.2" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="1"><text class="tp-ft tp-elabel-text" x="245.9" y="110.2" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="2"><text class="tp-ft tp-elabel-text" x="382.7" y="110.2" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="3"><text class="tp-ft tp-elabel-text" x="520.8" y="110.2" font-size="6.2" text-anchor="middle"></text></g><g class="tp-packets" data-packets=""></g><g class="tp-node" data-node="clients" data-kind="client"><rect class="tp-f" x="26" y="100.1" width="36.1" height="20.1" rx="3"/><rect class="tp-screen" x="29" y="103.1" width="30.1" height="14.1" rx="1"/><path class="k-line" data-tone="lo" d="M44.1 120.2L44.1 126.2"/><rect class="tp-f" x="36.1" y="125.2" width="16" height="2" rx="1"/><circle class="tp-led" data-led="clients:0" cx="55.1" cy="116.7" r="1.4"/></g><g class="tp-node" data-node="gw" data-kind="gateway"><rect class="tp-f" x="157.8" y="98.3" width="43.3" height="30.7" rx="4"/><path class="k-line" data-tone="lo" d="M165.8 129V110.3Q179.5 100.3 193.2 110.3V129"/><circle class="tp-led" data-led="gw:0" cx="179.5" cy="107.3" r="1.6"/></g><g class="tp-node" data-node="orders" data-kind="service"><rect class="tp-f tp-f-back" x="293.1" y="94.9" width="48.8" height="32.5" rx="4"/><rect class="tp-f" x="290.6" y="97.4" width="48.8" height="32.5" rx="4"/><path class="k-line" data-tone="faint" d="M290.6 108.4L339.3 108.4"/><circle class="tp-led" data-led="orders:0" cx="296.6" cy="102.9" r="1.7"/><circle class="tp-led" data-led="orders:1" cx="302.6" cy="102.9" r="1.7"/></g><g class="tp-node" data-node="inventory" data-kind="service"><rect class="tp-f" x="426" y="97.4" width="48.8" height="32.5" rx="4"/><path class="k-line" data-tone="faint" d="M426 108.4L474.8 108.4"/><circle class="tp-led" data-led="inventory:0" cx="432" cy="102.9" r="1.7"/><rect class="tp-cell tp-fcell tp-qcell" data-qcell="inventory:0" x="430" y="122.9" width="4" height="4" rx=".6"/><rect class="tp-cell tp-fcell tp-qcell" data-qcell="inventory:1" x="435" y="122.9" width="4" height="4" rx=".6"/><rect class="tp-cell tp-fcell tp-qcell" data-qcell="inventory:2" x="440" y="122.9" width="4" height="4" rx=".6"/><rect class="tp-cell tp-fcell tp-qcell" data-qcell="inventory:3" x="445" y="122.9" width="4" height="4" rx=".6"/><rect class="tp-cell tp-fcell tp-qcell" data-qcell="inventory:4" x="450" y="122.9" width="4" height="4" rx=".6"/><rect class="tp-cell tp-fcell tp-qcell" data-qcell="inventory:5" x="455" y="122.9" width="4" height="4" rx=".6"/></g><g class="tp-node" data-node="pg" data-kind="db"><path class="tp-f" d="M568.9 100.7V126.6A17 5 0 0 0 602.8 126.6V100.7A17 5 0 0 0 568.9 100.7Z"/><ellipse class="tp-f tp-f-top" cx="585.8" cy="100.7" rx="17" ry="5"/><path class="k-line" data-tone="faint" d="M568.9 109.7A17 5 0 0 0 602.8 109.7"/><circle class="tp-led" data-led="pg:0" cx="597.8" cy="114.7" r="1.6"/></g></svg></div></div><figcaption class="k-legend"><span class="k-keys"><span class="k-key"><svg class="k-swatch" data-mark="lit" viewBox="0 0 16 10" aria-hidden="true"><path d="M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z"/></svg>Request</span><span class="k-key"><svg class="k-swatch" data-mark="raised" viewBox="0 0 16 10" aria-hidden="true"><path d="M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z"/></svg>Response</span><span class="k-key"><svg class="k-swatch" data-mark="amber" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Retry</span><span class="k-key"><svg class="k-swatch" data-mark="red" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Error, refused or dropped</span></span><span class="k-caption">inventory admits 14 req/s with a buffer of 6. orders-api calls it with a 150 ms timeout and 3 retries. When inventory slows past the timeout, every call times out and is retried: the load it sees triples, its buffer fills and it starts answering 503. A breaker on the call stops the amplification.</span></figcaption></figure></main><script type="module">// The model behind every figure: a small, seeded, tick-based simulation of requests moving
+// through a system. The page inlines this file (exports stripped) and draws `sim.packets`;
+// `scripts/build.mjs --check` runs the same code in Node and prints what the readout will say.
+// Every number a figure shows comes from here.
+//
+// Time. Sim time is real time for everything the model decides (service time, queue waits,
+// timeouts, backoff, breaker windows, rates), except packet travel, which is slowed down so
+// people can watch it. Latency is therefore built up in model time rather than measured off
+// the clock: a job costs its queue wait plus its service time plus its slowest sync call, and a
+// call costs its network round trip (`ms` on the edge, default `sim.net`) plus the callee's job,
+// plus any earlier failed attempts and their backoff.
+
+const SIM_DEFAULTS = { speed: 150, per: 1, rebalance: 0.9, window: 2, seed: 7, refuse: 0.02, net: 0.5, length: 0, loop: true };
+const SERVICE_MS = { client: 0, lb: 0.3, gateway: 1, service: 8, worker: 15, cache: 0.4, db: 4, storage: 20, kafka: 2, queue: 1, cdn: 0.5, dns: 1, external: 120, flags: 1, scheduler: 0, box: 5 };
+const DETECT = { lb: 0.6, gateway: 0.6, dns: 3 };
+
+function rngOf(seed) {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+}
+
+const isLog = (node) => node.kind === "kafka" || node.kind === "queue";
+const routeOf = (node) => node.route || (node.kind === "lb" || node.kind === "gateway" || node.kind === "dns" ? "roundrobin" : "all");
+
+function hashOf(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+// Scenario steps may name a phase instead of a time: { phase: "incident", after: 1.5 }.
+function normalizeScenario(scenario) {
+  if (!scenario) return null;
+  const phases = (scenario.phases || []).map((phase) => ({ ...phase })).sort((a, b) => a.at - b.at);
+  const byName = new Map(phases.map((phase) => [phase.name, phase]));
+  const steps = (scenario.steps || []).map((step, index) => {
+    let at = step.at;
+    if (at == null && step.phase != null) {
+      const phase = byName.get(step.phase);
+      if (!phase) throw new Error(`scenario step ${index}: unknown phase "${step.phase}"`);
+      at = phase.at + (step.after || 0);
+    }
+    if (at == null) throw new Error(`scenario step ${index}: needs \`at\` or \`phase\``);
+    return { ...step, at, index };
+  });
+  steps.sort((a, b) => a.at - b.at || a.index - b.index);
+  const last = Math.max(0, ...steps.map((step) => step.at), ...phases.map((phase) => phase.at));
+  const length = scenario.length || Math.ceil(last + 8);
+  phases.forEach((phase, index) => (phase.end = phases[index + 1]?.at ?? length));
+  return { length, loop: scenario.loop !== false, steps, phases };
+}
+
+const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
+
+// spec: { nodes, edges (with `len` in world units), sim, scenario, flags, features }.
+function createSim(spec) {
+  const features = spec.features || {};
+  const on = (name) => features[name] !== false;
+  const cfg = { ...SIM_DEFAULTS, ...(spec.sim || {}) };
+  const scenario = on("scenario") ? normalizeScenario(spec.scenario) : null;
+  if (scenario) cfg.length = scenario.length;
+  const rand = rngOf(cfg.seed);
+  const nodes = new Map();
+  const edges = spec.edges.map((edge, index) => ({
+    ...edge,
+    index,
+    sent: 0,
+    dropped: 0,
+    failed: 0,
+    fast: 0,
+    recent: [],
+    recentErrors: [],
+    flow: 0,
+    errorRate: 0,
+    breaker: on("breakers") && edge.breaker ? { errors: 0.5, min: 8, window: 2, open: 3, ...(edge.breaker === true ? {} : edge.breaker), state: "closed", outcomes: [], until: 0, trial: false } : null,
+  }));
+  for (const node of spec.nodes) {
+    nodes.set(node.id, {
+      ...node,
+      up: node.up !== false,
+      downSince: node.up === false ? 0 : null,
+      ms: node.ms ?? SERVICE_MS[node.kind] ?? 5,
+      queueMax: on("queues") ? node.queue || 0 : 0,
+      out: [],
+      into: [],
+      rr: 0,
+      tokens: 0,
+      bucket: node.capacity ? node.capacity * (node.burst ?? 0.25) + 1 : 0,
+      handled: 0,
+      jobs: new Set(),
+      working: [],
+      waiting: [],
+      clock: rand() / Math.max(typeof node.emit === "number" ? node.emit : 1, 0.001),
+      nextBurst: 0,
+      flow: 0,
+      dropRate: 0,
+      errorRate: 0,
+      recent: [],
+      recentDrops: [],
+      recentErrors: [],
+      service: [],
+      roots: [],
+      hist: [],
+      replica: 0,
+    });
+  }
+  for (const edge of edges) {
+    nodes.get(edge.from).out.push(edge);
+    nodes.get(edge.to).into.push(edge);
+  }
+
+  // Feature flags in the modelled system. A service evaluates flags locally from the last
+  // config it got; while the flag service is down, changes don't reach anyone.
+  const flags = new Map();
+  if (on("flags")) for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
+  const flagNode = on("flags") ? [...nodes.values()].find((node) => node.kind === "flags") : null;
+
+  // Logs: kafka topics (partitions, consumer groups with exclusive assignment) and queues
+  // (one lane, competing consumers).
+  const logs = new Map();
+  for (const node of nodes.values()) {
+    if (!isLog(node)) continue;
+    const partitions = node.kind === "queue" ? 1 : node.partitions || 3;
+    const groups = new Map();
+    for (const edge of node.out) {
+      const name = node.kind === "queue" ? "queue" : edge.group || "default";
+      if (!groups.has(name)) groups.set(name, { name, members: [], committed: Array(partitions).fill(0), assign: new Map(), pause: 0, generation: 0 });
+      groups.get(name).members.push(edge);
+    }
+    const log = { node, partitions, end: Array(partitions).fill(0), rr: 0, groups: [...groups.values()], appended: 0 };
+    // Brokers: each partition has `rf` replicas, led round-robin. Losing a leader pauses its
+    // partitions for `election` seconds; with acks "all", a partition whose in-sync replicas
+    // fall below `minIsr` refuses writes.
+    if (node.kind === "kafka" && node.brokers) {
+      const n = node.brokers;
+      log.brokers = Array(n).fill(true);
+      log.rf = Math.min(node.rf ?? 3, n);
+      log.minIsr = Math.min(node.minIsr ?? 2, log.rf);
+      log.acks = node.acks ?? 1;
+      log.election = node.election ?? 2;
+      log.parts = Array.from({ length: partitions }, (_, p) => ({ replicas: Array.from({ length: log.rf }, (_, i) => (p + i) % n), leader: p % n, electUntil: 0 }));
+    }
+    logs.set(node.id, log);
+  }
+
+  const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
+  // Timeouts are judged in model time when the reply arrives. For a reply that never comes,
+  // a backstop deadline in sim time: the call's animation round trip, the slowest sync call
+  // its target makes in turn, the timeout and a second's grace.
+  const allowance = new Map();
+  const allowanceOf = (edge, seen = new Set()) => {
+    if (allowance.has(edge.index)) return allowance.get(edge.index);
+    if (seen.has(edge.index)) return 0;
+    seen.add(edge.index);
+    const target = nodes.get(edge.to);
+    const below = target.out.filter((e) => e.sync && e.kind !== "replication").map((e) => allowanceOf(e, seen));
+    const value = 2 * durationOf(edge) + Math.max(0, ...below);
+    allowance.set(edge.index, value);
+    return value;
+  };
+  edges.forEach((edge) => allowanceOf(edge));
+
+  const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  let ids = 0;
+  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
+
+  function rebalance(log, group, now) {
+    const live = group.members.filter((edge) => nodes.get(edge.to).up);
+    group.assign = new Map();
+    if (log.node.kind === "queue") {
+      for (const edge of live) group.assign.set(edge.index, [0]);
+    } else {
+      live.forEach((edge) => group.assign.set(edge.index, []));
+      for (let p = 0; p < log.partitions; p++) if (live.length) group.assign.get(live[p % live.length].index).push(p);
+      group.generation++;
+      if (now > 0) group.pause = cfg.rebalance;
+    }
+    sim.events.push({ type: "rebalance", log: log.node.id, group: group.name, at: now });
+  }
+  for (const log of logs.values()) for (const group of log.groups) rebalance(log, group, 0);
+
+  function launch(edge, kind, extra = {}) {
+    const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    if (packet.dir > 0) {
+      edge.sent++;
+      edge.recent.push(sim.time);
+    }
+    sim.packets.push(packet);
+    return packet;
+  }
+
+  const burst = (edge, at = 1) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1 });
+
+  // --- jobs -----------------------------------------------------------------------------------
+
+  function startJob(node, msg, call, extra = {}) {
+    const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
+    node.jobs.add(job);
+    node.handled++;
+    node.recent.push(sim.time);
+    node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
+    sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
+    if (!node.capacity) return begin(job);
+    if (node.bucket >= 1) {
+      node.bucket -= 1;
+      return begin(job);
+    }
+    if (node.waiting.length < node.queueMax) return node.waiting.push(job);
+    reject(job);
+  }
+
+  function begin(job) {
+    const node = job.node;
+    // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
+    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
+    job.readyAt = sim.time + (base * spread) / 1000;
+    node.working.push(job);
+  }
+
+  // Over capacity with a full buffer: answer 503 at once.
+  function reject(job) {
+    const node = job.node;
+    node.recentDrops.push(sim.time);
+    if (job.call) {
+      job.call.edge.dropped++;
+      burst(job.call.edge);
+    } else if (job.via) burst(job.via);
+    respond(job, false);
+  }
+
+  function respond(job, ok) {
+    if (job.dead || job.done) return;
+    job.done = true;
+    const node = job.node;
+    node.jobs.delete(job);
+    if (!ok) node.recentErrors.push(sim.time);
+    const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
+    const ms = own + job.cost;
+    node.service.push({ at: sim.time, ms });
+    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
+    if (job.root) node.roots.push({ at: sim.time, ms, ok });
+  }
+
+  function ready(job) {
+    if (job.dead || job.done) return;
+    const node = job.node;
+    if (!node.up) return;
+    if (isLog(node)) return respond(job, true);
+    if (node.errorRate && rand() < node.errorRate) return respond(job, false);
+    forward(job);
+    job.forwarded = true;
+    if (job.waiting === 0) respond(job, !job.failed);
+  }
+
+  const decide = (msg, name) => {
+    const flag = flags.get(name);
+    if (!flag) return false;
+    if (flag.sticky) return (hashOf(`${msg.source}:${name}`) % 10000) / 10000 < flag.effective;
+    msg.draws ??= {};
+    if (msg.draws[name] === undefined) msg.draws[name] = rand() < flag.effective;
+    return msg.draws[name];
+  };
+  const healthy = (node, router) => node.up || sim.time - node.downSince < (router.detect ?? router.ttl ?? DETECT[router.kind] ?? 0);
+
+  function forward(job) {
+    const node = job.node;
+    const usable = node.out.filter((edge) => edge.kind !== "config").filter((edge) => (edge.flag && on("flags") ? decide(job.msg, edge.flag) : edge.unless && on("flags") ? !decide(job.msg, edge.unless) : true));
+    for (const edge of usable) if (edge.kind === "replication") {
+      launch(edge, "replication", { msg: job.msg });
+    }
+    const data = usable.filter((edge) => edge.kind !== "replication");
+    if (!data.length) return;
+    const mode = routeOf(node);
+    const chosen = [];
+    if (mode === "roundrobin") {
+      // Health checks notice a dead target only after `detect` seconds (`ttl` for DNS).
+      for (let tries = 0; tries < data.length; tries++) {
+        const edge = data[node.rr++ % data.length];
+        if (node.health === false || healthy(nodes.get(edge.to), node)) {
+          chosen.push(edge);
+          break;
+        }
+      }
+      if (!chosen.length) job.failed = true;
+    } else if (mode === "random") {
+      const total = data.reduce((sum, edge) => sum + (edge.p ?? 1), 0);
+      let pick = rand() * total;
+      chosen.push(data.find((edge) => (pick -= edge.p ?? 1) <= 0) || data[data.length - 1]);
+    } else {
+      // A CDN or cache with `hit` sends only its misses on.
+      for (const edge of data) if (rand() < (edge.p ?? (node.hit != null ? 1 - node.hit : 1))) chosen.push(edge);
+    }
+    for (const edge of chosen) {
+      if (edge.sync) {
+        job.waiting++;
+        callOut(job, edge, 0);
+      } else launch(edge, "request", { msg: job.msg });
+    }
+  }
+
+  // --- calls: one attempt of a sync request ---------------------------------------------------
+
+  const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
+
+  function callOut(job, edge, attempt, prior = 0) {
+    const br = edge.breaker;
+    let trial = false;
+    if (br) {
+      if (br.state === "open" && sim.time >= br.until) setBreaker(edge, "half");
+      if (br.state === "open" || (br.state === "half" && br.trial)) {
+        edge.fast++;
+        return finish(job, false, prior);
+      }
+      if (br.state === "half") {
+        br.trial = true;
+        trial = true;
+      }
+    }
+    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
+    sim.calls.add(call);
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+  }
+
+  function setBreaker(edge, state) {
+    const br = edge.breaker;
+    br.state = state;
+    br.trial = false;
+    if (state === "open") br.until = sim.time + br.open;
+    if (state === "closed") br.outcomes = [];
+    sim.events.push({ type: "breaker", edge: edge.index, state, at: sim.time });
+  }
+
+  function settle(call, ok, ms) {
+    if (call.done) return;
+    const spent = call.prior + ms;
+    call.done = true;
+    sim.calls.delete(call);
+    const { edge, job } = call;
+    if (!ok) {
+      edge.failed++;
+      edge.recentErrors.push(sim.time);
+    }
+    const br = edge.breaker;
+    if (br) {
+      if (call.trial) setBreaker(edge, ok ? "closed" : "open");
+      else if (br.state === "closed") {
+        br.outcomes.push({ at: sim.time, ok });
+        while (br.outcomes.length && br.outcomes[0].at < sim.time - br.window) br.outcomes.shift();
+        const bad = br.outcomes.filter((o) => !o.ok).length;
+        if (br.outcomes.length >= br.min && bad / br.outcomes.length >= br.errors) setBreaker(edge, "open");
+      }
+    }
+    if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
+      const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
+      return;
+    }
+    finish(job, ok, spent);
+  }
+
+  function finish(job, ok, ms) {
+    job.waiting--;
+    job.cost = Math.max(job.cost, ms);
+    if (!ok) job.failed = true;
+    if (job.waiting === 0 && job.forwarded) respond(job, !job.failed);
+  }
+
+  // --- arrivals -------------------------------------------------------------------------------
+
+  function arrive(packet) {
+    const edge = edges[packet.edge];
+    if (packet.dir < 0) {
+      const call = packet.call;
+      if (!call || call.done) return;
+      const ms = netOf(edge) + (packet.ms || 0);
+      // The caller gave up at `timeout` in model time: this reply is late and ignored.
+      if (edge.timeout && ms > edge.timeout * 1000) {
+        call.timedOut = true;
+        return settle(call, false, edge.timeout * 1000);
+      }
+      return settle(call, packet.kind === "response", ms);
+    }
+    const node = nodes.get(edge.to);
+    if (!node.up) {
+      node.recentDrops.push(sim.time);
+      edge.dropped++;
+      burst(edge);
+      // Connection refused: the caller hears about it straight away.
+      if (packet.call) {
+        const call = packet.call;
+        sim.timers.push({ at: sim.time + cfg.refuse, run: () => !call.done && call.packets.push(launch(edge, "error", { call, ms: 0 })) });
+      }
+      return;
+    }
+    if (isLog(node)) {
+      const log = logs.get(node.id);
+      const p = chooseP(log, edge, packet);
+      if (!writable(log, p)) {
+        node.recentDrops.push(sim.time);
+        edge.dropped++;
+        burst(edge);
+        if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
+        return;
+      }
+      log.end[p]++;
+      log.appended++;
+    }
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge });
+  }
+
+  const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
+  const readable = (log, p) => !log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]);
+  const writable = (log, p) => readable(log, p) && (!log.parts || log.acks !== "all" || isrOf(log, log.parts[p]) >= log.minIsr);
+
+  function setBroker(id, b, up) {
+    const log = logs.get(id);
+    if (!log?.brokers || b < 0 || b >= log.brokers.length || log.brokers[b] === up) return;
+    log.brokers[b] = up;
+    sim.events.push({ type: up ? "broker-up" : "broker-down", node: id, broker: b, at: sim.time });
+    for (const part of log.parts) {
+      if (!up && part.leader === b) {
+        const next = part.replicas.find((r) => log.brokers[r]);
+        if (next != null) {
+          part.leader = next;
+          part.electUntil = sim.time + log.election;
+        }
+      } else if (up && !log.brokers[part.leader] && part.replicas.includes(b)) {
+        part.leader = b;
+        part.electUntil = sim.time + log.election;
+      }
+    }
+  }
+
+  function chooseP(log, edge, packet) {
+    if (packet.partition != null) return packet.partition;
+    if (edge.key != null) return hashOf(String(edge.key)) % log.partitions;
+    const skew = log.node.skew;
+    if (skew) {
+      const total = skew.reduce((a, b) => a + b, 0);
+      let pick = rand() * total;
+      for (let p = 0; p < log.partitions; p++) if ((pick -= skew[p] ?? 0) <= 0) return p;
+      return log.partitions - 1;
+    }
+    return log.rr++ % log.partitions;
+  }
+
+  // --- sources --------------------------------------------------------------------------------
+
+  const emitAt = (node, t) => {
+    const emit = node.emit;
+    if (typeof emit === "number") return emit;
+    if (Array.isArray(emit)) {
+      const span = cfg.length || emit[emit.length - 1][0] || 1;
+      const x = cfg.loop && cfg.length ? t % span : t;
+      if (x <= emit[0][0]) return emit[0][1];
+      for (let i = 1; i < emit.length; i++) {
+        const [t1, r1] = emit[i];
+        const [t0, r0] = emit[i - 1];
+        if (x <= t1) return r0 + ((r1 - r0) * (x - t0)) / Math.max(t1 - t0, 1e-6);
+      }
+      return emit[emit.length - 1][1];
+    }
+    return 0;
+  };
+
+  function emitOne(node) {
+    const msg = newMsg(node.id);
+    const job = { node, msg, call: null, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, root: true };
+    node.jobs.add(job);
+    node.handled++;
+    node.recent.push(sim.time);
+    sim.events.push({ type: "handle", node: node.id, replica: 0, at: sim.time });
+    forward(job);
+    job.forwarded = true;
+    if (job.waiting === 0) {
+      job.done = true;
+      node.jobs.delete(job);
+      if (node.out.some((edge) => edge.sync)) node.roots.push({ at: sim.time, ms: 0, ok: !job.failed });
+    }
+  }
+
+  // --- the tick -------------------------------------------------------------------------------
+
+  function step(dt) {
+    sim.time += dt;
+    const now = sim.time;
+    if (scenario) {
+      while (sim.stepIndex < scenario.steps.length && scenario.steps[sim.stepIndex].at <= now) {
+        const s = scenario.steps[sim.stepIndex++];
+        apply(s);
+        sim.events.push({ type: "step", index: s.index, at: now });
+      }
+    }
+    if (sim.timers.length) {
+      const due = sim.timers.filter((timer) => timer.at <= now);
+      if (due.length) {
+        sim.timers = sim.timers.filter((timer) => timer.at > now);
+        due.forEach((timer) => timer.run());
+      }
+    }
+    for (const node of nodes.values()) {
+      if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
+      if (!node.up) continue;
+      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+        // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
+        if (now >= node.nextBurst) {
+          node.nextBurst = now + node.emit.every;
+          for (let i = 0; i < node.emit.burst; i++) sim.timers.push({ at: now + (i / node.emit.burst) * 0.33, run: () => node.up && emitOne(node) });
+        }
+      } else if (node.emit) {
+        const rate = emitAt(node, now);
+        if (rate > 0) {
+          node.clock -= dt;
+          while (node.clock <= 0) {
+            node.clock += (0.6 + rand() * 0.8) / rate;
+            emitOne(node);
+          }
+        }
+      }
+      while (node.waiting.length && node.bucket >= 1) {
+        node.bucket -= 1;
+        begin(node.waiting.shift());
+      }
+      if (node.working.length) {
+        const due = node.working.filter((job) => job.readyAt <= now);
+        if (due.length) {
+          node.working = node.working.filter((job) => job.readyAt > now);
+          due.forEach(ready);
+        }
+      }
+    }
+    // Timeouts: the caller gives up; a reply still on its way arrives late and is ignored.
+    if (sim.calls.size) {
+      for (const call of [...sim.calls]) if (now >= call.deadline) {
+        for (const packet of call.packets) if (packet.dir < 0) packet.kind = "late";
+        call.timedOut = true;
+        settle(call, false, call.edge.timeout * 1000);
+      }
+    }
+    // Consumers pull from logs at their own rate.
+    for (const log of logs.values()) {
+      for (const group of log.groups) {
+        if (group.pause > 0) {
+          group.pause = Math.max(0, group.pause - dt);
+          continue;
+        }
+        for (const edge of group.members) {
+          const consumer = nodes.get(edge.to);
+          if (!consumer.up) continue;
+          const parts = group.assign.get(edge.index) || [];
+          const rate = edge.rate ?? consumer.rate ?? 40;
+          consumer.tokens = Math.min(consumer.tokens + rate * dt, 3);
+          while (consumer.tokens >= 1) {
+            let best = -1;
+            let most = 0;
+            for (const p of parts) {
+              if (!readable(log, p)) continue;
+              const lag = log.end[p] - group.committed[p];
+              if (lag > most) {
+                most = lag;
+                best = p;
+              }
+            }
+            if (best < 0) {
+              consumer.tokens = Math.min(consumer.tokens, 1);
+              break;
+            }
+            consumer.tokens -= 1;
+            group.committed[best]++;
+            launch(edge, "record", { partition: best, group: group.name, msg: newMsg(log.node.id) });
+          }
+        }
+      }
+    }
+    // Move packets; an arriving packet hands off.
+    const live = [];
+    const moving = sim.packets;
+    sim.packets = [];
+    for (const packet of moving) {
+      if (packet.kind === "drop") {
+        packet.age += dt;
+        if (packet.age < 0.6) live.push(packet);
+        continue;
+      }
+      packet.t += dt / packet.duration;
+      if (packet.t >= 1) {
+        if (packet.kind !== "late") arrive(packet);
+      } else live.push(packet);
+    }
+    sim.packets = live.concat(sim.packets);
+    const window = Math.min(cfg.window, Math.max(now, 0.25));
+    const trim = (list, keep = cfg.window) => {
+      while (list.length && (list[0].at ?? list[0]) < now - keep) list.shift();
+    };
+    for (const node of nodes.values()) {
+      trim(node.recent);
+      trim(node.recentDrops);
+      trim(node.recentErrors);
+      trim(node.service, 3);
+      trim(node.roots, 3);
+      node.flow = node.recent.length / window;
+      node.dropRate = node.recentDrops.length / window;
+      node.errorRateSeen = node.recentErrors.length / window;
+    }
+    for (const edge of edges) {
+      trim(edge.recent);
+      trim(edge.recentErrors);
+      edge.flow = edge.recent.length / window;
+      edge.errorRate = edge.recentErrors.length / window;
+    }
+    sim.histClock += dt;
+    if (sim.histClock >= 0.25) {
+      sim.histClock = 0;
+      for (const node of nodes.values()) {
+        node.hist.push(node.flow);
+        if (node.hist.length > 120) node.hist.shift();
+      }
+      sim.hist.push(totalIn());
+      if (sim.hist.length > 120) sim.hist.shift();
+    }
+    if (sim.events.length > 512) sim.events.splice(0, sim.events.length - 512);
+  }
+
+  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
+
+  function setUp(id, up) {
+    const broker = /^(.*):b(\d+)$/.exec(id);
+    if (broker && !nodes.has(id)) return setBroker(broker[1], +broker[2], up);
+    const node = nodes.get(id);
+    if (!node || node.up === up) return;
+    node.up = up;
+    node.downSince = up ? null : sim.time;
+    if (!up) {
+      // In-flight work is lost; callers waiting on it get a reset.
+      for (const job of node.jobs) {
+        if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
+        job.dead = true;
+      }
+      node.jobs.clear();
+      node.working = [];
+      node.waiting = [];
+    }
+    if (up && node === flagNode) for (const flag of flags.values()) syncFlag(flag);
+    sim.events.push({ type: up ? "recover" : "fail", node: id, at: sim.time });
+    for (const log of logs.values()) for (const group of log.groups) if (group.members.some((edge) => edge.to === id)) rebalance(log, group, sim.time);
+  }
+
+  function syncFlag(flag) {
+    if (flagNode && !flagNode.up) return;
+    if (flag.effective === flag.rollout) return;
+    flag.effective = flag.rollout;
+    sim.events.push({ type: "flag", flag: flag.name, rollout: flag.effective, at: sim.time });
+  }
+
+  // "from>to" in a scenario's `set` changes that edge: retries, timeout, backoff, p, breaker.
+  const EDGE_SETTABLE = new Set(["retries", "timeout", "backoff", "p", "breaker", "rate"]);
+  function setEdge(key, props) {
+    const [from, to] = key.split(">");
+    const list = edges.filter((edge) => edge.from === from && edge.to === to);
+    if (!list.length) throw new Error(`scenario: no edge "${key}"`);
+    for (const edge of list) for (const [name, value] of Object.entries(props)) {
+      if (!EDGE_SETTABLE.has(name)) throw new Error(`scenario: can't set "${name}" on an edge (settable: ${[...EDGE_SETTABLE].join(", ")})`);
+      if (name === "breaker") {
+        edge.breaker = value && on("breakers") ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], until: 0, trial: false } : null;
+        sim.events.push({ type: "breaker", edge: edge.index, state: edge.breaker ? "closed" : "none", at: sim.time });
+      } else edge[name] = value;
+      if (name === "timeout") allowanceOf(edge);
+    }
+  }
+
+  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs"]);
+  function apply(step) {
+    if (step.fail) [].concat(step.fail).forEach((id) => setUp(id, false));
+    if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
+    if (step.set) {
+      for (const [id, props] of Object.entries(step.set)) {
+        if (id.includes(">")) {
+          setEdge(id, props);
+          continue;
+        }
+        const node = nodes.get(id);
+        if (!node) throw new Error(`scenario: unknown node "${id}"`);
+        for (const [key, value] of Object.entries(props)) {
+          if (!SETTABLE.has(key)) throw new Error(`scenario: can't set "${key}" (settable: ${[...SETTABLE].join(", ")})`);
+          if (key === "queue") node.queueMax = on("queues") ? value : 0;
+          else node[key] = value;
+          if (key === "emit" && typeof value === "number") node.clock = Math.min(node.clock, 1 / Math.max(value, 0.001));
+        }
+      }
+    }
+    if (on("flags")) {
+      if (step.flag) {
+        const flag = flags.get(step.flag);
+        if (!flag) throw new Error(`scenario: unknown flag "${step.flag}"`);
+        flag.rollout = step.rollout ?? 1;
+        syncFlag(flag);
+      }
+      if (step.kill) {
+        const flag = flags.get(step.kill);
+        if (!flag) throw new Error(`scenario: unknown flag "${step.kill}"`);
+        flag.rollout = 0;
+        syncFlag(flag);
+      }
+    }
+  }
+
+  sim.step = (dt) => {
+    // Sub-step so a long frame doesn't teleport packets past their arrival.
+    const n = Math.max(1, Math.ceil(dt / (1 / 60)));
+    for (let i = 0; i < n; i++) step(dt / n);
+  };
+  sim.setUp = setUp;
+  sim.setBroker = setBroker;
+  sim.readable = readable;
+  sim.isrOf = isrOf;
+  sim.apply = apply;
+  sim.totalIn = totalIn;
+  sim.lagOf = (id, groupName) => {
+    const log = logs.get(id);
+    if (!log) return 0;
+    const group = groupName ? log.groups.find((g) => g.name === groupName) : log.groups[0];
+    if (!group) return 0;
+    return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+  };
+  sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
+  sim.statsOf = (id) => statsOf(sim, id);
+  sim.summary = () => summaryOf(sim);
+  return sim;
+}
+
+// p50 / p99 of completed requests started at these sources, over the last 3 s of model time.
+function latencyOf(sources) {
+  const samples = [];
+  let failed = 0;
+  for (const node of sources) for (const root of node?.roots || []) {
+    if (root.ok) samples.push(root.ms);
+    else failed++;
+  }
+  samples.sort((a, b) => a - b);
+  return { p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), count: samples.length, failed };
+}
+
+const fmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n >= 10 ? n.toFixed(0) : n.toFixed(1));
+const formatRate = (n, per = 1) => `${fmt(n * per)}/s`;
+const formatCount = (n, per = 1) => fmt(n * per).replace(/\.0$/, "");
+const formatMs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : ms >= 10 ? `${ms.toFixed(0)}ms` : `${ms.toFixed(1)}ms`);
+
+function statsOf(sim, id) {
+  const node = sim.nodes.get(id);
+  if (!node) return "";
+  const per = sim.cfg.per;
+  const name = node.label || node.id;
+  if (!node.up) return `${name} · down${node.dropRate ? ` · ${formatRate(node.dropRate, per)} refused` : ""}`;
+  const log = sim.logs.get(id);
+  if (log) {
+    const parts = log.groups.map((group) => {
+      const lag = log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+      const live = [...group.assign.values()].filter((list) => list.length).length;
+      return `${log.groups.length > 1 ? group.name + " " : ""}lag ${formatCount(lag, per)}${group.pause > 0 ? " · rebalancing" : node.kind === "kafka" ? ` · ${live}/${group.members.length} consumers` : ""}`;
+    });
+    if (log.brokers) {
+      const live = log.brokers.filter(Boolean).length;
+      const electing = log.parts.filter((part) => sim.time < part.electUntil).length;
+      const offline = log.parts.filter((part) => !log.brokers[part.leader]).length;
+      const under = log.parts.filter((part) => sim.isrOf(log, part) < log.minIsr).length;
+      parts.push(`brokers ${live}/${log.brokers.length}`);
+      if (electing) parts.push(`${electing} electing`);
+      if (offline) parts.push(`${offline} offline`);
+      if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
+    }
+    return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
+  }
+  if (node.kind === "flags") {
+    const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
+    return `${name} · ${list.join(" · ") || "no flags"}`;
+  }
+  const bits = [`${name} · ${formatRate(node.flow, per)}`];
+  if (node.roots.length) {
+    const lat = latencyOf([node]);
+    if (lat.count) bits.push(`p50 ${formatMs(lat.p50)} · p99 ${formatMs(lat.p99)}`);
+  } else if (node.service.length) {
+    const sorted = node.service.map((s) => s.ms).sort((a, b) => a - b);
+    bits.push(`${formatMs(quantile(sorted, 0.5))} p50`);
+  }
+  if (node.capacity) bits.push(`cap ${formatRate(node.capacity, per)}`);
+  if (node.queueMax) bits.push(`queue ${node.waiting.length}/${node.queueMax}`);
+  if (node.dropRate) bits.push(`${formatRate(node.dropRate, per)} rejected`);
+  if (node.errorRateSeen) bits.push(`${formatRate(node.errorRateSeen, per)} errors`);
+  for (const edge of node.out) if (edge.breaker && edge.breaker.state !== "closed") bits.push(`breaker → ${sim.nodes.get(edge.to).label || edge.to} ${edge.breaker.state}`);
+  return bits.join(" · ");
+}
+
+function summaryOf(sim) {
+  const per = sim.cfg.per;
+  let lag = 0;
+  let drops = 0;
+  for (const node of sim.nodes.values()) drops += node.dropRate;
+  for (const id of sim.logs.keys()) lag += sim.lagOf(id);
+  const bits = [`${formatRate(sim.totalIn(), per)} in`];
+  const lat = sim.latencyOf();
+  if (lat.count) bits.push(`p50 ${formatMs(lat.p50)} · p99 ${formatMs(lat.p99)}`);
+  if (sim.logs.size) bits.push(`lag ${formatCount(lag, per)}`);
+  const failing = lat.failed / 3;
+  const down = [...sim.nodes.values()].filter((node) => !node.up).length;
+  bits.push(failing > 0.05 ? `${formatRate(failing, per)} failing` : drops ? `${formatRate(drops, per)} lost` : down ? `${down} down` : "healthy");
+  return bits.join(" · ");
+}
+
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[150,80],"positions":{"clients":[0,0],"gw":[1,0],"orders":[2,0],"inventory":[3,0],"pg":[4,0]},"spec":{"nodes":[{"id":"clients","kind":"client","emit":9,"partitions":0,"replicas":1,"label":"clients"},{"id":"gw","kind":"gateway","label":"gateway","partitions":0,"replicas":1},{"id":"orders","kind":"service","replicas":2,"label":"orders-api","partitions":0},{"id":"inventory","kind":"service","label":"inventory","ms":25,"capacity":14,"queue":6,"burst":0.1,"partitions":0,"replicas":1},{"id":"pg","kind":"db","label":"inventory-db","partitions":0,"replicas":1}],"edges":[{"from":"clients","to":"gw","kind":"sync","sync":true,"len":106},{"from":"gw","to":"orders","kind":"sync","sync":true,"len":99},{"from":"orders","to":"inventory","timeout":0.15,"retries":3,"backoff":0.05,"kind":"sync","sync":true,"len":96},{"from":"inventory","to":"pg","kind":"sync","sync":true,"len":102}],"sim":{"per":20,"seed":4},"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"slowdown","at":8},{"name":"breaker on","at":20},{"name":"fixed","at":30}],"steps":[{"at":1,"say":"~180 req/s. inventory answers in ~25 ms, well inside orders-api's 150 ms timeout."},{"phase":"slowdown","set":{"inventory":{"ms":260}},"say":"inventory slows to ~260 ms (a bad query plan). Calls start timing out; each one is retried up to 3 times (amber)."},{"phase":"slowdown","after":5,"say":"The storm: inventory now sees several times the real traffic, its buffer fills (amber cells) and it answers 503. Almost nothing succeeds."},{"phase":"breaker on","set":{"orders>inventory":{"breaker":{"errors":0.5,"min":6,"window":2,"open":2}}},"say":"A breaker on the call. It trips open (red port): calls fail fast without touching inventory, so its load collapses."},{"phase":"fixed","set":{"inventory":{"ms":25}},"say":"inventory is fixed. The breaker half-opens (amber), its trial call succeeds, and it closes."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,106],[0,99],[0,96],[0,102]],"views":{"iso":{"edges":[[[76.7,63.7],[169.2,96.8]],[[211.1,111.8],[297.6,142.7]],[[344.7,159.5],[428.5,189.5]],[[475.7,206.3],[564.7,238.2]]],"step":[6.111537677768098,2.1844778179917057],"flagStep":[0,0],"packet":{"top":"M3.2 -3.5L0.6 -1.4L-3.2 -2.8L-0.6 -4.8Z","sides":"M3.2 -3.5L0.6 -1.4L0.6 1.7L3.2 -0.3ZM0.6 -1.4L-3.2 -2.8L-3.2 0.3L0.6 1.7Z","outline":"M-3.2 -2.8L-0.6 -4.8L3.2 -3.5L3.2 -0.3L0.6 1.7L-3.2 0.3Z"}},"flat":{"edges":[[[62.1,113.7],[157.8,113.7]],[[201.2,113.7],[290.6,113.7]],[[339.3,113.7],[426,113.7]],[[474.8,113.7],[566.9,113.7]]],"step":[6.32063882063882,0],"flagStep":[0,0],"packet":null,"k":0.9029484029484028}}};
+// The live page. Inlined after topo-sim.mjs (exports stripped) and `const DATA = …`.
+// It steps the sim, draws its packets into the visible view and writes attributes:
+// it never re-renders markup per frame.
+const stage = document.querySelector(".tp-stage");
+const readout = document.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+let sim = createSim(DATA.spec);
+// Extension points for topo-story.js and topo-edit.js.
+const hooks = { tick: [], takeover: [], key: [] };
+let paused = false;
+const SLOTS = DATA.slots;
+const lens = DATA.lens;
+const POOL_MAX = 420;
+const NS = "http://www.w3.org/2000/svg";
+
+const views = {};
+for (const name of ["iso", "flat"]) {
+  const svg = stage.querySelector(`.tp-${name}`);
+  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), status: new Map() };
+  const all = (selector, fn) => svg.querySelectorAll(selector).forEach(fn);
+  all("[data-breaker]", (el) => v.breakers.set(+el.dataset.breaker, el));
+  all("[data-elabel]", (el) => v.elabels.set(+el.dataset.elabel, { el, text: el.querySelector("text") }));
+  all("[data-qcell]", (el) => v.qcells.set(el.dataset.qcell, el));
+  all("[data-flag]", (el) => v.knobs.set(el.dataset.flag, el));
+  all("[data-lane]", (el) => v.lanes.set(el.dataset.lane, el));
+  all("[data-part^='broker:']", (el) => v.brokers.set(`${el.closest("[data-node]").dataset.node}:${el.dataset.part.slice(7)}`, el));
+  svg.querySelectorAll("[data-led]").forEach((el) => v.leds.set(el.dataset.led, el));
+  svg.querySelectorAll("[data-cell]").forEach((el) => v.cells.set(el.dataset.cell, el));
+  svg.querySelectorAll("[data-cursor]").forEach((el) => {
+    const [id, g, p] = el.dataset.cursor.split(":");
+    v.cursors.push({ el, id, g: +g, p: +p, at: -1 });
+  });
+  svg.querySelectorAll("[data-node]").forEach((el) => v.nodes.set(el.dataset.node, el));
+  svg.querySelectorAll("[data-edge]").forEach((el) => (v.edges[+el.dataset.edge] = el));
+  svg.querySelectorAll("[data-label]").forEach((el) => v.labels.set(el.dataset.label, el));
+  views[name] = v;
+}
+let view = DATA.view;
+
+function packetEl(v) {
+  const g = document.createElementNS(NS, "g");
+  g.setAttribute("class", "tp-pk");
+  if (v.data.packet) {
+    const { sides, top, outline } = v.data.packet;
+    g.innerHTML = `<path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
+  } else {
+    g.innerHTML = `<circle r="1.9"/>`;
+  }
+  g.style.display = "none";
+  v.layer.appendChild(g);
+  return { g, kind: "", shown: false };
+}
+
+function pointOn(v, packet) {
+  const pts = v.data.edges[packet.edge];
+  const L = lens[packet.edge];
+  const total = L[L.length - 1];
+  const t = Math.min(1, Math.max(0, packet.dir > 0 ? packet.t : 1 - packet.t));
+  const want = t * total;
+  let i = 1;
+  while (i < L.length - 1 && L[i] < want) i++;
+  const span = L[i] - L[i - 1] || 1;
+  const f = Math.min(1, Math.max(0, (want - L[i - 1]) / span));
+  return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f];
+}
+
+function drawPackets() {
+  const v = views[view];
+  const list = still.matches ? [] : sim.packets;
+  const count = Math.min(list.length, POOL_MAX);
+  while (v.pool.length < count) v.pool.push(packetEl(v));
+  for (let i = 0; i < v.pool.length; i++) {
+    const slot = v.pool[i];
+    if (i >= count) {
+      if (slot.shown) {
+        slot.g.style.display = "none";
+        slot.shown = false;
+      }
+      continue;
+    }
+    const packet = list[i];
+    const [x, y] = pointOn(v, packet);
+    if (!slot.shown) {
+      slot.g.style.display = "";
+      slot.shown = true;
+    }
+    if (slot.kind !== packet.kind) {
+      slot.g.dataset.kind = packet.kind;
+      slot.kind = packet.kind;
+    }
+    const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
+    const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
+    slot.g.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})${grow !== 1 ? ` scale(${grow.toFixed(2)})` : ""}`);
+    slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
+  }
+}
+
+// LEDs blink when a node handles a message.
+const lit = new Map();
+function ledFor(event) {
+  const node = sim.nodes.get(event.node);
+  if (node.kind === "kafka" || node.kind === "queue") return `${event.node}:b${node.handled % (node.brokers || 3)}`;
+  if (node.kind === "service" || node.kind === "worker") return `${event.node}:${event.replica}`;
+  return `${event.node}:0`;
+}
+function events(now) {
+  for (const event of sim.events) {
+    if (event.type === "handle") {
+      const id = ledFor(event);
+      for (const v of Object.values(views)) {
+        const el = v.leds.get(id);
+        if (el) {
+          el.setAttribute("data-on", "");
+          lit.set(el, now + 90);
+        }
+      }
+    } else if (event.type === "flag") {
+      const panel = DATA.spec.nodes.find((node) => node.kind === "flags");
+      if (panel) for (const v of Object.values(views)) {
+        const el = v.leds.get(`${panel.id}:0`);
+        if (el) {
+          el.setAttribute("data-on", "");
+          lit.set(el, now + 600);
+        }
+      }
+    } else if (event.type === "fail" || event.type === "recover") {
+      for (const v of Object.values(views)) v.nodes.get(event.node)?.toggleAttribute("data-down", event.type === "fail");
+    }
+  }
+  sim.events.length = 0;
+  for (const [el, until] of lit) if (now >= until) {
+    el.removeAttribute("data-on");
+    lit.delete(el);
+  }
+}
+
+// Record cells show the last SLOTS offsets of each partition; a cell is bright while the
+// first consumer group hasn't committed it. Cursors sit at each group's committed offset.
+function drawLogs() {
+  const v = views[view];
+  for (const [id, log] of sim.logs) {
+    for (let p = 0; p < log.partitions; p++) {
+      const end = log.end[p];
+      const base = end - SLOTS;
+      const c0 = log.groups[0] ? log.groups[0].committed[p] : end;
+      for (let i = 0; i < SLOTS; i++) {
+        const key = `${id}:${p}:${i}`;
+        const off = base + i;
+        const on = off >= 0 && off >= c0;
+        if (v.cellState.get(key) === on) continue;
+        v.cellState.set(key, on);
+        v.cells.get(key)?.toggleAttribute("data-on", on);
+      }
+    }
+  }
+  for (const cursor of v.cursors) {
+    const log = sim.logs.get(cursor.id);
+    const group = log?.groups[cursor.g];
+    if (!group) continue;
+    const base = log.end[cursor.p] - SLOTS;
+    const s = Math.max(0, Math.min(SLOTS, group.committed[cursor.p] - base));
+    if (s === cursor.at) continue;
+    cursor.at = s;
+    cursor.el.setAttribute("transform", `translate(${(v.data.step[0] * s).toFixed(2)} ${(v.data.step[1] * s).toFixed(2)})`);
+  }
+}
+
+// Everything else that shows state, at 4 Hz: breakers, edge labels, buffers, flag switches,
+// paused partitions and failed brokers. Attributes are only written when they change.
+const setOnce = (v, key, el, attr, value) => {
+  if (v.status.get(key) === value) return;
+  v.status.set(key, value);
+  if (attr === "text") el.textContent = value;
+  else if (attr === "transform") el.setAttribute("transform", value);
+  else if (value === false || value == null) el.removeAttribute(attr);
+  else el.setAttribute(attr, value === true ? "" : value);
+};
+function drawStatus() {
+  const v = views[view];
+  const per = sim.cfg.per;
+  for (const [index, el] of v.breakers) {
+    const state = sim.edges[index].breaker?.state || "closed";
+    setOnce(v, `br${index}`, el, "data-state", state);
+    setOnce(v, `bre${index}`, v.edges[index], "data-breaker", state === "closed" ? false : state);
+  }
+  for (const [index, { el, text }] of v.elabels) {
+    const edge = sim.edges[index];
+    const bits = [];
+    if (edge.label) bits.push(edge.label);
+    else if (DATA.labels === "rate") bits.push(formatRate(edge.flow, per));
+    const flagName = edge.flag || edge.unless;
+    const flag = flagName && sim.flags.get(flagName);
+    if (flag) bits.push(`${edge.unless ? "¬" : ""}${flagName} ${Math.round((edge.unless ? 1 - flag.effective : flag.effective) * 100)}%`);
+    const bad = edge.flow > 0.3 && edge.errorRate / edge.flow > 0.1;
+    if (bad) bits.push(`${Math.round((100 * edge.errorRate) / edge.flow)}% err`);
+    setOnce(v, `el${index}`, text, "text", bits.join(" · "));
+    setOnce(v, `elb${index}`, el, "data-bad", bad);
+  }
+  for (const [key, el] of v.qcells) {
+    const [id, i] = key.split(":");
+    const node = sim.nodes.get(id);
+    const n = Math.min(8, node.queueMax || 1);
+    setOnce(v, `q${key}`, el, "data-on", node.waiting.length > 0 && +i < Math.ceil((node.waiting.length / Math.max(1, node.queueMax)) * n));
+  }
+  for (const [name, el] of v.knobs) {
+    const flag = sim.flags.get(name);
+    const f = flag ? flag.effective : 0;
+    setOnce(v, `k${name}`, el, "transform", `translate(${(v.data.flagStep[0] * f).toFixed(2)} ${(v.data.flagStep[1] * f).toFixed(2)})`);
+  }
+  for (const [key, el] of v.lanes) {
+    const [id, p] = key.split(":");
+    const log = sim.logs.get(id);
+    setOnce(v, `l${key}`, el, "data-paused", !!log && !sim.readable(log, +p));
+  }
+  for (const [key, el] of v.brokers) {
+    const [id, b] = key.split(":");
+    setOnce(v, `b${key}`, el, "data-down", !sim.logs.get(id).brokers[+b]);
+  }
+}
+
+// Focus: hover or keyboard picks a node; its links and neighbours stay lit.
+let focus = null;
+let pinned = false;
+const neighbours = (id) => {
+  const near = new Set([id]);
+  const edges = new Set();
+  DATA.spec.edges.forEach((edge, index) => {
+    if (edge.from === id || edge.to === id) {
+      near.add(edge.from);
+      near.add(edge.to);
+      edges.add(index);
+    }
+  });
+  return { near, edges };
+};
+function setFocus(id) {
+  focus = id;
+  const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
+  stage.toggleAttribute("data-focus", !!id);
+  for (const v of Object.values(views)) {
+    for (const [nid, el] of v.nodes) {
+      el.toggleAttribute("data-near", near.has(nid));
+      el.toggleAttribute("data-sel", nid === id);
+    }
+    for (const [nid, el] of v.labels) el.toggleAttribute("data-near", near.has(nid));
+    v.edges.forEach((el, index) => el.toggleAttribute("data-near", edges.has(index)));
+  }
+  say(true);
+}
+
+let lastSay = 0;
+function say(force, now = performance.now()) {
+  if (!force && now - lastSay < 250) return;
+  lastSay = now;
+  const text = focus ? sim.statsOf(focus) : sim.summary();
+  if (readout && readout.textContent !== text) readout.textContent = text;
+  stage.setAttribute("aria-valuetext", text);
+}
+
+function setView(name) {
+  if (!views[name] || name === view) return;
+  views[view].svg.setAttribute("hidden", "");
+  views[view].pool.forEach((slot) => {
+    slot.g.style.display = "none";
+    slot.shown = false;
+  });
+  view = name;
+  views[view].svg.removeAttribute("hidden");
+  views[view].cellState.clear();
+  views[view].cursors.forEach((cursor) => (cursor.at = -1));
+  views[view].status.clear();
+  document.querySelectorAll(".tp-views button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === name)));
+  drawLogs();
+  drawPackets();
+}
+
+let frame = 0;
+let last = 0;
+let visible = false;
+let logClock = 0;
+let statusClock = 0;
+function tick(now) {
+  const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
+  last = now;
+  if (!paused) sim.step(dt * (window.__topoSpeed ?? 1));
+  events(now);
+  for (const hook of hooks.tick) hook(dt);
+  logClock += dt;
+  statusClock += dt;
+  if (logClock > 0.05) {
+    logClock = 0;
+    drawLogs();
+  }
+  if (statusClock > 0.25) {
+    statusClock = 0;
+    drawStatus();
+  }
+  drawPackets();
+  say(false, now);
+  frame = visible ? requestAnimationFrame(tick) : 0;
+}
+const run = () => {
+  if (!frame && visible) {
+    last = 0;
+    frame = requestAnimationFrame(tick);
+  }
+};
+new IntersectionObserver((entries) => {
+  visible = entries[entries.length - 1].isIntersecting;
+  run();
+}, { rootMargin: "120px 0px" }).observe(stage);
+
+const nodeAt = (target) => target.closest?.("[data-node]")?.dataset.node;
+const toggle = (id) => {
+  for (const hook of hooks.takeover) hook(id);
+  const node = sim.nodes.get(id);
+  if (node) sim.setUp(id, !node.up);
+  say(true);
+};
+stage.addEventListener("pointerover", (event) => {
+  const id = nodeAt(event.target);
+  if (id && id !== focus) {
+    pinned = false;
+    setFocus(id);
+  }
+});
+stage.addEventListener("pointerleave", () => {
+  if (!pinned) setFocus(null);
+});
+stage.addEventListener("click", (event) => {
+  const part = event.target.closest?.("[data-part^='broker:']");
+  const id = nodeAt(event.target);
+  if (part && id) {
+    const b = +part.dataset.part.slice(7);
+    for (const hook of hooks.takeover) hook(id);
+    sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
+    drawStatus();
+    say(true);
+  } else if (id) toggle(id);
+});
+const ring = [...DATA.spec.nodes].map((node) => node.id);
+stage.addEventListener("keydown", (event) => {
+  const here = focus ? ring.indexOf(focus) : -1;
+  if (hooks.key.some((hook) => hook(event))) {
+    event.preventDefault();
+    return;
+  }
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    pinned = true;
+    setFocus(ring[(here + 1) % ring.length]);
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    pinned = true;
+    setFocus(ring[(here - 1 + ring.length) % ring.length]);
+  } else if ((event.key === "Enter" || event.key === " ") && focus) {
+    toggle(focus);
+  } else if (event.key === "v" || event.key === "V") {
+    setView(view === "iso" ? "flat" : "iso");
+  } else if (event.key === "Escape") {
+    pinned = false;
+    setFocus(null);
+  } else return;
+  event.preventDefault();
+});
+document.querySelectorAll(".tp-views button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+
+// Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
+function resetVisuals(next) {
+  sim = next;
+  for (const v of Object.values(views)) {
+    v.pool.forEach((slot) => {
+      slot.g.style.display = "none";
+      slot.shown = false;
+    });
+    v.cellState.clear();
+    v.cursors.forEach((cursor) => (cursor.at = -1));
+    v.status.clear();
+    for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
+  }
+  for (const el of lit.keys()) el.removeAttribute("data-on");
+  lit.clear();
+  sim.events.length = 0;
+  drawLogs();
+  drawStatus();
+  drawPackets();
+  say(true);
+}
+
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
+drawLogs();
+drawStatus();
+say(true);
+
+// The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
+// `scenario` feature is on. A timeline under the stage shows the named phases and each step;
+// the story plays and loops on its own. Scrubbing or jumping to a phase re-simulates from 0
+// (the sim is seeded, so the same time always looks the same). Clicking a node takes over:
+// the story stops applying and the reader plays freely until they press play again.
+(() => {
+  const story = normalizeScenario(DATA.spec.scenario);
+  if (!story) return;
+  const plate = stage.closest(".k-card");
+  const hint = plate.querySelector('[data-corner="hint"]');
+  const hintText = hint ? hint.textContent : "";
+  const pct = (t) => `${((100 * t) / story.length).toFixed(3)}%`;
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+  const phases = story.phases
+    .map((phase, index) => `<button type="button" class="tp-phase" data-at="${phase.at}" style="left:${pct(phase.at)};width:${pct(phase.end - phase.at)}" title="${esc(phase.name)} (${index + 1})"><span>${esc(phase.name)}</span></button>`)
+    .join("");
+  const ticks = story.steps.map((step) => `<i class="tp-tick" style="left:${pct(step.at)}"${step.say ? ` title="${esc(step.say)}"` : ""}></i>`).join("");
+  const bar = document.createElement("div");
+  bar.className = "tp-story";
+  bar.innerHTML = `<div class="tp-timeline"><button type="button" class="tp-play"></button><div class="tp-track" tabindex="0" role="slider" aria-label="Story time" aria-valuemin="0" aria-valuemax="${story.length}">${phases}${ticks}<div class="tp-head"></div></div><span class="tp-time"></span></div><p class="tp-say" aria-live="polite"></p>`;
+  stage.after(bar);
+  const play = bar.querySelector(".tp-play");
+  const track = bar.querySelector(".tp-track");
+  const head = bar.querySelector(".tp-head");
+  const clock = bar.querySelector(".tp-time");
+  const line = bar.querySelector(".tp-say");
+
+  let mode = "story";
+  let playing = !still.matches;
+  paused = !playing;
+  let preview = null;
+
+  function seek(t) {
+    const next = createSim(DATA.spec);
+    const steps = Math.round(Math.max(0, Math.min(t, story.length)) * 60);
+    for (let i = 0; i < steps; i++) next.step(1 / 60);
+    resetVisuals(next);
+    mode = "story";
+    render();
+  }
+
+  const phaseAt = (t) => story.phases.filter((phase) => phase.at <= t + 1e-6).pop();
+  const sayAt = (t) => story.steps.filter((step) => step.say && step.at <= t + 1e-6).pop();
+  let shown = { say: null, phase: null };
+  function render() {
+    const t = preview ?? Math.min(sim.time, story.length);
+    head.style.left = pct(t);
+    clock.textContent = `${t.toFixed(1)}s`;
+    track.setAttribute("aria-valuenow", t.toFixed(1));
+    bar.dataset.mode = mode;
+    play.textContent = playing && mode === "story" ? "❚❚" : "▶";
+    play.setAttribute("aria-label", mode === "free" ? "Resume the story" : playing ? "Pause" : "Play");
+    const phase = mode === "story" ? phaseAt(t) : null;
+    const step = mode === "story" ? sayAt(t) : null;
+    if (phase !== shown.phase) {
+      shown.phase = phase;
+      bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to take over · 1–${Math.min(9, story.phases.length)} jump` : hintText;
+    }
+    const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
+    if (text !== shown.say) {
+      shown.say = text;
+      line.textContent = text;
+    }
+  }
+
+  hooks.tick.push(() => {
+    if (mode === "story" && sim.time >= story.length) {
+      if (story.loop) seek(0);
+      else {
+        playing = false;
+        paused = true;
+      }
+    }
+    render();
+  });
+  hooks.takeover.push(() => {
+    if (mode !== "story") return;
+    mode = "free";
+    playing = true;
+    paused = false;
+    // Free play: the rest of the script no longer applies.
+    sim.stepIndex = Infinity;
+    shown.phase = undefined;
+    render();
+  });
+  hooks.key.push((event) => {
+    if (/^[1-9]$/.test(event.key) && story.phases[+event.key - 1]) {
+      seek(story.phases[+event.key - 1].at);
+      return true;
+    }
+    if (event.key === "p" || event.key === "P") {
+      toggle_();
+      return true;
+    }
+    return false;
+  });
+
+  function toggle_() {
+    if (mode === "free") {
+      seek(sim.time);
+      playing = true;
+    } else playing = !playing;
+    paused = !playing;
+    render();
+  }
+  play.addEventListener("click", toggle_);
+  bar.querySelectorAll(".tp-phase").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      seek(+el.dataset.at);
+    }),
+  );
+  const fractionOf = (event) => {
+    const box = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+  };
+  track.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".tp-phase")) return;
+    track.setPointerCapture(event.pointerId);
+    preview = fractionOf(event) * story.length;
+    render();
+  });
+  track.addEventListener("pointermove", (event) => {
+    if (preview == null) return;
+    preview = fractionOf(event) * story.length;
+    render();
+  });
+  const release = () => {
+    if (preview == null) return;
+    const t = preview;
+    preview = null;
+    seek(t);
+  };
+  track.addEventListener("pointerup", release);
+  track.addEventListener("pointercancel", release);
+  track.addEventListener("keydown", (event) => {
+    const t = Math.min(sim.time, story.length);
+    if (event.key === "ArrowRight") seek(t + 1);
+    else if (event.key === "ArrowLeft") seek(t - 1);
+    else if (event.key === "Home") seek(0);
+    else if (event.key === " ") toggle_();
+    else return;
+    event.preventDefault();
+  });
+  window.__topo.story = { seek, get mode() { return mode; }, get playing() { return playing; }, story };
+  render();
+})();
+</script></body></html>

@@ -16,7 +16,14 @@ const NS = "http://www.w3.org/2000/svg";
 const views = {};
 for (const name of ["iso", "flat"]) {
   const svg = stage.querySelector(`.tp-${name}`);
-  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map() };
+  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), status: new Map() };
+  const all = (selector, fn) => svg.querySelectorAll(selector).forEach(fn);
+  all("[data-breaker]", (el) => v.breakers.set(+el.dataset.breaker, el));
+  all("[data-elabel]", (el) => v.elabels.set(+el.dataset.elabel, { el, text: el.querySelector("text") }));
+  all("[data-qcell]", (el) => v.qcells.set(el.dataset.qcell, el));
+  all("[data-flag]", (el) => v.knobs.set(el.dataset.flag, el));
+  all("[data-lane]", (el) => v.lanes.set(el.dataset.lane, el));
+  all("[data-part^='broker:']", (el) => v.brokers.set(`${el.closest("[data-node]").dataset.node}:${el.dataset.part.slice(7)}`, el));
   svg.querySelectorAll("[data-led]").forEach((el) => v.leds.set(el.dataset.led, el));
   svg.querySelectorAll("[data-cell]").forEach((el) => v.cells.set(el.dataset.cell, el));
   svg.querySelectorAll("[data-cursor]").forEach((el) => {
@@ -92,7 +99,7 @@ function drawPackets() {
 const lit = new Map();
 function ledFor(event) {
   const node = sim.nodes.get(event.node);
-  if (node.kind === "kafka" || node.kind === "queue") return `${event.node}:b${node.handled % 3}`;
+  if (node.kind === "kafka" || node.kind === "queue") return `${event.node}:b${node.handled % (node.brokers || 3)}`;
   if (node.kind === "service" || node.kind === "worker") return `${event.node}:${event.replica}`;
   return `${event.node}:0`;
 }
@@ -105,6 +112,15 @@ function events(now) {
         if (el) {
           el.setAttribute("data-on", "");
           lit.set(el, now + 90);
+        }
+      }
+    } else if (event.type === "flag") {
+      const panel = DATA.spec.nodes.find((node) => node.kind === "flags");
+      if (panel) for (const v of Object.values(views)) {
+        const el = v.leds.get(`${panel.id}:0`);
+        if (el) {
+          el.setAttribute("data-on", "");
+          lit.set(el, now + 600);
         }
       }
     } else if (event.type === "fail" || event.type === "recover") {
@@ -146,6 +162,59 @@ function drawLogs() {
     if (s === cursor.at) continue;
     cursor.at = s;
     cursor.el.setAttribute("transform", `translate(${(v.data.step[0] * s).toFixed(2)} ${(v.data.step[1] * s).toFixed(2)})`);
+  }
+}
+
+// Everything else that shows state, at 4 Hz: breakers, edge labels, buffers, flag switches,
+// paused partitions and failed brokers. Attributes are only written when they change.
+const setOnce = (v, key, el, attr, value) => {
+  if (v.status.get(key) === value) return;
+  v.status.set(key, value);
+  if (attr === "text") el.textContent = value;
+  else if (attr === "transform") el.setAttribute("transform", value);
+  else if (value === false || value == null) el.removeAttribute(attr);
+  else el.setAttribute(attr, value === true ? "" : value);
+};
+function drawStatus() {
+  const v = views[view];
+  const per = sim.cfg.per;
+  for (const [index, el] of v.breakers) {
+    const state = sim.edges[index].breaker?.state || "closed";
+    setOnce(v, `br${index}`, el, "data-state", state);
+    setOnce(v, `bre${index}`, v.edges[index], "data-breaker", state === "closed" ? false : state);
+  }
+  for (const [index, { el, text }] of v.elabels) {
+    const edge = sim.edges[index];
+    const bits = [];
+    if (edge.label) bits.push(edge.label);
+    else if (DATA.labels === "rate") bits.push(formatRate(edge.flow, per));
+    const flagName = edge.flag || edge.unless;
+    const flag = flagName && sim.flags.get(flagName);
+    if (flag) bits.push(`${edge.unless ? "¬" : ""}${flagName} ${Math.round((edge.unless ? 1 - flag.effective : flag.effective) * 100)}%`);
+    const bad = edge.flow > 0.3 && edge.errorRate / edge.flow > 0.1;
+    if (bad) bits.push(`${Math.round((100 * edge.errorRate) / edge.flow)}% err`);
+    setOnce(v, `el${index}`, text, "text", bits.join(" · "));
+    setOnce(v, `elb${index}`, el, "data-bad", bad);
+  }
+  for (const [key, el] of v.qcells) {
+    const [id, i] = key.split(":");
+    const node = sim.nodes.get(id);
+    const n = Math.min(8, node.queueMax || 1);
+    setOnce(v, `q${key}`, el, "data-on", node.waiting.length > 0 && +i < Math.ceil((node.waiting.length / Math.max(1, node.queueMax)) * n));
+  }
+  for (const [name, el] of v.knobs) {
+    const flag = sim.flags.get(name);
+    const f = flag ? flag.effective : 0;
+    setOnce(v, `k${name}`, el, "transform", `translate(${(v.data.flagStep[0] * f).toFixed(2)} ${(v.data.flagStep[1] * f).toFixed(2)})`);
+  }
+  for (const [key, el] of v.lanes) {
+    const [id, p] = key.split(":");
+    const log = sim.logs.get(id);
+    setOnce(v, `l${key}`, el, "data-paused", !!log && !sim.readable(log, +p));
+  }
+  for (const [key, el] of v.brokers) {
+    const [id, b] = key.split(":");
+    setOnce(v, `b${key}`, el, "data-down", !sim.logs.get(id).brokers[+b]);
   }
 }
 
@@ -199,6 +268,7 @@ function setView(name) {
   views[view].svg.removeAttribute("hidden");
   views[view].cellState.clear();
   views[view].cursors.forEach((cursor) => (cursor.at = -1));
+  views[view].status.clear();
   document.querySelectorAll(".tp-views button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === name)));
   drawLogs();
   drawPackets();
@@ -208,6 +278,7 @@ let frame = 0;
 let last = 0;
 let visible = false;
 let logClock = 0;
+let statusClock = 0;
 function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
   last = now;
@@ -215,9 +286,14 @@ function tick(now) {
   events(now);
   for (const hook of hooks.tick) hook(dt);
   logClock += dt;
+  statusClock += dt;
   if (logClock > 0.05) {
     logClock = 0;
     drawLogs();
+  }
+  if (statusClock > 0.25) {
+    statusClock = 0;
+    drawStatus();
   }
   drawPackets();
   say(false, now);
@@ -252,8 +328,15 @@ stage.addEventListener("pointerleave", () => {
   if (!pinned) setFocus(null);
 });
 stage.addEventListener("click", (event) => {
+  const part = event.target.closest?.("[data-part^='broker:']");
   const id = nodeAt(event.target);
-  if (id) toggle(id);
+  if (part && id) {
+    const b = +part.dataset.part.slice(7);
+    for (const hook of hooks.takeover) hook(id);
+    sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
+    drawStatus();
+    say(true);
+  } else if (id) toggle(id);
 });
 const ring = [...DATA.spec.nodes].map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
@@ -290,16 +373,19 @@ function resetVisuals(next) {
     });
     v.cellState.clear();
     v.cursors.forEach((cursor) => (cursor.at = -1));
+    v.status.clear();
     for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
   }
   for (const el of lit.keys()) el.removeAttribute("data-on");
   lit.clear();
   sim.events.length = 0;
   drawLogs();
+  drawStatus();
   drawPackets();
   say(true);
 }
 
 window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
 drawLogs();
+drawStatus();
 say(true);

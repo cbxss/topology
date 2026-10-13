@@ -1,0 +1,1521 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Brokers and ISR</title><style>
+.tp{
+  --tp-page:#0a0a0b;--tp-card:#121214;--tp-text:#a4a4a8;--tp-strong:#e8e8ea;--tp-muted:#6c6c72;
+  --tp-face:#1a1a1d;--tp-top:#1d1d20;--tp-lit-top:#28282c;--tp-lit-shade:#1e1e21;
+  --tp-shade-0:#0e0e10;--tp-shade-1:#111113;--tp-shade-2:#151517;--tp-shade-3:#18181b;
+  --tp-hi:#d6d6da;--tp-mid:#6b6b71;--tp-lo:#3d3d42;--tp-faint:#29292d;--tp-lit:#ffffff;
+  --tp-halo:#040405;--tp-halo-opacity:.9;--tp-dot:#e8e8ea;
+  --tp-red:#ff6b6b;--tp-green:#6be0a0;--tp-blue:#6b9bff;--tp-amber:#f0b64a;
+  --tp-weight:.6px;--tp-ease:cubic-bezier(.32,.72,0,1);
+  --tp-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+.tp[data-theme="light"]{
+  --tp-page:#f1f1ee;--tp-card:#fafaf8;--tp-text:#56565a;--tp-strong:#18181a;--tp-muted:#8b8b90;
+  --tp-face:#ffffff;--tp-top:#ffffff;--tp-lit-top:#ffffff;--tp-lit-shade:#ededea;
+  --tp-shade-0:#dbdbd8;--tp-shade-1:#e4e4e1;--tp-shade-2:#ecece9;--tp-shade-3:#f3f3f0;
+  --tp-hi:#25252a;--tp-mid:#89898e;--tp-lo:#b3b3b7;--tp-faint:#d3d3d5;--tp-lit:#000000;
+  --tp-halo:#88887e;--tp-halo-opacity:.3;--tp-dot:#39393d;
+  --tp-red:#e5484d;--tp-green:#30a46c;--tp-blue:#3e63dd;--tp-amber:#c27c0e;
+}
+.k-svg{display:block;width:100%;height:auto;overflow:visible;margin:0 auto}
+.k-svg path,.k-svg circle{vector-effect:non-scaling-stroke}
+.k-fill{fill:var(--tp-card);stroke:none}
+.k-solid[data-lit]>.k-fill{fill:var(--tp-face)}
+.k-shade,.k-top{stroke:none}
+.k-shade[data-shade="0"]{fill:var(--tp-shade-0)}
+.k-shade[data-shade="1"]{fill:var(--tp-shade-1)}
+.k-shade[data-shade="2"]{fill:var(--tp-shade-2)}
+.k-shade[data-shade="3"]{fill:var(--tp-shade-3)}
+.k-top{fill:var(--tp-top)}
+.k-solid[data-lit]>.k-top{fill:var(--tp-lit-top)}
+.k-solid[data-lit]>.k-shade{fill:var(--tp-lit-shade)}
+.k-solid[data-lit]>.k-edge{stroke:var(--tp-lit)}
+.k-halo{fill:var(--tp-halo);stroke:none;filter:blur(9px);opacity:var(--tp-halo-opacity);transform:translateY(3px)}
+.k-line{fill:none;stroke:var(--tp-lo);stroke-width:var(--tp-weight);stroke-linecap:round;stroke-linejoin:round}
+.k-line[data-tone="hi"]{stroke:var(--tp-hi)}
+.k-line[data-tone="mid"]{stroke:var(--tp-mid)}
+.k-line[data-tone="faint"]{stroke:var(--tp-faint)}
+.k-line[data-tone="lit"]{stroke:var(--tp-lit)}
+.k-line[data-dashed]{stroke-dasharray:3 3}
+.k-dots circle{fill:var(--tp-dot);stroke:none;opacity:.32}
+.k-dots[data-tone="hi"] circle{opacity:.85}
+.k-dots[data-tone="mid"] circle{opacity:.45}
+.k-dots[data-tone="lo"] circle{opacity:.22}
+.k-text{fill:var(--tp-mid);font-family:var(--tp-mono);letter-spacing:.04em}
+.k-text[data-tone="hi"]{fill:var(--tp-hi)}
+.k-text[data-tone="lo"]{fill:var(--tp-lo)}
+.k-figure{margin:32px 0 36px}
+.k-card{position:relative;padding:52px 24px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid)}
+.k-corners{position:absolute;inset:18px 20px;pointer-events:none}
+.k-corner{position:absolute;color:var(--tp-muted);font-family:var(--tp-mono);font-size:10.5px;line-height:1;letter-spacing:.04em;white-space:nowrap}
+.k-corner[data-corner="fig"]{top:0;left:0;color:var(--tp-text)}
+.k-corner[data-corner="title"]{top:0;right:0;text-transform:uppercase;letter-spacing:.1em}
+.k-corner[data-corner="hint"]{bottom:0;left:0;text-transform:uppercase;letter-spacing:.1em}
+.k-corner[data-corner="readout"]{right:0;bottom:0;color:var(--tp-text);font-variant-numeric:tabular-nums}
+.k-legend{display:grid;gap:8px;margin-top:12px;color:var(--tp-muted);font-size:13px;line-height:1.55}
+.k-keys{display:flex;flex-wrap:wrap;gap:6px 18px}
+.k-key{display:inline-flex;align-items:center;gap:7px}
+.k-swatch{width:16px;height:10px;flex:none;overflow:visible}
+.k-swatch path{fill:none;stroke:var(--tp-hi);stroke-width:1;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.k-swatch[data-mark="raised"] path{stroke:var(--tp-mid)}
+.k-swatch[data-mark="lit"] path{stroke:var(--tp-lit)}
+.k-swatch[data-mark="dashed"] path{stroke-dasharray:3 2.5}
+.k-swatch[data-mark="red"] path{stroke:var(--tp-red)}
+.k-swatch[data-mark="green"] path{stroke:var(--tp-green)}
+.k-swatch[data-mark="blue"] path{stroke:var(--tp-blue)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+@media (max-width:560px){.k-card{padding:48px 12px 70px}.k-corner[data-corner="hint"]{bottom:18px}}
+
+*{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
+body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="dark"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 5</span><span class="k-corner" data-corner="title">Brokers and ISR</span><span class="k-corner" data-corner="hint">Hover a node · click to fail it · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>345/s in · p50 3.2ms · p99 8.7ms · lag 0 · healthy</span></div><style>
+.tp-stage{position:relative;outline:none;touch-action:manipulation}
+.tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
+.tp-svg[hidden]{display:none}
+.tp-node{cursor:pointer;transition:opacity .25s var(--tp-ease)}
+.tp-edge .k-line{transition:stroke .2s}
+.tp-edge-bed{fill:none;stroke:var(--tp-card);stroke-width:3.4px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.tp-iso .tp-edge-bed{stroke:none}
+.tp-port{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-stage[data-focus] .tp-node:not([data-near]){opacity:.38}
+.tp-stage[data-focus] .tp-edge:not([data-near]) .k-line{stroke:var(--tp-faint)}
+.tp-stage[data-focus] .tp-edge[data-near] .k-line{stroke:var(--tp-hi)}
+.tp-stage[data-focus] .tp-label:not([data-near]) text{fill:var(--tp-lo)}
+.tp-label .tp-ft{fill:var(--tp-text)}
+.tp-node[data-sel] .k-solid>.k-edge{stroke:var(--tp-lit)}
+.tp-node[data-sel] .tp-f{stroke:var(--tp-lit)}
+.tp-led{fill:var(--tp-lo);stroke:none;transition:fill .5s}
+.tp-led[data-on]{fill:var(--tp-green);transition:none}
+.tp-node[data-down] .tp-led{fill:var(--tp-red)}
+.tp-node[data-down]>*:not(.tp-led){opacity:.4}
+.tp-node[data-down] .k-edge,.tp-node[data-down] .tp-f{stroke-dasharray:2 2}
+.tp-screen{fill:var(--tp-shade-0);stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-cell[data-on] .k-top{fill:var(--tp-hi)}
+.tp-cell[data-on] .k-shade{fill:var(--tp-mid)}
+.tp-cell[data-on] .k-edge{stroke:var(--tp-hi)}
+.tp-fcell{fill:var(--tp-card);stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-fcell[data-on]{fill:var(--tp-hi);stroke:var(--tp-hi)}
+.tp-fcursor{fill:none;stroke:var(--tp-lit);stroke-width:1.4px;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.tp-cursor[data-g="1"]{--tp-cur:var(--tp-blue)}
+.tp-fcursor[data-g="1"]{stroke:var(--tp-blue)}
+.tp-fcursor[data-g="2"]{stroke:var(--tp-green)}
+.tp-cursor[data-g="1"] .k-edge{stroke:var(--tp-blue)}
+.tp-cursor[data-g="2"] .k-edge{stroke:var(--tp-green)}
+.tp-f{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-f-back{stroke:var(--tp-lo)}
+.tp-f-top{fill:var(--tp-face)}
+.tp-f-chip{fill:var(--tp-face);stroke:var(--tp-lo)}
+.tp-f-mark{fill:none;stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-fzone{fill:var(--tp-shade-1);stroke:var(--tp-lo);stroke-width:var(--tp-weight);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.tp-ft{fill:var(--tp-hi);font-family:var(--tp-mono);letter-spacing:.02em}
+.tp-ft-dim{fill:var(--tp-muted)}
+.tp-zone .k-text{letter-spacing:.14em}
+.tp-pk{pointer-events:none}
+.tp-pk[data-kind="request"]{--pk:var(--tp-lit)}
+.tp-pk[data-kind="response"]{--pk:var(--tp-mid)}
+.tp-pk[data-kind="record"]{--pk:var(--tp-blue)}
+.tp-pk[data-kind="replication"]{--pk:var(--tp-green)}
+.tp-pk[data-kind="drop"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="error"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
+.tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+.tp-ext .k-edge,.tp-f-ext{stroke-dasharray:2.5 2}
+.tp-f-dot{fill:var(--tp-mid)}
+.tp-f-knob{fill:var(--tp-lit);stroke:none}
+.tp-breaker{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:1px;vector-effect:non-scaling-stroke}
+.tp-breaker[data-state="open"]{fill:var(--tp-red);stroke:var(--tp-red)}
+.tp-breaker[data-state="half"]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-edge[data-breaker="open"] .k-line{stroke:var(--tp-red);stroke-dasharray:1.5 2.5}
+.tp-edge[data-kind="config"] .k-line{stroke-dasharray:1 3}
+.tp-elabel .k-text,.tp-elabel-text{fill:var(--tp-muted);font-variant-numeric:tabular-nums}
+.tp-elabel-text{paint-order:stroke;stroke:var(--tp-card);stroke-width:2.5px;stroke-linejoin:round}
+.tp-elabel[data-bad] .k-text,.tp-elabel[data-bad] .tp-elabel-text{fill:var(--tp-red)}
+.tp-lane{transition:opacity .3s}
+.tp-lane[data-paused]{opacity:.3}
+.tp-broker{cursor:pointer}
+.tp-broker[data-down] .tp-led{fill:var(--tp-red)}
+.tp-broker[data-down]>*:not(.tp-led){opacity:.4}
+.tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
+.tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-story{margin:18px 0 -10px}
+.tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
+.tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-play:focus-visible,.tp-track:focus-visible{outline:1px solid var(--tp-lit);outline-offset:2px}
+.tp-track{position:relative;flex:1;height:28px;cursor:pointer;touch-action:none}
+.tp-track::before{content:"";position:absolute;left:0;right:0;top:20px;height:1px;background:var(--tp-lo)}
+.tp-phase{all:unset;position:absolute;top:0;bottom:0;box-sizing:border-box;border-left:1px solid var(--tp-lo);cursor:pointer}
+.tp-phase span{position:absolute;left:5px;top:2px;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--tp-muted)}
+.tp-phase:hover span,.tp-phase[data-now] span{color:var(--tp-strong)}
+.tp-phase[data-now]{background:color-mix(in srgb,var(--tp-hi) 5%,transparent)}
+.tp-tick{position:absolute;top:16px;width:1px;height:9px;background:var(--tp-mid);pointer-events:none}
+.tp-head{position:absolute;top:12px;height:17px;width:2px;margin-left:-1px;background:var(--tp-lit);pointer-events:none}
+.tp-time{flex:none;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-say{margin:8px 0 0 34px;min-height:3em;font-size:12.5px;line-height:1.5;color:var(--tp-text)}
+.tp-story[data-mode="free"] .tp-track{opacity:.4}
+@media (max-width:560px){.tp-say{margin-left:0}}
+.tp-pk .pk-top{fill:var(--pk)}
+.tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
+.tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
+.tp-pk circle{fill:var(--pk)}
+.tp-views{position:absolute;top:13px;left:50%;transform:translateX(-50%);display:flex;gap:0;z-index:2;font-family:var(--tp-mono);font-size:10px;letter-spacing:.08em}
+.tp-views button{all:unset;cursor:pointer;padding:3px 9px;color:var(--tp-muted);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-views button[aria-pressed="true"]{color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-mid);background:var(--tp-shade-2)}
+.tp-views button:focus-visible{outline:1px solid var(--tp-lit)}
+</style><div class="tp-views" role="group" aria-label="View"><button type="button" data-view="iso" aria-pressed="true">ISO</button><button type="button" data-view="flat" aria-pressed="false">2D</button></div><div class="tp-stage" tabindex="0" role="application" aria-label="Brokers and ISR: hover or arrow keys pick a node, Enter fails or restores it, V switches between isometric and 2D"><svg xmlns="http://www.w3.org/2000/svg" class="k-svg tp-svg tp-iso" viewBox="0 0 640 319" role="img" aria-label="Brokers and ISR: payments-api (service), payments.v1 (kafka), ledger-a (worker), ledger-b (worker). Connections: payments-api to payments.v1; payments.v1 to ledger-a; payments.v1 to ledger-b."><g class="tp-edge" data-edge="0" data-kind="async"><path class="tp-edge-bed" d="M113.1 88.2L239.7 133.4"/><path class="k-line" data-tone="mid" data-dashed d="M113.1 88.2L239.7 133.4"/><path class="k-line" data-tone="mid" data-free="" d="M230.4 132.6L238.1 132.8L234.8 129.2"/><circle class="tp-port" cx="113.1" cy="88.2" r="1.4"/></g><g class="tp-edge" data-edge="1" data-kind="async"><path class="tp-edge-bed" d="M391.3 176.5L442.1 194.7L445.1 195.5L447.8 195.8L450.4 195.5L452.7 194.7L454.9 193.4L468.4 182.8L470.6 181.4L472.9 180.6L475.5 180.3L478.2 180.6L481.2 181.4L541.8 203.1"/><path class="k-line" data-tone="mid" data-dashed d="M391.3 176.5L442.1 194.7L445.1 195.5L447.8 195.8L450.4 195.5L452.7 194.7L454.9 193.4L468.4 182.8L470.6 181.4L472.9 180.6L475.5 180.3L478.2 180.6L481.2 181.4L541.8 203.1"/><path class="k-line" data-tone="mid" data-free="" d="M532.5 202.3L540.2 202.5L536.9 198.8"/></g><g class="tp-edge" data-edge="2" data-kind="async"><path class="tp-edge-bed" d="M372 191.8L432.6 213.4L435.1 214.6L436.6 215.8L437.1 217.2L436.6 218.6L435 220.2L421.5 230.8L420 232.4L419.5 233.9L420 235.2L421.5 236.5L424 237.6L474.8 255.7"/><path class="k-line" data-tone="mid" data-dashed d="M372 191.8L432.6 213.4L435.1 214.6L436.6 215.8L437.1 217.2L436.6 218.6L435 220.2L421.5 230.8L420 232.4L419.5 233.9L420 235.2L421.5 236.5L424 237.6L474.8 255.7"/><path class="k-line" data-tone="mid" data-free="" d="M465.5 254.9L473.1 255.2L469.9 251.5"/></g><g class="tp-label" data-label="api"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 63.0061 93.8332)" font-size="8" text-anchor="middle">payments-api</text></g><g class="tp-label" data-label="topic"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 286.0272 178.1781)" font-size="8" text-anchor="middle">payments.v1</text></g><g class="tp-label" data-label="ledger-a"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 550.6522 229.8374)" font-size="8" text-anchor="middle">ledger-a</text></g><g class="tp-label" data-label="ledger-b"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 483.6441 282.4815)" font-size="8" text-anchor="middle">ledger-b</text></g><g class="tp-elabel" data-elabel="0"><text class="k-text" data-tone="mid" transform="matrix(1.0917 0.3902 -0.7364 0.5785 180.8355 107.3316)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="1"><text class="k-text" data-tone="mid" transform="matrix(1.0917 0.3902 -0.7364 0.5785 512.0974 187.4386)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="2"><text class="k-text" data-tone="mid" transform="matrix(1.0917 0.3902 -0.7364 0.5785 410.4976 200.4977)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-packets" data-packets=""></g><g class="tp-node" data-node="api" data-kind="service"><path class="k-halo" d="M45.1 65.8L45.1 65.6L45.2 65.5L45.3 65.4L67.4 48L67.5 47.9L67.7 47.8L68 47.8L68.2 47.7L68.5 47.7L68.7 47.7L69 47.8L69.2 47.8L121.6 66.6L121.8 66.7L122 66.8L122.1 66.9L122.2 67L122.2 67.2L122.2 78.3L122.2 78.5L122.1 78.6L122 78.7L99.9 96.1L99.7 96.2L99.5 96.3L99.3 96.3L99 96.4L98.8 96.4L98.5 96.4L98.3 96.3L98 96.3L45.6 77.5L45.4 77.4L45.3 77.3L45.2 77.2L45.1 77.1L45.1 76.9Z"/><g class="k-solid"><path class="k-fill" d="M42.4 67.9L43.1 66.8L65.2 49.5L66.7 48.8L68.7 48.6L70.7 48.9L123.1 67.7L124.4 68.5L124.8 69.5L124.8 78.5L124.1 79.5L102.1 96.8L100.5 97.6L98.5 97.8L96.6 97.4L44.2 78.7L42.8 77.9L42.4 76.8Z"/><path class="k-shade" data-shade="0" d="M124.8 69.5L124.1 70.6L124.1 79.5L124.8 78.5ZM124.1 70.6L102.1 87.9L102.1 96.8L124.1 79.5ZM102.1 87.9L100.5 88.6L100.5 97.6L102.1 96.8Z"/><path class="k-shade" data-shade="1" d="M100.5 88.6L98.5 88.8L98.5 97.8L100.5 97.6Z"/><path class="k-shade" data-shade="2" d="M98.5 88.8L96.6 88.5L96.6 97.4L98.5 97.8Z"/><path class="k-shade" data-shade="3" d="M96.6 88.5L44.2 69.7L44.2 78.7L96.6 97.4ZM44.2 69.7L42.8 68.9L42.8 77.9L44.2 78.7ZM42.8 68.9L42.4 67.9L42.4 76.8L42.8 77.9Z"/><path class="k-top" d="M123.1 67.7L124.4 68.5L124.8 69.5L124.1 70.6L102.1 87.9L100.5 88.6L98.5 88.8L96.6 88.5L44.2 69.7L42.8 68.9L42.4 67.9L43.1 66.8L65.2 49.5L66.7 48.8L68.7 48.6L70.7 48.9Z"/><path class="k-line k-crease" data-tone="faint" d="M124.8 69.5L124.1 70.6M124.1 70.6L102.1 87.9M102.1 87.9L100.5 88.6M100.5 88.6L98.5 88.8M98.5 88.8L96.6 88.5M96.6 88.5L44.2 69.7M44.2 69.7L42.8 68.9M42.8 68.9L42.4 67.9"/><path class="k-line k-bevel" data-tone="faint" d="M124 69.5L123.4 70.5M123.4 70.5L101.7 87.5M101.7 87.5L100.2 88.2M100.2 88.2L98.2 88.4M98.2 88.4L96.3 88.1M96.3 88.1L45 69.7M45 69.7L43.6 68.9M43.6 68.9L43.2 67.9"/><path class="k-line k-edge" data-tone="mid" d="M42.4 67.9L43.1 66.8L65.2 49.5L66.7 48.8L68.7 48.6L70.7 48.9L123.1 67.7L124.4 68.5L124.8 69.5L124.8 78.5L124.1 79.5L102.1 96.8L100.5 97.6L98.5 97.8L96.6 97.4L44.2 78.7L42.8 77.9L42.4 76.8Z"/></g><path class="k-line" data-tone="lo" d="M56.2 80.3L66 83.8L66 80.2L56.2 76.7Z"/><path class="k-line" data-tone="lo" d="M68.2 84.6L78 88.1L78 84.5L68.2 81Z"/><path class="k-line" data-tone="lo" d="M80.2 88.9L90 92.4L90 88.8L80.2 85.3Z"/><path class="k-line" data-tone="faint" d="M121.9 77.7L104.3 91.5L104.3 89.8L121.9 75.9Z"/><circle class="tp-led" data-led="api:0" cx="47.4" cy="75.4" r="1.3"/><g class="k-solid"><path class="k-fill" d="M42.4 58L43.1 57L65.2 39.7L66.7 38.9L68.7 38.7L70.7 39.1L123.1 57.8L124.4 58.6L124.8 59.7L124.8 68.6L124.1 69.7L102.1 87L100.5 87.7L98.5 87.9L96.6 87.6L44.2 68.9L42.8 68L42.4 67Z"/><path class="k-shade" data-shade="0" d="M124.8 59.7L124.1 60.7L124.1 69.7L124.8 68.6ZM124.1 60.7L102.1 78.1L102.1 87L124.1 69.7ZM102.1 78.1L100.5 78.8L100.5 87.7L102.1 87Z"/><path class="k-shade" data-shade="1" d="M100.5 78.8L98.5 79L98.5 87.9L100.5 87.7Z"/><path class="k-shade" data-shade="2" d="M98.5 79L96.6 78.7L96.6 87.6L98.5 87.9Z"/><path class="k-shade" data-shade="3" d="M96.6 78.7L44.2 59.9L44.2 68.9L96.6 87.6ZM44.2 59.9L42.8 59.1L42.8 68L44.2 68.9ZM42.8 59.1L42.4 58L42.4 67L42.8 68Z"/><path class="k-top" d="M123.1 57.8L124.4 58.6L124.8 59.7L124.1 60.7L102.1 78.1L100.5 78.8L98.5 79L96.6 78.7L44.2 59.9L42.8 59.1L42.4 58L43.1 57L65.2 39.7L66.7 38.9L68.7 38.7L70.7 39.1Z"/><path class="k-line k-crease" data-tone="faint" d="M124.8 59.7L124.1 60.7M124.1 60.7L102.1 78.1M102.1 78.1L100.5 78.8M100.5 78.8L98.5 79M98.5 79L96.6 78.7M96.6 78.7L44.2 59.9M44.2 59.9L42.8 59.1M42.8 59.1L42.4 58"/><path class="k-line k-bevel" data-tone="faint" d="M124 59.7L123.4 60.7M123.4 60.7L101.7 77.7M101.7 77.7L100.2 78.4M100.2 78.4L98.2 78.6M98.2 78.6L96.3 78.3M96.3 78.3L45 59.9M45 59.9L43.6 59.1M43.6 59.1L43.2 58.1"/><path class="k-line k-edge" data-tone="mid" d="M42.4 58L43.1 57L65.2 39.7L66.7 38.9L68.7 38.7L70.7 39.1L123.1 57.8L124.4 58.6L124.8 59.7L124.8 68.6L124.1 69.7L102.1 87L100.5 87.7L98.5 87.9L96.6 87.6L44.2 68.9L42.8 68L42.4 67Z"/></g><path class="k-line" data-tone="lo" d="M56.2 70.5L66 74L66 70.4L56.2 66.9Z"/><path class="k-line" data-tone="lo" d="M68.2 74.8L78 78.3L78 74.7L68.2 71.2Z"/><path class="k-line" data-tone="lo" d="M80.2 79.1L90 82.6L90 79L80.2 75.5Z"/><path class="k-line" data-tone="faint" d="M121.9 67.8L104.3 81.7L104.3 79.9L121.9 66Z"/><circle class="tp-led" data-led="api:1" cx="47.4" cy="65.6" r="1.3"/><g class="k-solid"><path class="k-fill" d="M42.4 48.2L43.1 47.2L65.2 29.8L66.7 29.1L68.7 28.9L70.7 29.3L123.1 48L124.4 48.8L124.8 49.9L124.8 58.8L124.1 59.8L102.1 77.2L100.5 77.9L98.5 78.1L96.6 77.8L44.2 59L42.8 58.2L42.4 57.1Z"/><path class="k-shade" data-shade="0" d="M124.8 49.9L124.1 50.9L124.1 59.8L124.8 58.8ZM124.1 50.9L102.1 68.3L102.1 77.2L124.1 59.8ZM102.1 68.3L100.5 69L100.5 77.9L102.1 77.2Z"/><path class="k-shade" data-shade="1" d="M100.5 69L98.5 69.2L98.5 78.1L100.5 77.9Z"/><path class="k-shade" data-shade="2" d="M98.5 69.2L96.6 68.8L96.6 77.8L98.5 78.1Z"/><path class="k-shade" data-shade="3" d="M96.6 68.8L44.2 50.1L44.2 59L96.6 77.8ZM44.2 50.1L42.8 49.3L42.8 58.2L44.2 59ZM42.8 49.3L42.4 48.2L42.4 57.1L42.8 58.2Z"/><path class="k-top" d="M123.1 48L124.4 48.8L124.8 49.9L124.1 50.9L102.1 68.3L100.5 69L98.5 69.2L96.6 68.8L44.2 50.1L42.8 49.3L42.4 48.2L43.1 47.2L65.2 29.8L66.7 29.1L68.7 28.9L70.7 29.3Z"/><path class="k-line k-crease" data-tone="faint" d="M124.8 49.9L124.1 50.9M124.1 50.9L102.1 68.3M102.1 68.3L100.5 69M100.5 69L98.5 69.2M98.5 69.2L96.6 68.8M96.6 68.8L44.2 50.1M44.2 50.1L42.8 49.3M42.8 49.3L42.4 48.2"/><path class="k-line k-bevel" data-tone="faint" d="M124 49.9L123.4 50.9M123.4 50.9L101.7 67.9M101.7 67.9L100.2 68.6M100.2 68.6L98.2 68.8M98.2 68.8L96.3 68.4M96.3 68.4L45 50.1M45 50.1L43.6 49.3M43.6 49.3L43.2 48.2"/><path class="k-line k-edge" data-tone="mid" d="M42.4 48.2L43.1 47.2L65.2 29.8L66.7 29.1L68.7 28.9L70.7 29.3L123.1 48L124.4 48.8L124.8 49.9L124.8 58.8L124.1 59.8L102.1 77.2L100.5 77.9L98.5 78.1L96.6 77.8L44.2 59L42.8 58.2L42.4 57.1Z"/></g><path class="k-line" data-tone="lo" d="M56.2 60.6L66 64.2L66 60.6L56.2 57.1Z"/><path class="k-line" data-tone="lo" d="M68.2 64.9L78 68.4L78 64.9L68.2 61.4Z"/><path class="k-line" data-tone="lo" d="M80.2 69.2L90 72.7L90 69.2L80.2 65.7Z"/><path class="k-line" data-tone="faint" d="M121.9 58L104.3 71.9L104.3 70.1L121.9 56.2Z"/><circle class="tp-led" data-led="api:2" cx="47.4" cy="55.7" r="1.3"/><path class="k-line" data-tone="faint" d="M119 49.9L98.4 66.1L48.2 48.2L68.8 32Z"/><g class="k-dots" data-tone="lo"><circle cx="68.2" cy="30.2" r="0.5"/><circle cx="122.3" cy="49.6" r="0.5"/><circle cx="44.9" cy="48.5" r="0.5"/><circle cx="99.1" cy="67.9" r="0.5"/></g></g><g class="tp-node" data-node="topic" data-kind="kafka"><path class="k-halo" d="M226.6 135.3L226.6 135.2L226.7 135L226.8 134.9L257 111.2L257.2 111.1L257.4 111L257.6 110.9L257.9 110.9L258.1 110.9L258.4 110.9L258.6 110.9L258.8 111L394.2 159.4L394.4 159.5L394.6 159.6L394.7 159.7L394.8 159.8L394.8 160L394.8 171.1L394.8 171.3L394.7 171.4L394.6 171.5L364.4 195.2L364.2 195.3L364 195.4L363.8 195.5L363.5 195.5L363.3 195.5L363 195.5L362.8 195.5L362.5 195.4L227.2 147L227 147L226.8 146.8L226.7 146.7L226.6 146.6L226.6 146.5Z"/><g class="k-solid"><path class="k-fill" d="M224 139.6L224.6 138.6L254.8 114.9L256.4 114.2L258.4 114L260.3 114.3L395.7 162.7L397 163.5L397.4 164.6L397.4 171.3L396.7 172.3L366.6 196L365 196.7L363 196.9L361.1 196.6L225.7 148.2L224.4 147.4L224 146.3Z"/><path class="k-shade" data-shade="0" d="M397.4 164.6L396.7 165.6L396.7 172.3L397.4 171.3ZM396.7 165.6L366.6 189.3L366.6 196L396.7 172.3ZM366.6 189.3L365 190L365 196.7L366.6 196Z"/><path class="k-shade" data-shade="1" d="M365 190L363 190.2L363 196.9L365 196.7Z"/><path class="k-shade" data-shade="2" d="M363 190.2L361.1 189.9L361.1 196.6L363 196.9Z"/><path class="k-shade" data-shade="3" d="M361.1 189.9L225.7 141.5L225.7 148.2L361.1 196.6ZM225.7 141.5L224.4 140.7L224.4 147.4L225.7 148.2ZM224.4 140.7L224 139.6L224 146.3L224.4 147.4Z"/><path class="k-top" d="M395.7 162.7L397 163.5L397.4 164.6L396.7 165.6L366.6 189.3L365 190L363 190.2L361.1 189.9L225.7 141.5L224.4 140.7L224 139.6L224.6 138.6L254.8 114.9L256.4 114.2L258.4 114L260.3 114.3Z"/><path class="k-line k-crease" data-tone="faint" d="M397.4 164.6L396.7 165.6M396.7 165.6L366.6 189.3M366.6 189.3L365 190M365 190L363 190.2M363 190.2L361.1 189.9M361.1 189.9L225.7 141.5M225.7 141.5L224.4 140.7M224.4 140.7L224 139.6"/><path class="k-line k-bevel" data-tone="faint" d="M396.4 164.4L395.7 165.4M395.7 165.4L365.9 188.9M365.9 188.9L364.4 189.6M364.4 189.6L362.4 189.8M362.4 189.8L360.5 189.4M360.5 189.4L226.7 141.6M226.7 141.6L225.4 140.8M225.4 140.8L225 139.8"/><path class="k-line k-edge" data-tone="mid" d="M224 139.6L224.6 138.6L254.8 114.9L256.4 114.2L258.4 114L260.3 114.3L395.7 162.7L397 163.5L397.4 164.6L397.4 171.3L396.7 172.3L366.6 196L365 196.7L363 196.9L361.1 196.6L225.7 148.2L224.4 147.4L224 146.3Z"/></g><g class="tp-broker" data-part="broker:2"><g class="k-solid"><path class="k-fill" d="M232 133.9L232.2 133.3L239.1 127.9L239.9 127.6L240.9 127.7L251.8 131.6L252.4 132.1L252.4 137.6L252.2 138.2L245.3 143.6L244.4 143.9L243.4 143.8L232.5 139.9L232 139.4Z"/><path class="k-shade" data-shade="0" d="M252.4 132.1L252.2 132.6L252.2 138.2L252.4 137.6ZM252.2 132.6L245.3 138L245.3 143.6L252.2 138.2ZM245.3 138L244.4 138.3L244.4 143.9L245.3 143.6Z"/><path class="k-shade" data-shade="2" d="M244.4 138.3L243.4 138.2L243.4 143.8L244.4 143.9Z"/><path class="k-shade" data-shade="3" d="M243.4 138.2L232.5 134.3L232.5 139.9L243.4 143.8ZM232.5 134.3L232 133.9L232 139.4L232.5 139.9Z"/><path class="k-top" d="M251.8 131.6L252.4 132.1L252.2 132.6L245.3 138L244.4 138.3L243.4 138.2L232.5 134.3L232 133.9L232.2 133.3L239.1 127.9L239.9 127.6L240.9 127.7Z"/><path class="k-line k-crease" data-tone="faint" d="M252.4 132.1L252.2 132.6M252.2 132.6L245.3 138M245.3 138L244.4 138.3M244.4 138.3L243.4 138.2M243.4 138.2L232.5 134.3M232.5 134.3L232 133.9"/><path class="k-line k-bevel" data-tone="faint" d="M251.9 132.1L251.7 132.6M251.7 132.6L245.1 137.8M245.1 137.8L244.3 138M244.3 138L243.4 137.9M243.4 137.9L233 134.2M233 134.2L232.5 133.8"/><path class="k-line k-edge" data-tone="mid" d="M232 133.9L232.2 133.3L239.1 127.9L239.9 127.6L240.9 127.7L251.8 131.6L252.4 132.1L252.4 137.6L252.2 138.2L245.3 143.6L244.4 143.9L243.4 143.8L232.5 139.9L232 139.4Z"/></g><circle class="tp-led" data-led="topic:b2" cx="248.7" cy="138.1" r="1"/></g><g class="tp-broker" data-part="broker:1"><g class="k-solid"><path class="k-fill" d="M241.5 126.3L241.7 125.8L248.7 120.4L249.5 120.1L250.5 120.2L261.4 124.1L262 124.5L262 130.1L261.8 130.6L254.8 136.1L254 136.4L253 136.3L242.1 132.4L241.5 131.9Z"/><path class="k-shade" data-shade="0" d="M262 124.5L261.8 125.1L261.8 130.6L262 130.1ZM261.8 125.1L254.8 130.5L254.8 136.1L261.8 130.6ZM254.8 130.5L254 130.8L254 136.4L254.8 136.1Z"/><path class="k-shade" data-shade="2" d="M254 130.8L253 130.7L253 136.3L254 136.4Z"/><path class="k-shade" data-shade="3" d="M253 130.7L242.1 126.8L242.1 132.4L253 136.3ZM242.1 126.8L241.5 126.3L241.5 131.9L242.1 132.4Z"/><path class="k-top" d="M261.4 124.1L262 124.5L261.8 125.1L254.8 130.5L254 130.8L253 130.7L242.1 126.8L241.5 126.3L241.7 125.8L248.7 120.4L249.5 120.1L250.5 120.2Z"/><path class="k-line k-crease" data-tone="faint" d="M262 124.5L261.8 125.1M261.8 125.1L254.8 130.5M254.8 130.5L254 130.8M254 130.8L253 130.7M253 130.7L242.1 126.8M242.1 126.8L241.5 126.3"/><path class="k-line k-bevel" data-tone="faint" d="M261.4 124.6L261.2 125.1M261.2 125.1L254.7 130.2M254.7 130.2L253.9 130.5M253.9 130.5L252.9 130.4M252.9 130.4L242.6 126.7M242.6 126.7L242.1 126.3"/><path class="k-line k-edge" data-tone="mid" d="M241.5 126.3L241.7 125.8L248.7 120.4L249.5 120.1L250.5 120.2L261.4 124.1L262 124.5L262 130.1L261.8 130.6L254.8 136.1L254 136.4L253 136.3L242.1 132.4L241.5 131.9Z"/></g><circle class="tp-led" data-led="topic:b1" cx="258.3" cy="130.6" r="1"/></g><g class="tp-broker" data-part="broker:0"><g class="k-solid"><path class="k-fill" d="M251.1 118.8L251.3 118.3L258.2 112.9L259.1 112.6L260.1 112.7L271 116.6L271.5 117L271.5 122.6L271.3 123.1L264.4 128.6L263.6 128.9L262.6 128.8L251.7 124.9L251.1 124.4Z"/><path class="k-shade" data-shade="0" d="M271.5 117L271.3 117.5L271.3 123.1L271.5 122.6ZM271.3 117.5L264.4 123L264.4 128.6L271.3 123.1ZM264.4 123L263.6 123.3L263.6 128.9L264.4 128.6Z"/><path class="k-shade" data-shade="2" d="M263.6 123.3L262.6 123.2L262.6 128.8L263.6 128.9Z"/><path class="k-shade" data-shade="3" d="M262.6 123.2L251.7 119.3L251.7 124.9L262.6 128.8ZM251.7 119.3L251.1 118.8L251.1 124.4L251.7 124.9Z"/><path class="k-top" d="M271 116.6L271.5 117L271.3 117.5L264.4 123L263.6 123.3L262.6 123.2L251.7 119.3L251.1 118.8L251.3 118.3L258.2 112.9L259.1 112.6L260.1 112.7Z"/><path class="k-line k-crease" data-tone="faint" d="M271.5 117L271.3 117.5M271.3 117.5L264.4 123M264.4 123L263.6 123.3M263.6 123.3L262.6 123.2M262.6 123.2L251.7 119.3M251.7 119.3L251.1 118.8"/><path class="k-line k-bevel" data-tone="faint" d="M271 117.1L270.8 117.6M270.8 117.6L264.2 122.7M264.2 122.7L263.5 123M263.5 123L262.5 122.9M262.5 122.9L252.2 119.2M252.2 119.2L251.6 118.8"/><path class="k-line k-edge" data-tone="mid" d="M251.1 118.8L251.3 118.3L258.2 112.9L259.1 112.6L260.1 112.7L271 116.6L271.5 117L271.5 122.6L271.3 123.1L264.4 128.6L263.6 128.9L262.6 128.8L251.7 124.9L251.1 124.4Z"/></g><circle class="tp-led" data-led="topic:b0" cx="267.9" cy="123.1" r="1"/></g><g class="tp-lane" data-lane="topic:0"><g class="k-solid"><path class="k-fill" d="M285.5 135.4L285.7 134.9L290.8 130.9L291.7 130.6L292.6 130.7L386.5 164.2L387.1 164.7L387.1 165.3L386.9 165.9L381.7 169.9L380.9 170.2L379.9 170.1L286 136.5L285.5 136.1Z"/><path class="k-shade" data-shade="0" d="M387.1 164.7L386.9 165.2L386.9 165.9L387.1 165.3ZM386.9 165.2L381.7 169.2L381.7 169.9L386.9 165.9ZM381.7 169.2L380.9 169.5L380.9 170.2L381.7 169.9Z"/><path class="k-shade" data-shade="2" d="M380.9 169.5L379.9 169.4L379.9 170.1L380.9 170.2Z"/><path class="k-shade" data-shade="3" d="M379.9 169.4L286 135.9L286 136.5L379.9 170.1ZM286 135.9L285.5 135.4L285.5 136.1L286 136.5Z"/><path class="k-top" d="M386.5 164.2L387.1 164.7L386.9 165.2L381.7 169.2L380.9 169.5L379.9 169.4L286 135.9L285.5 135.4L285.7 134.9L290.8 130.9L291.7 130.6L292.6 130.7Z"/><path class="k-line k-edge" data-tone="lo" d="M285.5 135.4L285.7 134.9L290.8 130.9L291.7 130.6L292.6 130.7L386.5 164.2L387.1 164.7L387.1 165.3L386.9 165.9L381.7 169.9L380.9 170.2L379.9 170.1L286 136.5L285.5 136.1Z"/></g><g class="tp-cell" data-cell="topic:0:0"><g class="k-solid"><path class="k-fill" d="M289.2 133.3L289.3 133L293.1 130L293.6 129.8L294.2 129.9L299 131.6L299.3 131.8L299.3 134.3L299.2 134.6L295.4 137.6L294.9 137.8L294.3 137.7L289.5 136L289.2 135.8Z"/><path class="k-shade" data-shade="0" d="M299.3 131.8L299.2 132.2L299.2 134.6L299.3 134.3ZM299.2 132.2L295.4 135.2L295.4 137.6L299.2 134.6ZM295.4 135.2L294.9 135.3L294.9 137.8L295.4 137.6Z"/><path class="k-shade" data-shade="2" d="M294.9 135.3L294.3 135.3L294.3 137.7L294.9 137.8Z"/><path class="k-shade" data-shade="3" d="M294.3 135.3L289.5 133.6L289.5 136L294.3 137.7ZM289.5 133.6L289.2 133.3L289.2 135.8L289.5 136Z"/><path class="k-top" d="M299 131.6L299.3 131.8L299.2 132.2L295.4 135.2L294.9 135.3L294.3 135.3L289.5 133.6L289.2 133.3L289.3 133L293.1 130L293.6 129.8L294.2 129.9Z"/><path class="k-line k-edge" data-tone="lo" d="M289.2 133.3L289.3 133L293.1 130L293.6 129.8L294.2 129.9L299 131.6L299.3 131.8L299.3 134.3L299.2 134.6L295.4 137.6L294.9 137.8L294.3 137.7L289.5 136L289.2 135.8Z"/></g></g><g class="tp-cell" data-cell="topic:0:1"><g class="k-solid"><path class="k-fill" d="M296.8 136L296.9 135.7L300.7 132.7L301.2 132.5L301.8 132.6L306.6 134.3L307 134.6L307 137L306.9 137.3L303 140.4L302.5 140.5L301.9 140.5L297.1 138.8L296.8 138.5Z"/><path class="k-shade" data-shade="0" d="M307 134.6L306.9 134.9L306.9 137.3L307 137ZM306.9 134.9L303 137.9L303 140.4L306.9 137.3ZM303 137.9L302.5 138.1L302.5 140.5L303 140.4Z"/><path class="k-shade" data-shade="2" d="M302.5 138.1L301.9 138L301.9 140.5L302.5 140.5Z"/><path class="k-shade" data-shade="3" d="M301.9 138L297.1 136.3L297.1 138.8L301.9 140.5ZM297.1 136.3L296.8 136L296.8 138.5L297.1 138.8Z"/><path class="k-top" d="M306.6 134.3L307 134.6L306.9 134.9L303 137.9L302.5 138.1L301.9 138L297.1 136.3L296.8 136L296.9 135.7L300.7 132.7L301.2 132.5L301.8 132.6Z"/><path class="k-line k-edge" data-tone="lo" d="M296.8 136L296.9 135.7L300.7 132.7L301.2 132.5L301.8 132.6L306.6 134.3L307 134.6L307 137L306.9 137.3L303 140.4L302.5 140.5L301.9 140.5L297.1 138.8L296.8 138.5Z"/></g></g><g class="tp-cell" data-cell="topic:0:2"><g class="k-solid"><path class="k-fill" d="M304.4 138.8L304.6 138.4L308.4 135.4L308.9 135.3L309.5 135.3L314.3 137L314.6 137.3L314.6 139.8L314.5 140.1L310.7 143.1L310.2 143.3L309.6 143.2L304.8 141.5L304.4 141.2Z"/><path class="k-shade" data-shade="0" d="M314.6 137.3L314.5 137.6L314.5 140.1L314.6 139.8ZM314.5 137.6L310.7 140.6L310.7 143.1L314.5 140.1ZM310.7 140.6L310.2 140.8L310.2 143.3L310.7 143.1Z"/><path class="k-shade" data-shade="2" d="M310.2 140.8L309.6 140.7L309.6 143.2L310.2 143.3Z"/><path class="k-shade" data-shade="3" d="M309.6 140.7L304.8 139L304.8 141.5L309.6 143.2ZM304.8 139L304.4 138.8L304.4 141.2L304.8 141.5Z"/><path class="k-top" d="M314.3 137L314.6 137.3L314.5 137.6L310.7 140.6L310.2 140.8L309.6 140.7L304.8 139L304.4 138.8L304.6 138.4L308.4 135.4L308.9 135.3L309.5 135.3Z"/><path class="k-line k-edge" data-tone="lo" d="M304.4 138.8L304.6 138.4L308.4 135.4L308.9 135.3L309.5 135.3L314.3 137L314.6 137.3L314.6 139.8L314.5 140.1L310.7 143.1L310.2 143.3L309.6 143.2L304.8 141.5L304.4 141.2Z"/></g></g><g class="tp-cell" data-cell="topic:0:3"><g class="k-solid"><path class="k-fill" d="M312.1 141.5L312.2 141.2L316 138.2L316.5 138L317.1 138.1L321.9 139.8L322.3 140L322.3 142.5L322.1 142.8L318.3 145.8L317.8 146L317.2 145.9L312.4 144.2L312.1 143.9Z"/><path class="k-shade" data-shade="0" d="M322.3 140L322.1 140.4L322.1 142.8L322.3 142.5ZM322.1 140.4L318.3 143.4L318.3 145.8L322.1 142.8ZM318.3 143.4L317.8 143.5L317.8 146L318.3 145.8Z"/><path class="k-shade" data-shade="2" d="M317.8 143.5L317.2 143.5L317.2 145.9L317.8 146Z"/><path class="k-shade" data-shade="3" d="M317.2 143.5L312.4 141.8L312.4 144.2L317.2 145.9ZM312.4 141.8L312.1 141.5L312.1 143.9L312.4 144.2Z"/><path class="k-top" d="M321.9 139.8L322.3 140L322.1 140.4L318.3 143.4L317.8 143.5L317.2 143.5L312.4 141.8L312.1 141.5L312.2 141.2L316 138.2L316.5 138L317.1 138.1Z"/><path class="k-line k-edge" data-tone="lo" d="M312.1 141.5L312.2 141.2L316 138.2L316.5 138L317.1 138.1L321.9 139.8L322.3 140L322.3 142.5L322.1 142.8L318.3 145.8L317.8 146L317.2 145.9L312.4 144.2L312.1 143.9Z"/></g></g><g class="tp-cell" data-cell="topic:0:4"><g class="k-solid"><path class="k-fill" d="M319.7 144.2L319.8 143.9L323.7 140.9L324.2 140.7L324.8 140.8L329.6 142.5L329.9 142.8L329.9 145.2L329.8 145.5L326 148.5L325.4 148.7L324.9 148.7L320.1 146.9L319.7 146.7Z"/><path class="k-shade" data-shade="0" d="M329.9 142.8L329.8 143.1L329.8 145.5L329.9 145.2ZM329.8 143.1L326 146.1L326 148.5L329.8 145.5ZM326 146.1L325.4 146.3L325.4 148.7L326 148.5Z"/><path class="k-shade" data-shade="2" d="M325.4 146.3L324.9 146.2L324.9 148.7L325.4 148.7Z"/><path class="k-shade" data-shade="3" d="M324.9 146.2L320.1 144.5L320.1 146.9L324.9 148.7ZM320.1 144.5L319.7 144.2L319.7 146.7L320.1 146.9Z"/><path class="k-top" d="M329.6 142.5L329.9 142.8L329.8 143.1L326 146.1L325.4 146.3L324.9 146.2L320.1 144.5L319.7 144.2L319.8 143.9L323.7 140.9L324.2 140.7L324.8 140.8Z"/><path class="k-line k-edge" data-tone="lo" d="M319.7 144.2L319.8 143.9L323.7 140.9L324.2 140.7L324.8 140.8L329.6 142.5L329.9 142.8L329.9 145.2L329.8 145.5L326 148.5L325.4 148.7L324.9 148.7L320.1 146.9L319.7 146.7Z"/></g></g><g class="tp-cell" data-cell="topic:0:5"><g class="k-solid"><path class="k-fill" d="M327.4 147L327.5 146.6L331.3 143.6L331.8 143.5L332.4 143.5L337.2 145.2L337.5 145.5L337.5 148L337.4 148.3L333.6 151.3L333.1 151.5L332.5 151.4L327.7 149.7L327.4 149.4Z"/><path class="k-shade" data-shade="0" d="M337.5 145.5L337.4 145.8L337.4 148.3L337.5 148ZM337.4 145.8L333.6 148.8L333.6 151.3L337.4 148.3ZM333.6 148.8L333.1 149L333.1 151.5L333.6 151.3Z"/><path class="k-shade" data-shade="2" d="M333.1 149L332.5 148.9L332.5 151.4L333.1 151.5Z"/><path class="k-shade" data-shade="3" d="M332.5 148.9L327.7 147.2L327.7 149.7L332.5 151.4ZM327.7 147.2L327.4 147L327.4 149.4L327.7 149.7Z"/><path class="k-top" d="M337.2 145.2L337.5 145.5L337.4 145.8L333.6 148.8L333.1 149L332.5 148.9L327.7 147.2L327.4 147L327.5 146.6L331.3 143.6L331.8 143.5L332.4 143.5Z"/><path class="k-line k-edge" data-tone="lo" d="M327.4 147L327.5 146.6L331.3 143.6L331.8 143.5L332.4 143.5L337.2 145.2L337.5 145.5L337.5 148L337.4 148.3L333.6 151.3L333.1 151.5L332.5 151.4L327.7 149.7L327.4 149.4Z"/></g></g><g class="tp-cell" data-cell="topic:0:6"><g class="k-solid"><path class="k-fill" d="M335 149.7L335.1 149.4L339 146.4L339.5 146.2L340.1 146.2L344.9 148L345.2 148.2L345.2 150.7L345.1 151L341.2 154L340.7 154.2L340.1 154.1L335.3 152.4L335 152.1Z"/><path class="k-shade" data-shade="0" d="M345.2 148.2L345.1 148.5L345.1 151L345.2 150.7ZM345.1 148.5L341.2 151.6L341.2 154L345.1 151ZM341.2 151.6L340.7 151.7L340.7 154.2L341.2 154Z"/><path class="k-shade" data-shade="2" d="M340.7 151.7L340.1 151.7L340.1 154.1L340.7 154.2Z"/><path class="k-shade" data-shade="3" d="M340.1 151.7L335.3 150L335.3 152.4L340.1 154.1ZM335.3 150L335 149.7L335 152.1L335.3 152.4Z"/><path class="k-top" d="M344.9 148L345.2 148.2L345.1 148.5L341.2 151.6L340.7 151.7L340.1 151.7L335.3 150L335 149.7L335.1 149.4L339 146.4L339.5 146.2L340.1 146.2Z"/><path class="k-line k-edge" data-tone="lo" d="M335 149.7L335.1 149.4L339 146.4L339.5 146.2L340.1 146.2L344.9 148L345.2 148.2L345.2 150.7L345.1 151L341.2 154L340.7 154.2L340.1 154.1L335.3 152.4L335 152.1Z"/></g></g><g class="tp-cell" data-cell="topic:0:7"><g class="k-solid"><path class="k-fill" d="M342.6 152.4L342.8 152.1L346.6 149.1L347.1 148.9L347.7 149L352.5 150.7L352.8 151L352.8 153.4L352.7 153.7L348.9 156.7L348.4 156.9L347.8 156.9L343 155.1L342.6 154.9Z"/><path class="k-shade" data-shade="0" d="M352.8 151L352.7 151.3L352.7 153.7L352.8 153.4ZM352.7 151.3L348.9 154.3L348.9 156.7L352.7 153.7ZM348.9 154.3L348.4 154.5L348.4 156.9L348.9 156.7Z"/><path class="k-shade" data-shade="2" d="M348.4 154.5L347.8 154.4L347.8 156.9L348.4 156.9Z"/><path class="k-shade" data-shade="3" d="M347.8 154.4L343 152.7L343 155.1L347.8 156.9ZM343 152.7L342.6 152.4L342.6 154.9L343 155.1Z"/><path class="k-top" d="M352.5 150.7L352.8 151L352.7 151.3L348.9 154.3L348.4 154.5L347.8 154.4L343 152.7L342.6 152.4L342.8 152.1L346.6 149.1L347.1 148.9L347.7 149Z"/><path class="k-line k-edge" data-tone="lo" d="M342.6 152.4L342.8 152.1L346.6 149.1L347.1 148.9L347.7 149L352.5 150.7L352.8 151L352.8 153.4L352.7 153.7L348.9 156.7L348.4 156.9L347.8 156.9L343 155.1L342.6 154.9Z"/></g></g><g class="tp-cell" data-cell="topic:0:8"><g class="k-solid"><path class="k-fill" d="M350.3 155.1L350.4 154.8L354.2 151.8L354.7 151.6L355.3 151.7L360.1 153.4L360.5 153.7L360.5 156.2L360.4 156.5L356.5 159.5L356 159.7L355.4 159.6L350.6 157.9L350.3 157.6Z"/><path class="k-shade" data-shade="0" d="M360.5 153.7L360.4 154L360.4 156.5L360.5 156.2ZM360.4 154L356.5 157L356.5 159.5L360.4 156.5ZM356.5 157L356 157.2L356 159.7L356.5 159.5Z"/><path class="k-shade" data-shade="2" d="M356 157.2L355.4 157.1L355.4 159.6L356 159.7Z"/><path class="k-shade" data-shade="3" d="M355.4 157.1L350.6 155.4L350.6 157.9L355.4 159.6ZM350.6 155.4L350.3 155.1L350.3 157.6L350.6 157.9Z"/><path class="k-top" d="M360.1 153.4L360.5 153.7L360.4 154L356.5 157L356 157.2L355.4 157.1L350.6 155.4L350.3 155.1L350.4 154.8L354.2 151.8L354.7 151.6L355.3 151.7Z"/><path class="k-line k-edge" data-tone="lo" d="M350.3 155.1L350.4 154.8L354.2 151.8L354.7 151.6L355.3 151.7L360.1 153.4L360.5 153.7L360.5 156.2L360.4 156.5L356.5 159.5L356 159.7L355.4 159.6L350.6 157.9L350.3 157.6Z"/></g></g><g class="tp-cell" data-cell="topic:0:9"><g class="k-solid"><path class="k-fill" d="M357.9 157.9L358 157.6L361.9 154.6L362.4 154.4L363 154.4L367.8 156.2L368.1 156.4L368.1 158.9L368 159.2L364.2 162.2L363.7 162.4L363.1 162.3L358.3 160.6L357.9 160.3Z"/><path class="k-shade" data-shade="0" d="M368.1 156.4L368 156.7L368 159.2L368.1 158.9ZM368 156.7L364.2 159.7L364.2 162.2L368 159.2ZM364.2 159.7L363.7 159.9L363.7 162.4L364.2 162.2Z"/><path class="k-shade" data-shade="2" d="M363.7 159.9L363.1 159.9L363.1 162.3L363.7 162.4Z"/><path class="k-shade" data-shade="3" d="M363.1 159.9L358.3 158.1L358.3 160.6L363.1 162.3ZM358.3 158.1L357.9 157.9L357.9 160.3L358.3 160.6Z"/><path class="k-top" d="M367.8 156.2L368.1 156.4L368 156.7L364.2 159.7L363.7 159.9L363.1 159.9L358.3 158.1L357.9 157.9L358 157.6L361.9 154.6L362.4 154.4L363 154.4Z"/><path class="k-line k-edge" data-tone="lo" d="M357.9 157.9L358 157.6L361.9 154.6L362.4 154.4L363 154.4L367.8 156.2L368.1 156.4L368.1 158.9L368 159.2L364.2 162.2L363.7 162.4L363.1 162.3L358.3 160.6L357.9 160.3Z"/></g></g><g class="tp-cell" data-cell="topic:0:10"><g class="k-solid"><path class="k-fill" d="M365.6 160.6L365.7 160.3L369.5 157.3L370 157.1L370.6 157.2L375.4 158.9L375.8 159.2L375.8 161.6L375.6 161.9L371.8 164.9L371.3 165.1L370.7 165.1L365.9 163.3L365.6 163.1Z"/><path class="k-shade" data-shade="0" d="M375.8 159.2L375.6 159.5L375.6 161.9L375.8 161.6ZM375.6 159.5L371.8 162.5L371.8 164.9L375.6 161.9ZM371.8 162.5L371.3 162.7L371.3 165.1L371.8 164.9Z"/><path class="k-shade" data-shade="2" d="M371.3 162.7L370.7 162.6L370.7 165.1L371.3 165.1Z"/><path class="k-shade" data-shade="3" d="M370.7 162.6L365.9 160.9L365.9 163.3L370.7 165.1ZM365.9 160.9L365.6 160.6L365.6 163.1L365.9 163.3Z"/><path class="k-top" d="M375.4 158.9L375.8 159.2L375.6 159.5L371.8 162.5L371.3 162.7L370.7 162.6L365.9 160.9L365.6 160.6L365.7 160.3L369.5 157.3L370 157.1L370.6 157.2Z"/><path class="k-line k-edge" data-tone="lo" d="M365.6 160.6L365.7 160.3L369.5 157.3L370 157.1L370.6 157.2L375.4 158.9L375.8 159.2L375.8 161.6L375.6 161.9L371.8 164.9L371.3 165.1L370.7 165.1L365.9 163.3L365.6 163.1Z"/></g></g><g class="tp-cell" data-cell="topic:0:11"><g class="k-solid"><path class="k-fill" d="M373.2 163.3L373.3 163L377.2 160L377.7 159.8L378.3 159.9L383.1 161.6L383.4 161.9L383.4 164.3L383.3 164.7L379.4 167.7L378.9 167.8L378.4 167.8L373.5 166.1L373.2 165.8Z"/><path class="k-shade" data-shade="0" d="M383.4 161.9L383.3 162.2L383.3 164.7L383.4 164.3ZM383.3 162.2L379.4 165.2L379.4 167.7L383.3 164.7ZM379.4 165.2L378.9 165.4L378.9 167.8L379.4 167.7Z"/><path class="k-shade" data-shade="2" d="M378.9 165.4L378.4 165.3L378.4 167.8L378.9 167.8Z"/><path class="k-shade" data-shade="3" d="M378.4 165.3L373.5 163.6L373.5 166.1L378.4 167.8ZM373.5 163.6L373.2 163.3L373.2 165.8L373.5 166.1Z"/><path class="k-top" d="M383.1 161.6L383.4 161.9L383.3 162.2L379.4 165.2L378.9 165.4L378.4 165.3L373.5 163.6L373.2 163.3L373.3 163L377.2 160L377.7 159.8L378.3 159.9Z"/><path class="k-line k-edge" data-tone="lo" d="M373.2 163.3L373.3 163L377.2 160L377.7 159.8L378.3 159.9L383.1 161.6L383.4 161.9L383.4 164.3L383.3 164.7L379.4 167.7L378.9 167.8L378.4 167.8L373.5 166.1L373.2 165.8Z"/></g></g><g class="tp-cursor" data-cursor="topic:0:0" data-g="0"><g class="k-solid" data-lit><path class="k-fill" d="M285.9 131.3L293.2 125.5L294 125.5L294.8 125.8L295 126.2L295 131.1L287.6 136.9L286.9 136.9L286 136.6L285.9 136.2Z"/><path class="k-shade" data-shade="0" d="M295 126.2L287.6 132L287.6 136.9L295 131.1Z"/><path class="k-shade" data-shade="1" d="M287.6 132L286.9 132L286.9 136.9L287.6 136.9Z"/><path class="k-shade" data-shade="3" d="M286.9 132L286 131.7L286 136.6L286.9 136.9ZM286 131.7L285.9 131.3L285.9 136.2L286 136.6Z"/><path class="k-top" d="M294.8 125.8L295 126.2L287.6 132L286.9 132L286 131.7L285.9 131.3L293.2 125.5L294 125.5Z"/><path class="k-line k-crease" data-tone="faint" d="M295 126.2L287.6 132M287.6 132L286.9 132M286.9 132L286 131.7M286 131.7L285.9 131.3"/><path class="k-line k-edge" data-tone="hi" d="M285.9 131.3L293.2 125.5L294 125.5L294.8 125.8L295 126.2L295 131.1L287.6 136.9L286.9 136.9L286 136.6L285.9 136.2Z"/></g></g></g><g class="tp-lane" data-lane="topic:1"><g class="k-solid"><path class="k-fill" d="M277.4 141.8L277.6 141.3L282.7 137.2L283.6 136.9L284.5 137L378.4 170.6L379 171L379 171.7L378.8 172.2L373.6 176.3L372.8 176.6L371.8 176.5L277.9 142.9L277.4 142.5Z"/><path class="k-shade" data-shade="0" d="M379 171L378.8 171.6L378.8 172.2L379 171.7ZM378.8 171.6L373.6 175.6L373.6 176.3L378.8 172.2ZM373.6 175.6L372.8 175.9L372.8 176.6L373.6 176.3Z"/><path class="k-shade" data-shade="2" d="M372.8 175.9L371.8 175.8L371.8 176.5L372.8 176.6Z"/><path class="k-shade" data-shade="3" d="M371.8 175.8L277.9 142.2L277.9 142.9L371.8 176.5ZM277.9 142.2L277.4 141.8L277.4 142.5L277.9 142.9Z"/><path class="k-top" d="M378.4 170.6L379 171L378.8 171.6L373.6 175.6L372.8 175.9L371.8 175.8L277.9 142.2L277.4 141.8L277.6 141.3L282.7 137.2L283.6 136.9L284.5 137Z"/><path class="k-line k-edge" data-tone="lo" d="M277.4 141.8L277.6 141.3L282.7 137.2L283.6 136.9L284.5 137L378.4 170.6L379 171L379 171.7L378.8 172.2L373.6 176.3L372.8 176.6L371.8 176.5L277.9 142.9L277.4 142.5Z"/></g><g class="tp-cell" data-cell="topic:1:0"><g class="k-solid"><path class="k-fill" d="M281.1 139.7L281.2 139.3L285 136.3L285.5 136.2L286.1 136.2L290.9 137.9L291.2 138.2L291.2 140.7L291.1 141L287.3 144L286.8 144.2L286.2 144.1L281.4 142.4L281.1 142.1Z"/><path class="k-shade" data-shade="0" d="M291.2 138.2L291.1 138.5L291.1 141L291.2 140.7ZM291.1 138.5L287.3 141.5L287.3 144L291.1 141ZM287.3 141.5L286.8 141.7L286.8 144.2L287.3 144Z"/><path class="k-shade" data-shade="2" d="M286.8 141.7L286.2 141.6L286.2 144.1L286.8 144.2Z"/><path class="k-shade" data-shade="3" d="M286.2 141.6L281.4 139.9L281.4 142.4L286.2 144.1ZM281.4 139.9L281.1 139.7L281.1 142.1L281.4 142.4Z"/><path class="k-top" d="M290.9 137.9L291.2 138.2L291.1 138.5L287.3 141.5L286.8 141.7L286.2 141.6L281.4 139.9L281.1 139.7L281.2 139.3L285 136.3L285.5 136.2L286.1 136.2Z"/><path class="k-line k-edge" data-tone="lo" d="M281.1 139.7L281.2 139.3L285 136.3L285.5 136.2L286.1 136.2L290.9 137.9L291.2 138.2L291.2 140.7L291.1 141L287.3 144L286.8 144.2L286.2 144.1L281.4 142.4L281.1 142.1Z"/></g></g><g class="tp-cell" data-cell="topic:1:1"><g class="k-solid"><path class="k-fill" d="M288.7 142.4L288.8 142.1L292.6 139.1L293.1 138.9L293.7 139L298.5 140.7L298.9 140.9L298.9 143.4L298.8 143.7L294.9 146.7L294.4 146.9L293.8 146.8L289 145.1L288.7 144.8Z"/><path class="k-shade" data-shade="0" d="M298.9 140.9L298.8 141.3L298.8 143.7L298.9 143.4ZM298.8 141.3L294.9 144.3L294.9 146.7L298.8 143.7ZM294.9 144.3L294.4 144.4L294.4 146.9L294.9 146.7Z"/><path class="k-shade" data-shade="2" d="M294.4 144.4L293.8 144.4L293.8 146.8L294.4 146.9Z"/><path class="k-shade" data-shade="3" d="M293.8 144.4L289 142.7L289 145.1L293.8 146.8ZM289 142.7L288.7 142.4L288.7 144.8L289 145.1Z"/><path class="k-top" d="M298.5 140.7L298.9 140.9L298.8 141.3L294.9 144.3L294.4 144.4L293.8 144.4L289 142.7L288.7 142.4L288.8 142.1L292.6 139.1L293.1 138.9L293.7 139Z"/><path class="k-line k-edge" data-tone="lo" d="M288.7 142.4L288.8 142.1L292.6 139.1L293.1 138.9L293.7 139L298.5 140.7L298.9 140.9L298.9 143.4L298.8 143.7L294.9 146.7L294.4 146.9L293.8 146.8L289 145.1L288.7 144.8Z"/></g></g><g class="tp-cell" data-cell="topic:1:2"><g class="k-solid"><path class="k-fill" d="M296.3 145.1L296.5 144.8L300.3 141.8L300.8 141.6L301.4 141.7L306.2 143.4L306.5 143.7L306.5 146.1L306.4 146.4L302.6 149.4L302.1 149.6L301.5 149.6L296.7 147.8L296.3 147.6Z"/><path class="k-shade" data-shade="0" d="M306.5 143.7L306.4 144L306.4 146.4L306.5 146.1ZM306.4 144L302.6 147L302.6 149.4L306.4 146.4ZM302.6 147L302.1 147.2L302.1 149.6L302.6 149.4Z"/><path class="k-shade" data-shade="2" d="M302.1 147.2L301.5 147.1L301.5 149.6L302.1 149.6Z"/><path class="k-shade" data-shade="3" d="M301.5 147.1L296.7 145.4L296.7 147.8L301.5 149.6ZM296.7 145.4L296.3 145.1L296.3 147.6L296.7 147.8Z"/><path class="k-top" d="M306.2 143.4L306.5 143.7L306.4 144L302.6 147L302.1 147.2L301.5 147.1L296.7 145.4L296.3 145.1L296.5 144.8L300.3 141.8L300.8 141.6L301.4 141.7Z"/><path class="k-line k-edge" data-tone="lo" d="M296.3 145.1L296.5 144.8L300.3 141.8L300.8 141.6L301.4 141.7L306.2 143.4L306.5 143.7L306.5 146.1L306.4 146.4L302.6 149.4L302.1 149.6L301.5 149.6L296.7 147.8L296.3 147.6Z"/></g></g><g class="tp-cell" data-cell="topic:1:3"><g class="k-solid"><path class="k-fill" d="M304 147.9L304.1 147.5L307.9 144.5L308.4 144.4L309 144.4L313.8 146.1L314.2 146.4L314.2 148.9L314 149.2L310.2 152.2L309.7 152.4L309.1 152.3L304.3 150.6L304 150.3Z"/><path class="k-shade" data-shade="0" d="M314.2 146.4L314 146.7L314 149.2L314.2 148.9ZM314 146.7L310.2 149.7L310.2 152.2L314 149.2ZM310.2 149.7L309.7 149.9L309.7 152.4L310.2 152.2Z"/><path class="k-shade" data-shade="2" d="M309.7 149.9L309.1 149.8L309.1 152.3L309.7 152.4Z"/><path class="k-shade" data-shade="3" d="M309.1 149.8L304.3 148.1L304.3 150.6L309.1 152.3ZM304.3 148.1L304 147.9L304 150.3L304.3 150.6Z"/><path class="k-top" d="M313.8 146.1L314.2 146.4L314 146.7L310.2 149.7L309.7 149.9L309.1 149.8L304.3 148.1L304 147.9L304.1 147.5L307.9 144.5L308.4 144.4L309 144.4Z"/><path class="k-line k-edge" data-tone="lo" d="M304 147.9L304.1 147.5L307.9 144.5L308.4 144.4L309 144.4L313.8 146.1L314.2 146.4L314.2 148.9L314 149.2L310.2 152.2L309.7 152.4L309.1 152.3L304.3 150.6L304 150.3Z"/></g></g><g class="tp-cell" data-cell="topic:1:4"><g class="k-solid"><path class="k-fill" d="M311.6 150.6L311.7 150.3L315.6 147.3L316.1 147.1L316.7 147.1L321.5 148.9L321.8 149.1L321.8 151.6L321.7 151.9L317.9 154.9L317.4 155.1L316.8 155L312 153.3L311.6 153Z"/><path class="k-shade" data-shade="0" d="M321.8 149.1L321.7 149.4L321.7 151.9L321.8 151.6ZM321.7 149.4L317.9 152.5L317.9 154.9L321.7 151.9ZM317.9 152.5L317.4 152.6L317.4 155.1L317.9 154.9Z"/><path class="k-shade" data-shade="2" d="M317.4 152.6L316.8 152.6L316.8 155L317.4 155.1Z"/><path class="k-shade" data-shade="3" d="M316.8 152.6L312 150.9L312 153.3L316.8 155ZM312 150.9L311.6 150.6L311.6 153L312 153.3Z"/><path class="k-top" d="M321.5 148.9L321.8 149.1L321.7 149.4L317.9 152.5L317.4 152.6L316.8 152.6L312 150.9L311.6 150.6L311.7 150.3L315.6 147.3L316.1 147.1L316.7 147.1Z"/><path class="k-line k-edge" data-tone="lo" d="M311.6 150.6L311.7 150.3L315.6 147.3L316.1 147.1L316.7 147.1L321.5 148.9L321.8 149.1L321.8 151.6L321.7 151.9L317.9 154.9L317.4 155.1L316.8 155L312 153.3L311.6 153Z"/></g></g><g class="tp-cell" data-cell="topic:1:5"><g class="k-solid"><path class="k-fill" d="M319.3 153.3L319.4 153L323.2 150L323.7 149.8L324.3 149.9L329.1 151.6L329.4 151.9L329.4 154.3L329.3 154.6L325.5 157.6L325 157.8L324.4 157.8L319.6 156L319.3 155.8Z"/><path class="k-shade" data-shade="0" d="M329.4 151.9L329.3 152.2L329.3 154.6L329.4 154.3ZM329.3 152.2L325.5 155.2L325.5 157.6L329.3 154.6ZM325.5 155.2L325 155.4L325 157.8L325.5 157.6Z"/><path class="k-shade" data-shade="2" d="M325 155.4L324.4 155.3L324.4 157.8L325 157.8Z"/><path class="k-shade" data-shade="3" d="M324.4 155.3L319.6 153.6L319.6 156L324.4 157.8ZM319.6 153.6L319.3 153.3L319.3 155.8L319.6 156Z"/><path class="k-top" d="M329.1 151.6L329.4 151.9L329.3 152.2L325.5 155.2L325 155.4L324.4 155.3L319.6 153.6L319.3 153.3L319.4 153L323.2 150L323.7 149.8L324.3 149.9Z"/><path class="k-line k-edge" data-tone="lo" d="M319.3 153.3L319.4 153L323.2 150L323.7 149.8L324.3 149.9L329.1 151.6L329.4 151.9L329.4 154.3L329.3 154.6L325.5 157.6L325 157.8L324.4 157.8L319.6 156L319.3 155.8Z"/></g></g><g class="tp-cell" data-cell="topic:1:6"><g class="k-solid"><path class="k-fill" d="M326.9 156L327 155.7L330.9 152.7L331.4 152.5L332 152.6L336.8 154.3L337.1 154.6L337.1 157.1L337 157.4L333.1 160.4L332.6 160.6L332 160.5L327.2 158.8L326.9 158.5Z"/><path class="k-shade" data-shade="0" d="M337.1 154.6L337 154.9L337 157.4L337.1 157.1ZM337 154.9L333.1 157.9L333.1 160.4L337 157.4ZM333.1 157.9L332.6 158.1L332.6 160.6L333.1 160.4Z"/><path class="k-shade" data-shade="2" d="M332.6 158.1L332 158L332 160.5L332.6 160.6Z"/><path class="k-shade" data-shade="3" d="M332 158L327.2 156.3L327.2 158.8L332 160.5ZM327.2 156.3L326.9 156L326.9 158.5L327.2 158.8Z"/><path class="k-top" d="M336.8 154.3L337.1 154.6L337 154.9L333.1 157.9L332.6 158.1L332 158L327.2 156.3L326.9 156L327 155.7L330.9 152.7L331.4 152.5L332 152.6Z"/><path class="k-line k-edge" data-tone="lo" d="M326.9 156L327 155.7L330.9 152.7L331.4 152.5L332 152.6L336.8 154.3L337.1 154.6L337.1 157.1L337 157.4L333.1 160.4L332.6 160.6L332 160.5L327.2 158.8L326.9 158.5Z"/></g></g><g class="tp-cell" data-cell="topic:1:7"><g class="k-solid"><path class="k-fill" d="M334.5 158.8L334.7 158.5L338.5 155.5L339 155.3L339.6 155.3L344.4 157.1L344.7 157.3L344.7 159.8L344.6 160.1L340.8 163.1L340.3 163.3L339.7 163.2L334.9 161.5L334.5 161.2Z"/><path class="k-shade" data-shade="0" d="M344.7 157.3L344.6 157.6L344.6 160.1L344.7 159.8ZM344.6 157.6L340.8 160.7L340.8 163.1L344.6 160.1ZM340.8 160.7L340.3 160.8L340.3 163.3L340.8 163.1Z"/><path class="k-shade" data-shade="2" d="M340.3 160.8L339.7 160.8L339.7 163.2L340.3 163.3Z"/><path class="k-shade" data-shade="3" d="M339.7 160.8L334.9 159L334.9 161.5L339.7 163.2ZM334.9 159L334.5 158.8L334.5 161.2L334.9 161.5Z"/><path class="k-top" d="M344.4 157.1L344.7 157.3L344.6 157.6L340.8 160.7L340.3 160.8L339.7 160.8L334.9 159L334.5 158.8L334.7 158.5L338.5 155.5L339 155.3L339.6 155.3Z"/><path class="k-line k-edge" data-tone="lo" d="M334.5 158.8L334.7 158.5L338.5 155.5L339 155.3L339.6 155.3L344.4 157.1L344.7 157.3L344.7 159.8L344.6 160.1L340.8 163.1L340.3 163.3L339.7 163.2L334.9 161.5L334.5 161.2Z"/></g></g><g class="tp-cell" data-cell="topic:1:8"><g class="k-solid"><path class="k-fill" d="M342.2 161.5L342.3 161.2L346.1 158.2L346.6 158L347.2 158.1L352 159.8L352.4 160.1L352.4 162.5L352.3 162.8L348.4 165.8L347.9 166L347.3 166L342.5 164.2L342.2 164Z"/><path class="k-shade" data-shade="0" d="M352.4 160.1L352.3 160.4L352.3 162.8L352.4 162.5ZM352.3 160.4L348.4 163.4L348.4 165.8L352.3 162.8ZM348.4 163.4L347.9 163.6L347.9 166L348.4 165.8Z"/><path class="k-shade" data-shade="2" d="M347.9 163.6L347.3 163.5L347.3 166L347.9 166Z"/><path class="k-shade" data-shade="3" d="M347.3 163.5L342.5 161.8L342.5 164.2L347.3 166ZM342.5 161.8L342.2 161.5L342.2 164L342.5 164.2Z"/><path class="k-top" d="M352 159.8L352.4 160.1L352.3 160.4L348.4 163.4L347.9 163.6L347.3 163.5L342.5 161.8L342.2 161.5L342.3 161.2L346.1 158.2L346.6 158L347.2 158.1Z"/><path class="k-line k-edge" data-tone="lo" d="M342.2 161.5L342.3 161.2L346.1 158.2L346.6 158L347.2 158.1L352 159.8L352.4 160.1L352.4 162.5L352.3 162.8L348.4 165.8L347.9 166L347.3 166L342.5 164.2L342.2 164Z"/></g></g><g class="tp-cell" data-cell="topic:1:9"><g class="k-solid"><path class="k-fill" d="M349.8 164.2L349.9 163.9L353.8 160.9L354.3 160.7L354.9 160.8L359.7 162.5L360 162.8L360 165.2L359.9 165.6L356.1 168.6L355.6 168.7L355 168.7L350.2 167L349.8 166.7Z"/><path class="k-shade" data-shade="0" d="M360 162.8L359.9 163.1L359.9 165.6L360 165.2ZM359.9 163.1L356.1 166.1L356.1 168.6L359.9 165.6ZM356.1 166.1L355.6 166.3L355.6 168.7L356.1 168.6Z"/><path class="k-shade" data-shade="2" d="M355.6 166.3L355 166.2L355 168.7L355.6 168.7Z"/><path class="k-shade" data-shade="3" d="M355 166.2L350.2 164.5L350.2 167L355 168.7ZM350.2 164.5L349.8 164.2L349.8 166.7L350.2 167Z"/><path class="k-top" d="M359.7 162.5L360 162.8L359.9 163.1L356.1 166.1L355.6 166.3L355 166.2L350.2 164.5L349.8 164.2L349.9 163.9L353.8 160.9L354.3 160.7L354.9 160.8Z"/><path class="k-line k-edge" data-tone="lo" d="M349.8 164.2L349.9 163.9L353.8 160.9L354.3 160.7L354.9 160.8L359.7 162.5L360 162.8L360 165.2L359.9 165.6L356.1 168.6L355.6 168.7L355 168.7L350.2 167L349.8 166.7Z"/></g></g><g class="tp-cell" data-cell="topic:1:10"><g class="k-solid"><path class="k-fill" d="M357.5 167L357.6 166.7L361.4 163.7L361.9 163.5L362.5 163.5L367.3 165.3L367.7 165.5L367.7 168L367.5 168.3L363.7 171.3L363.2 171.5L362.6 171.4L357.8 169.7L357.5 169.4Z"/><path class="k-shade" data-shade="0" d="M367.7 165.5L367.5 165.8L367.5 168.3L367.7 168ZM367.5 165.8L363.7 168.8L363.7 171.3L367.5 168.3ZM363.7 168.8L363.2 169L363.2 171.5L363.7 171.3Z"/><path class="k-shade" data-shade="2" d="M363.2 169L362.6 169L362.6 171.4L363.2 171.5Z"/><path class="k-shade" data-shade="3" d="M362.6 169L357.8 167.2L357.8 169.7L362.6 171.4ZM357.8 167.2L357.5 167L357.5 169.4L357.8 169.7Z"/><path class="k-top" d="M367.3 165.3L367.7 165.5L367.5 165.8L363.7 168.8L363.2 169L362.6 169L357.8 167.2L357.5 167L357.6 166.7L361.4 163.7L361.9 163.5L362.5 163.5Z"/><path class="k-line k-edge" data-tone="lo" d="M357.5 167L357.6 166.7L361.4 163.7L361.9 163.5L362.5 163.5L367.3 165.3L367.7 165.5L367.7 168L367.5 168.3L363.7 171.3L363.2 171.5L362.6 171.4L357.8 169.7L357.5 169.4Z"/></g></g><g class="tp-cell" data-cell="topic:1:11"><g class="k-solid"><path class="k-fill" d="M365.1 169.7L365.2 169.4L369.1 166.4L369.6 166.2L370.2 166.3L375 168L375.3 168.3L375.3 170.7L375.2 171L371.3 174L370.8 174.2L370.3 174.1L365.4 172.4L365.1 172.2Z"/><path class="k-shade" data-shade="0" d="M375.3 168.3L375.2 168.6L375.2 171L375.3 170.7ZM375.2 168.6L371.3 171.6L371.3 174L375.2 171ZM371.3 171.6L370.8 171.8L370.8 174.2L371.3 174Z"/><path class="k-shade" data-shade="2" d="M370.8 171.8L370.3 171.7L370.3 174.1L370.8 174.2Z"/><path class="k-shade" data-shade="3" d="M370.3 171.7L365.4 170L365.4 172.4L370.3 174.1ZM365.4 170L365.1 169.7L365.1 172.2L365.4 172.4Z"/><path class="k-top" d="M375 168L375.3 168.3L375.2 168.6L371.3 171.6L370.8 171.8L370.3 171.7L365.4 170L365.1 169.7L365.2 169.4L369.1 166.4L369.6 166.2L370.2 166.3Z"/><path class="k-line k-edge" data-tone="lo" d="M365.1 169.7L365.2 169.4L369.1 166.4L369.6 166.2L370.2 166.3L375 168L375.3 168.3L375.3 170.7L375.2 171L371.3 174L370.8 174.2L370.3 174.1L365.4 172.4L365.1 172.2Z"/></g></g><g class="tp-cursor" data-cursor="topic:0:1" data-g="0"><g class="k-solid" data-lit><path class="k-fill" d="M277.8 137.7L285.1 131.9L285.9 131.8L286.7 132.1L286.9 132.5L286.9 137.4L279.5 143.2L278.8 143.3L277.9 143L277.8 142.6Z"/><path class="k-shade" data-shade="0" d="M286.9 132.5L279.5 138.3L279.5 143.2L286.9 137.4Z"/><path class="k-shade" data-shade="1" d="M279.5 138.3L278.8 138.4L278.8 143.3L279.5 143.2Z"/><path class="k-shade" data-shade="3" d="M278.8 138.4L277.9 138.1L277.9 143L278.8 143.3ZM277.9 138.1L277.8 137.7L277.8 142.6L277.9 143Z"/><path class="k-top" d="M286.7 132.1L286.9 132.5L279.5 138.3L278.8 138.4L277.9 138.1L277.8 137.7L285.1 131.9L285.9 131.8Z"/><path class="k-line k-crease" data-tone="faint" d="M286.9 132.5L279.5 138.3M279.5 138.3L278.8 138.4M278.8 138.4L277.9 138.1M277.9 138.1L277.8 137.7"/><path class="k-line k-edge" data-tone="hi" d="M277.8 137.7L285.1 131.9L285.9 131.8L286.7 132.1L286.9 132.5L286.9 137.4L279.5 143.2L278.8 143.3L277.9 143L277.8 142.6Z"/></g></g></g><g class="tp-lane" data-lane="topic:2"><g class="k-solid"><path class="k-fill" d="M269.3 148.2L269.5 147.6L274.6 143.6L275.5 143.3L276.4 143.4L370.3 177L370.9 177.4L370.9 178.1L370.7 178.6L365.5 182.6L364.7 182.9L363.7 182.8L269.8 149.3L269.3 148.8Z"/><path class="k-shade" data-shade="0" d="M370.9 177.4L370.7 177.9L370.7 178.6L370.9 178.1ZM370.7 177.9L365.5 182L365.5 182.6L370.7 178.6ZM365.5 182L364.7 182.3L364.7 182.9L365.5 182.6Z"/><path class="k-shade" data-shade="2" d="M364.7 182.3L363.7 182.2L363.7 182.8L364.7 182.9Z"/><path class="k-shade" data-shade="3" d="M363.7 182.2L269.8 148.6L269.8 149.3L363.7 182.8ZM269.8 148.6L269.3 148.2L269.3 148.8L269.8 149.3Z"/><path class="k-top" d="M370.3 177L370.9 177.4L370.7 177.9L365.5 182L364.7 182.3L363.7 182.2L269.8 148.6L269.3 148.2L269.5 147.6L274.6 143.6L275.5 143.3L276.4 143.4Z"/><path class="k-line k-edge" data-tone="lo" d="M269.3 148.2L269.5 147.6L274.6 143.6L275.5 143.3L276.4 143.4L370.3 177L370.9 177.4L370.9 178.1L370.7 178.6L365.5 182.6L364.7 182.9L363.7 182.8L269.8 149.3L269.3 148.8Z"/></g><g class="tp-cell" data-cell="topic:2:0"><g class="k-solid"><path class="k-fill" d="M273 146L273.1 145.7L276.9 142.7L277.4 142.5L278 142.6L282.8 144.3L283.1 144.6L283.1 147L283 147.3L279.2 150.4L278.7 150.5L278.1 150.5L273.3 148.7L273 148.5Z"/><path class="k-shade" data-shade="0" d="M283.1 144.6L283 144.9L283 147.3L283.1 147ZM283 144.9L279.2 147.9L279.2 150.4L283 147.3ZM279.2 147.9L278.7 148.1L278.7 150.5L279.2 150.4Z"/><path class="k-shade" data-shade="2" d="M278.7 148.1L278.1 148L278.1 150.5L278.7 150.5Z"/><path class="k-shade" data-shade="3" d="M278.1 148L273.3 146.3L273.3 148.7L278.1 150.5ZM273.3 146.3L273 146L273 148.5L273.3 148.7Z"/><path class="k-top" d="M282.8 144.3L283.1 144.6L283 144.9L279.2 147.9L278.7 148.1L278.1 148L273.3 146.3L273 146L273.1 145.7L276.9 142.7L277.4 142.5L278 142.6Z"/><path class="k-line k-edge" data-tone="lo" d="M273 146L273.1 145.7L276.9 142.7L277.4 142.5L278 142.6L282.8 144.3L283.1 144.6L283.1 147L283 147.3L279.2 150.4L278.7 150.5L278.1 150.5L273.3 148.7L273 148.5Z"/></g></g><g class="tp-cell" data-cell="topic:2:1"><g class="k-solid"><path class="k-fill" d="M280.6 148.8L280.7 148.4L284.5 145.4L285 145.3L285.6 145.3L290.4 147L290.8 147.3L290.8 149.8L290.7 150.1L286.8 153.1L286.3 153.3L285.7 153.2L280.9 151.5L280.6 151.2Z"/><path class="k-shade" data-shade="0" d="M290.8 147.3L290.7 147.6L290.7 150.1L290.8 149.8ZM290.7 147.6L286.8 150.6L286.8 153.1L290.7 150.1ZM286.8 150.6L286.3 150.8L286.3 153.3L286.8 153.1Z"/><path class="k-shade" data-shade="2" d="M286.3 150.8L285.7 150.7L285.7 153.2L286.3 153.3Z"/><path class="k-shade" data-shade="3" d="M285.7 150.7L280.9 149L280.9 151.5L285.7 153.2ZM280.9 149L280.6 148.8L280.6 151.2L280.9 151.5Z"/><path class="k-top" d="M290.4 147L290.8 147.3L290.7 147.6L286.8 150.6L286.3 150.8L285.7 150.7L280.9 149L280.6 148.8L280.7 148.4L284.5 145.4L285 145.3L285.6 145.3Z"/><path class="k-line k-edge" data-tone="lo" d="M280.6 148.8L280.7 148.4L284.5 145.4L285 145.3L285.6 145.3L290.4 147L290.8 147.3L290.8 149.8L290.7 150.1L286.8 153.1L286.3 153.3L285.7 153.2L280.9 151.5L280.6 151.2Z"/></g></g><g class="tp-cell" data-cell="topic:2:2"><g class="k-solid"><path class="k-fill" d="M288.2 151.5L288.4 151.2L292.2 148.2L292.7 148L293.3 148.1L298.1 149.8L298.4 150L298.4 152.5L298.3 152.8L294.5 155.8L294 156L293.4 155.9L288.6 154.2L288.2 153.9Z"/><path class="k-shade" data-shade="0" d="M298.4 150L298.3 150.3L298.3 152.8L298.4 152.5ZM298.3 150.3L294.5 153.4L294.5 155.8L298.3 152.8ZM294.5 153.4L294 153.5L294 156L294.5 155.8Z"/><path class="k-shade" data-shade="2" d="M294 153.5L293.4 153.5L293.4 155.9L294 156Z"/><path class="k-shade" data-shade="3" d="M293.4 153.5L288.6 151.8L288.6 154.2L293.4 155.9ZM288.6 151.8L288.2 151.5L288.2 153.9L288.6 154.2Z"/><path class="k-top" d="M298.1 149.8L298.4 150L298.3 150.3L294.5 153.4L294 153.5L293.4 153.5L288.6 151.8L288.2 151.5L288.4 151.2L292.2 148.2L292.7 148L293.3 148.1Z"/><path class="k-line k-edge" data-tone="lo" d="M288.2 151.5L288.4 151.2L292.2 148.2L292.7 148L293.3 148.1L298.1 149.8L298.4 150L298.4 152.5L298.3 152.8L294.5 155.8L294 156L293.4 155.9L288.6 154.2L288.2 153.9Z"/></g></g><g class="tp-cell" data-cell="topic:2:3"><g class="k-solid"><path class="k-fill" d="M295.9 154.2L296 153.9L299.8 150.9L300.3 150.7L300.9 150.8L305.7 152.5L306.1 152.8L306.1 155.2L305.9 155.5L302.1 158.5L301.6 158.7L301 158.7L296.2 156.9L295.9 156.7Z"/><path class="k-shade" data-shade="0" d="M306.1 152.8L305.9 153.1L305.9 155.5L306.1 155.2ZM305.9 153.1L302.1 156.1L302.1 158.5L305.9 155.5ZM302.1 156.1L301.6 156.3L301.6 158.7L302.1 158.5Z"/><path class="k-shade" data-shade="2" d="M301.6 156.3L301 156.2L301 158.7L301.6 158.7Z"/><path class="k-shade" data-shade="3" d="M301 156.2L296.2 154.5L296.2 156.9L301 158.7ZM296.2 154.5L295.9 154.2L295.9 156.7L296.2 156.9Z"/><path class="k-top" d="M305.7 152.5L306.1 152.8L305.9 153.1L302.1 156.1L301.6 156.3L301 156.2L296.2 154.5L295.9 154.2L296 153.9L299.8 150.9L300.3 150.7L300.9 150.8Z"/><path class="k-line k-edge" data-tone="lo" d="M295.9 154.2L296 153.9L299.8 150.9L300.3 150.7L300.9 150.8L305.7 152.5L306.1 152.8L306.1 155.2L305.9 155.5L302.1 158.5L301.6 158.7L301 158.7L296.2 156.9L295.9 156.7Z"/></g></g><g class="tp-cell" data-cell="topic:2:4"><g class="k-solid"><path class="k-fill" d="M303.5 156.9L303.6 156.6L307.5 153.6L308 153.4L308.6 153.5L313.4 155.2L313.7 155.5L313.7 158L313.6 158.3L309.8 161.3L309.3 161.5L308.7 161.4L303.9 159.7L303.5 159.4Z"/><path class="k-shade" data-shade="0" d="M313.7 155.5L313.6 155.8L313.6 158.3L313.7 158ZM313.6 155.8L309.8 158.8L309.8 161.3L313.6 158.3ZM309.8 158.8L309.3 159L309.3 161.5L309.8 161.3Z"/><path class="k-shade" data-shade="2" d="M309.3 159L308.7 158.9L308.7 161.4L309.3 161.5Z"/><path class="k-shade" data-shade="3" d="M308.7 158.9L303.9 157.2L303.9 159.7L308.7 161.4ZM303.9 157.2L303.5 156.9L303.5 159.4L303.9 159.7Z"/><path class="k-top" d="M313.4 155.2L313.7 155.5L313.6 155.8L309.8 158.8L309.3 159L308.7 158.9L303.9 157.2L303.5 156.9L303.6 156.6L307.5 153.6L308 153.4L308.6 153.5Z"/><path class="k-line k-edge" data-tone="lo" d="M303.5 156.9L303.6 156.6L307.5 153.6L308 153.4L308.6 153.5L313.4 155.2L313.7 155.5L313.7 158L313.6 158.3L309.8 161.3L309.3 161.5L308.7 161.4L303.9 159.7L303.5 159.4Z"/></g></g><g class="tp-cell" data-cell="topic:2:5"><g class="k-solid"><path class="k-fill" d="M311.2 159.7L311.3 159.4L315.1 156.4L315.6 156.2L316.2 156.2L321 158L321.3 158.2L321.3 160.7L321.2 161L317.4 164L316.9 164.2L316.3 164.1L311.5 162.4L311.2 162.1Z"/><path class="k-shade" data-shade="0" d="M321.3 158.2L321.2 158.5L321.2 161L321.3 160.7ZM321.2 158.5L317.4 161.6L317.4 164L321.2 161ZM317.4 161.6L316.9 161.7L316.9 164.2L317.4 164Z"/><path class="k-shade" data-shade="2" d="M316.9 161.7L316.3 161.7L316.3 164.1L316.9 164.2Z"/><path class="k-shade" data-shade="3" d="M316.3 161.7L311.5 159.9L311.5 162.4L316.3 164.1ZM311.5 159.9L311.2 159.7L311.2 162.1L311.5 162.4Z"/><path class="k-top" d="M321 158L321.3 158.2L321.2 158.5L317.4 161.6L316.9 161.7L316.3 161.7L311.5 159.9L311.2 159.7L311.3 159.4L315.1 156.4L315.6 156.2L316.2 156.2Z"/><path class="k-line k-edge" data-tone="lo" d="M311.2 159.7L311.3 159.4L315.1 156.4L315.6 156.2L316.2 156.2L321 158L321.3 158.2L321.3 160.7L321.2 161L317.4 164L316.9 164.2L316.3 164.1L311.5 162.4L311.2 162.1Z"/></g></g><g class="tp-cell" data-cell="topic:2:6"><g class="k-solid"><path class="k-fill" d="M318.8 162.4L318.9 162.1L322.8 159.1L323.3 158.9L323.9 159L328.7 160.7L329 161L329 163.4L328.9 163.7L325 166.7L324.5 166.9L323.9 166.9L319.1 165.1L318.8 164.9Z"/><path class="k-shade" data-shade="0" d="M329 161L328.9 161.3L328.9 163.7L329 163.4ZM328.9 161.3L325 164.3L325 166.7L328.9 163.7ZM325 164.3L324.5 164.5L324.5 166.9L325 166.7Z"/><path class="k-shade" data-shade="2" d="M324.5 164.5L323.9 164.4L323.9 166.9L324.5 166.9Z"/><path class="k-shade" data-shade="3" d="M323.9 164.4L319.1 162.7L319.1 165.1L323.9 166.9ZM319.1 162.7L318.8 162.4L318.8 164.9L319.1 165.1Z"/><path class="k-top" d="M328.7 160.7L329 161L328.9 161.3L325 164.3L324.5 164.5L323.9 164.4L319.1 162.7L318.8 162.4L318.9 162.1L322.8 159.1L323.3 158.9L323.9 159Z"/><path class="k-line k-edge" data-tone="lo" d="M318.8 162.4L318.9 162.1L322.8 159.1L323.3 158.9L323.9 159L328.7 160.7L329 161L329 163.4L328.9 163.7L325 166.7L324.5 166.9L323.9 166.9L319.1 165.1L318.8 164.9Z"/></g></g><g class="tp-cell" data-cell="topic:2:7"><g class="k-solid"><path class="k-fill" d="M326.4 165.1L326.6 164.8L330.4 161.8L330.9 161.6L331.5 161.7L336.3 163.4L336.6 163.7L336.6 166.1L336.5 166.5L332.7 169.5L332.2 169.6L331.6 169.6L326.8 167.9L326.4 167.6Z"/><path class="k-shade" data-shade="0" d="M336.6 163.7L336.5 164L336.5 166.5L336.6 166.1ZM336.5 164L332.7 167L332.7 169.5L336.5 166.5ZM332.7 167L332.2 167.2L332.2 169.6L332.7 169.5Z"/><path class="k-shade" data-shade="2" d="M332.2 167.2L331.6 167.1L331.6 169.6L332.2 169.6Z"/><path class="k-shade" data-shade="3" d="M331.6 167.1L326.8 165.4L326.8 167.9L331.6 169.6ZM326.8 165.4L326.4 165.1L326.4 167.6L326.8 167.9Z"/><path class="k-top" d="M336.3 163.4L336.6 163.7L336.5 164L332.7 167L332.2 167.2L331.6 167.1L326.8 165.4L326.4 165.1L326.6 164.8L330.4 161.8L330.9 161.6L331.5 161.7Z"/><path class="k-line k-edge" data-tone="lo" d="M326.4 165.1L326.6 164.8L330.4 161.8L330.9 161.6L331.5 161.7L336.3 163.4L336.6 163.7L336.6 166.1L336.5 166.5L332.7 169.5L332.2 169.6L331.6 169.6L326.8 167.9L326.4 167.6Z"/></g></g><g class="tp-cell" data-cell="topic:2:8"><g class="k-solid"><path class="k-fill" d="M334.1 167.9L334.2 167.6L338 164.6L338.5 164.4L339.1 164.4L343.9 166.2L344.3 166.4L344.3 168.9L344.2 169.2L340.3 172.2L339.8 172.4L339.2 172.3L334.4 170.6L334.1 170.3Z"/><path class="k-shade" data-shade="0" d="M344.3 166.4L344.2 166.7L344.2 169.2L344.3 168.9ZM344.2 166.7L340.3 169.7L340.3 172.2L344.2 169.2ZM340.3 169.7L339.8 169.9L339.8 172.4L340.3 172.2Z"/><path class="k-shade" data-shade="2" d="M339.8 169.9L339.2 169.9L339.2 172.3L339.8 172.4Z"/><path class="k-shade" data-shade="3" d="M339.2 169.9L334.4 168.1L334.4 170.6L339.2 172.3ZM334.4 168.1L334.1 167.9L334.1 170.3L334.4 170.6Z"/><path class="k-top" d="M343.9 166.2L344.3 166.4L344.2 166.7L340.3 169.7L339.8 169.9L339.2 169.9L334.4 168.1L334.1 167.9L334.2 167.6L338 164.6L338.5 164.4L339.1 164.4Z"/><path class="k-line k-edge" data-tone="lo" d="M334.1 167.9L334.2 167.6L338 164.6L338.5 164.4L339.1 164.4L343.9 166.2L344.3 166.4L344.3 168.9L344.2 169.2L340.3 172.2L339.8 172.4L339.2 172.3L334.4 170.6L334.1 170.3Z"/></g></g><g class="tp-cell" data-cell="topic:2:9"><g class="k-solid"><path class="k-fill" d="M341.7 170.6L341.9 170.3L345.7 167.3L346.2 167.1L346.8 167.2L351.6 168.9L351.9 169.2L351.9 171.6L351.8 171.9L348 174.9L347.5 175.1L346.9 175L342.1 173.3L341.7 173.1Z"/><path class="k-shade" data-shade="0" d="M351.9 169.2L351.8 169.5L351.8 171.9L351.9 171.6ZM351.8 169.5L348 172.5L348 174.9L351.8 171.9ZM348 172.5L347.5 172.7L347.5 175.1L348 174.9Z"/><path class="k-shade" data-shade="2" d="M347.5 172.7L346.9 172.6L346.9 175L347.5 175.1Z"/><path class="k-shade" data-shade="3" d="M346.9 172.6L342.1 170.9L342.1 173.3L346.9 175ZM342.1 170.9L341.7 170.6L341.7 173.1L342.1 173.3Z"/><path class="k-top" d="M351.6 168.9L351.9 169.2L351.8 169.5L348 172.5L347.5 172.7L346.9 172.6L342.1 170.9L341.7 170.6L341.9 170.3L345.7 167.3L346.2 167.1L346.8 167.2Z"/><path class="k-line k-edge" data-tone="lo" d="M341.7 170.6L341.9 170.3L345.7 167.3L346.2 167.1L346.8 167.2L351.6 168.9L351.9 169.2L351.9 171.6L351.8 171.9L348 174.9L347.5 175.1L346.9 175L342.1 173.3L341.7 173.1Z"/></g></g><g class="tp-cell" data-cell="topic:2:10"><g class="k-solid"><path class="k-fill" d="M349.4 173.3L349.5 173L353.3 170L353.8 169.8L354.4 169.9L359.2 171.6L359.6 171.9L359.6 174.3L359.4 174.7L355.6 177.7L355.1 177.8L354.5 177.8L349.7 176.1L349.4 175.8Z"/><path class="k-shade" data-shade="0" d="M359.6 171.9L359.4 172.2L359.4 174.7L359.6 174.3ZM359.4 172.2L355.6 175.2L355.6 177.7L359.4 174.7ZM355.6 175.2L355.1 175.4L355.1 177.8L355.6 177.7Z"/><path class="k-shade" data-shade="2" d="M355.1 175.4L354.5 175.3L354.5 177.8L355.1 177.8Z"/><path class="k-shade" data-shade="3" d="M354.5 175.3L349.7 173.6L349.7 176.1L354.5 177.8ZM349.7 173.6L349.4 173.3L349.4 175.8L349.7 176.1Z"/><path class="k-top" d="M359.2 171.6L359.6 171.9L359.4 172.2L355.6 175.2L355.1 175.4L354.5 175.3L349.7 173.6L349.4 173.3L349.5 173L353.3 170L353.8 169.8L354.4 169.9Z"/><path class="k-line k-edge" data-tone="lo" d="M349.4 173.3L349.5 173L353.3 170L353.8 169.8L354.4 169.9L359.2 171.6L359.6 171.9L359.6 174.3L359.4 174.7L355.6 177.7L355.1 177.8L354.5 177.8L349.7 176.1L349.4 175.8Z"/></g></g><g class="tp-cell" data-cell="topic:2:11"><g class="k-solid"><path class="k-fill" d="M357 176.1L357.1 175.8L361 172.7L361.5 172.6L362.1 172.6L366.9 174.4L367.2 174.6L367.2 177.1L367.1 177.4L363.2 180.4L362.7 180.6L362.2 180.5L357.3 178.8L357 178.5Z"/><path class="k-shade" data-shade="0" d="M367.2 174.6L367.1 174.9L367.1 177.4L367.2 177.1ZM367.1 174.9L363.2 177.9L363.2 180.4L367.1 177.4ZM363.2 177.9L362.7 178.1L362.7 180.6L363.2 180.4Z"/><path class="k-shade" data-shade="2" d="M362.7 178.1L362.2 178.1L362.2 180.5L362.7 180.6Z"/><path class="k-shade" data-shade="3" d="M362.2 178.1L357.3 176.3L357.3 178.8L362.2 180.5ZM357.3 176.3L357 176.1L357 178.5L357.3 178.8Z"/><path class="k-top" d="M366.9 174.4L367.2 174.6L367.1 174.9L363.2 177.9L362.7 178.1L362.2 178.1L357.3 176.3L357 176.1L357.1 175.8L361 172.7L361.5 172.6L362.1 172.6Z"/><path class="k-line k-edge" data-tone="lo" d="M357 176.1L357.1 175.8L361 172.7L361.5 172.6L362.1 172.6L366.9 174.4L367.2 174.6L367.2 177.1L367.1 177.4L363.2 180.4L362.7 180.6L362.2 180.5L357.3 178.8L357 178.5Z"/></g></g><g class="tp-cursor" data-cursor="topic:0:2" data-g="0"><g class="k-solid" data-lit><path class="k-fill" d="M269.7 144.1L277 138.3L277.8 138.2L278.6 138.5L278.8 138.9L278.8 143.8L271.4 149.6L270.7 149.7L269.8 149.4L269.7 149Z"/><path class="k-shade" data-shade="0" d="M278.8 138.9L271.4 144.7L271.4 149.6L278.8 143.8Z"/><path class="k-shade" data-shade="1" d="M271.4 144.7L270.7 144.8L270.7 149.7L271.4 149.6Z"/><path class="k-shade" data-shade="3" d="M270.7 144.8L269.8 144.4L269.8 149.4L270.7 149.7ZM269.8 144.4L269.7 144.1L269.7 149L269.8 149.4Z"/><path class="k-top" d="M278.6 138.5L278.8 138.9L271.4 144.7L270.7 144.8L269.8 144.4L269.7 144.1L277 138.3L277.8 138.2Z"/><path class="k-line k-crease" data-tone="faint" d="M278.8 138.9L271.4 144.7M271.4 144.7L270.7 144.8M270.7 144.8L269.8 144.4M269.8 144.4L269.7 144.1"/><path class="k-line k-edge" data-tone="hi" d="M269.7 144.1L277 138.3L277.8 138.2L278.6 138.5L278.8 138.9L278.8 143.8L271.4 149.6L270.7 149.7L269.8 149.4L269.7 149Z"/></g></g></g></g><g class="tp-node" data-node="ledger-a" data-kind="worker"><path class="k-halo" d="M532.7 202L532.7 201.9L532.8 201.7L532.9 201.6L555 184.3L555.2 184.2L555.4 184.1L555.6 184L555.9 184L556.1 184L556.4 184L556.6 184L556.9 184.1L609.3 202.8L609.5 202.9L609.6 203L609.7 203.1L609.8 203.2L609.8 203.4L609.8 214.3L609.8 214.5L609.7 214.6L609.6 214.7L587.5 232.1L587.4 232.2L587.2 232.3L586.9 232.3L586.7 232.4L586.4 232.4L586.2 232.4L585.9 232.3L585.7 232.3L533.3 213.5L533.1 213.4L532.9 213.3L532.8 213.2L532.7 213.1L532.7 212.9Z"/><g class="k-solid"><path class="k-fill" d="M530.1 203.9L530.7 202.8L552.8 185.5L554.4 184.8L556.4 184.6L558.3 184.9L610.7 203.7L612.1 204.5L612.5 205.5L612.5 214.5L611.8 215.5L589.7 232.9L588.2 233.6L586.1 233.8L584.2 233.4L531.8 214.7L530.5 213.9L530.1 212.8Z"/><path class="k-shade" data-shade="0" d="M612.5 205.5L611.8 206.6L611.8 215.5L612.5 214.5ZM611.8 206.6L589.7 223.9L589.7 232.9L611.8 215.5ZM589.7 223.9L588.2 224.6L588.2 233.6L589.7 232.9Z"/><path class="k-shade" data-shade="1" d="M588.2 224.6L586.1 224.8L586.1 233.8L588.2 233.6Z"/><path class="k-shade" data-shade="2" d="M586.1 224.8L584.2 224.5L584.2 233.4L586.1 233.8Z"/><path class="k-shade" data-shade="3" d="M584.2 224.5L531.8 205.8L531.8 214.7L584.2 233.4ZM531.8 205.8L530.5 204.9L530.5 213.9L531.8 214.7ZM530.5 204.9L530.1 203.9L530.1 212.8L530.5 213.9Z"/><path class="k-top" d="M610.7 203.7L612.1 204.5L612.5 205.5L611.8 206.6L589.7 223.9L588.2 224.6L586.1 224.8L584.2 224.5L531.8 205.8L530.5 204.9L530.1 203.9L530.7 202.8L552.8 185.5L554.4 184.8L556.4 184.6L558.3 184.9Z"/><path class="k-line k-crease" data-tone="faint" d="M612.5 205.5L611.8 206.6M611.8 206.6L589.7 223.9M589.7 223.9L588.2 224.6M588.2 224.6L586.1 224.8M586.1 224.8L584.2 224.5M584.2 224.5L531.8 205.8M531.8 205.8L530.5 204.9M530.5 204.9L530.1 203.9"/><path class="k-line k-bevel" data-tone="faint" d="M611.7 205.5L611 206.5M611 206.5L589.3 223.5M589.3 223.5L587.8 224.2M587.8 224.2L585.9 224.4M585.9 224.4L584 224.1M584 224.1L532.6 205.7M532.6 205.7L531.3 204.9M531.3 204.9L530.9 203.9"/><path class="k-line k-edge" data-tone="mid" d="M530.1 203.9L530.7 202.8L552.8 185.5L554.4 184.8L556.4 184.6L558.3 184.9L610.7 203.7L612.1 204.5L612.5 205.5L612.5 214.5L611.8 215.5L589.7 232.9L588.2 233.6L586.1 233.8L584.2 233.4L531.8 214.7L530.5 213.9L530.1 212.8Z"/></g><path class="k-line" data-tone="lo" d="M543.8 216.3L553.6 219.8L553.6 216.2L543.8 212.7Z"/><path class="k-line" data-tone="lo" d="M555.8 220.6L565.7 224.1L565.7 220.5L555.8 217Z"/><path class="k-line" data-tone="lo" d="M567.8 224.9L577.7 228.4L577.7 224.8L567.8 221.3Z"/><path class="k-line" data-tone="faint" d="M609.6 213.7L591.9 227.5L591.9 225.8L609.6 211.9Z"/><circle class="tp-led" data-led="ledger-a:0" cx="535.1" cy="211.4" r="1.3"/><path class="k-line" data-tone="faint" d="M606.7 205.6L586.1 221.8L535.9 203.8L556.5 187.6Z"/><g class="k-dots" data-tone="lo"><circle cx="555.8" cy="185.9" r="0.5"/><circle cx="610" cy="205.2" r="0.5"/><circle cx="532.6" cy="204.2" r="0.5"/><circle cx="586.7" cy="223.5" r="0.5"/></g><path class="k-line" data-tone="lo" d="M577.8 207L576.5 207.9L574.7 208.5L572.8 208.8L570.7 208.9L568.7 208.7L566.9 208.2L565.3 207.5L564.2 206.5L563.5 205.5L563.4 204.4L563.8 203.3L564.7 202.4L566.1 201.5L567.8 200.9L569.8 200.6L571.8 200.5L573.8 200.7L575.7 201.2L577.2 202L578.4 202.9L579 203.9L579.2 205L578.7 206.1ZM573.9 205.6L573 206.1L571.9 206.3L570.6 206.3L569.5 206.1L568.6 205.6L568.2 205L568.2 204.4L568.7 203.8L569.5 203.3L570.7 203.1L571.9 203.1L573 203.3L573.9 203.8L574.4 204.4L574.4 205Z"/></g><g class="tp-node" data-node="ledger-b" data-kind="worker"><path class="k-halo" d="M465.7 254.6L465.7 254.5L465.8 254.4L465.9 254.3L488 236.9L488.2 236.8L488.4 236.7L488.6 236.7L488.9 236.6L489.1 236.6L489.4 236.6L489.6 236.7L489.8 236.7L542.2 255.4L542.4 255.5L542.6 255.6L542.7 255.8L542.8 255.9L542.8 256L542.8 267L542.8 267.1L542.7 267.2L542.6 267.4L520.5 284.7L520.3 284.8L520.1 284.9L519.9 285L519.7 285L519.4 285L519.2 285L518.9 285L518.7 284.9L466.3 266.2L466.1 266.1L465.9 266L465.8 265.9L465.7 265.7L465.7 265.6Z"/><g class="k-solid"><path class="k-fill" d="M463.1 256.5L463.7 255.5L485.8 238.1L487.4 237.4L489.4 237.2L491.3 237.6L543.7 256.3L545.1 257.1L545.4 258.2L545.4 267.1L544.8 268.1L522.7 285.5L521.1 286.2L519.1 286.4L517.2 286.1L464.8 267.3L463.5 266.5L463.1 265.4Z"/><path class="k-shade" data-shade="0" d="M545.4 258.2L544.8 259.2L544.8 268.1L545.4 267.1ZM544.8 259.2L522.7 276.6L522.7 285.5L544.8 268.1ZM522.7 276.6L521.1 277.3L521.1 286.2L522.7 285.5Z"/><path class="k-shade" data-shade="1" d="M521.1 277.3L519.1 277.5L519.1 286.4L521.1 286.2Z"/><path class="k-shade" data-shade="2" d="M519.1 277.5L517.2 277.1L517.2 286.1L519.1 286.4Z"/><path class="k-shade" data-shade="3" d="M517.2 277.1L464.8 258.4L464.8 267.3L517.2 286.1ZM464.8 258.4L463.5 257.6L463.5 266.5L464.8 267.3ZM463.5 257.6L463.1 256.5L463.1 265.4L463.5 266.5Z"/><path class="k-top" d="M543.7 256.3L545.1 257.1L545.4 258.2L544.8 259.2L522.7 276.6L521.1 277.3L519.1 277.5L517.2 277.1L464.8 258.4L463.5 257.6L463.1 256.5L463.7 255.5L485.8 238.1L487.4 237.4L489.4 237.2L491.3 237.6Z"/><path class="k-line k-crease" data-tone="faint" d="M545.4 258.2L544.8 259.2M544.8 259.2L522.7 276.6M522.7 276.6L521.1 277.3M521.1 277.3L519.1 277.5M519.1 277.5L517.2 277.1M517.2 277.1L464.8 258.4M464.8 258.4L463.5 257.6M463.5 257.6L463.1 256.5"/><path class="k-line k-bevel" data-tone="faint" d="M544.7 258.2L544 259.2M544 259.2L522.3 276.2M522.3 276.2L520.8 276.9M520.8 276.9L518.9 277.1M518.9 277.1L516.9 276.7M516.9 276.7L465.6 258.4M465.6 258.4L464.3 257.6M464.3 257.6L463.9 256.5"/><path class="k-line k-edge" data-tone="mid" d="M463.1 256.5L463.7 255.5L485.8 238.1L487.4 237.4L489.4 237.2L491.3 237.6L543.7 256.3L545.1 257.1L545.4 258.2L545.4 267.1L544.8 268.1L522.7 285.5L521.1 286.2L519.1 286.4L517.2 286.1L464.8 267.3L463.5 266.5L463.1 265.4Z"/></g><path class="k-line" data-tone="lo" d="M476.8 268.9L486.6 272.5L486.6 268.9L476.8 265.4Z"/><path class="k-line" data-tone="lo" d="M488.8 273.2L498.6 276.7L498.6 273.2L488.8 269.7Z"/><path class="k-line" data-tone="lo" d="M500.8 277.5L510.7 281L510.7 277.5L500.8 274Z"/><path class="k-line" data-tone="faint" d="M542.6 266.3L524.9 280.2L524.9 278.4L542.6 264.5Z"/><circle class="tp-led" data-led="ledger-b:0" cx="468.1" cy="264" r="1.3"/><path class="k-line" data-tone="faint" d="M539.7 258.2L519.1 274.4L468.8 256.5L489.5 240.3Z"/><g class="k-dots" data-tone="lo"><circle cx="488.8" cy="238.5" r="0.5"/><circle cx="543" cy="257.9" r="0.5"/><circle cx="465.6" cy="256.8" r="0.5"/><circle cx="519.7" cy="276.2" r="0.5"/></g><path class="k-line" data-tone="lo" d="M510.8 259.7L509.4 260.5L507.7 261.1L505.8 261.5L503.7 261.5L501.7 261.3L499.8 260.8L498.3 260.1L497.2 259.2L496.5 258.1L496.4 257.1L496.8 256L497.7 255L499.1 254.2L500.8 253.6L502.8 253.2L504.8 253.2L506.8 253.4L508.7 253.9L510.2 254.6L511.4 255.5L512 256.6L512.1 257.6L511.7 258.7ZM506.9 258.3L506 258.7L504.9 259L503.6 259L502.5 258.7L501.6 258.3L501.2 257.7L501.2 257L501.6 256.4L502.5 256L503.7 255.7L504.9 255.7L506 256L506.9 256.4L507.4 257L507.4 257.7Z"/></g></svg><svg hidden xmlns="http://www.w3.org/2000/svg" class="k-svg tp-svg tp-flat" viewBox="0 0 640 240" role="img" aria-label="Brokers and ISR: payments-api (service), payments.v1 (kafka), ledger-a (worker), ledger-b (worker). Connections: payments-api to payments.v1; payments.v1 to ledger-a; payments.v1 to ledger-b."><g class="tp-edge" data-edge="0" data-kind="async"><path class="tp-edge-bed" d="M98.2 111.3L242 111.3"/><path class="k-line" data-tone="mid" data-dashed d="M98.2 111.3L242 111.3"/><path class="k-line" data-tone="mid" data-free="" d="M233.9 115L240.1 111.3L233.9 107.6"/><circle class="tp-port" cx="98.2" cy="111.3" r="1.4"/></g><g class="tp-edge" data-edge="1" data-kind="async"><path class="tp-edge-bed" d="M403.2 95L460.9 95L464 94.7L466.4 93.6L468.2 91.9L469.2 89.4L469.5 86.3L469.5 63.6L469.9 60.5L470.9 58L472.7 56.3L475.1 55.2L478.2 54.9L547 54.9"/><path class="k-line" data-tone="mid" data-dashed d="M403.2 95L460.9 95L464 94.7L466.4 93.6L468.2 91.9L469.2 89.4L469.5 86.3L469.5 63.6L469.9 60.5L470.9 58L472.7 56.3L475.1 55.2L478.2 54.9L547 54.9"/><path class="k-line" data-tone="mid" data-free="" d="M539 58.6L545.2 54.9L539 51.2"/></g><g class="tp-edge" data-edge="2" data-kind="async"><path class="tp-edge-bed" d="M403.2 127.6L472 127.6L475.1 128L477.6 129L479.3 130.8L480.4 133.2L480.7 136.3L480.7 159.1L481 162.2L482.1 164.6L483.8 166.4L486.3 167.4L489.4 167.7L547 167.7"/><path class="k-line" data-tone="mid" data-dashed d="M403.2 127.6L472 127.6L475.1 128L477.6 129L479.3 130.8L480.4 133.2L480.7 136.3L480.7 159.1L481 162.2L482.1 164.6L483.8 166.4L486.3 167.4L489.4 167.7L547 167.7"/><path class="k-line" data-tone="mid" data-free="" d="M539 171.5L545.2 167.7L539 164"/></g><g class="tp-label" data-label="api"><text class="tp-ft" x="64.7" y="143.6" font-size="8" text-anchor="middle">payments-api</text></g><g class="tp-label" data-label="topic"><text class="tp-ft" x="322.6" y="150.5" font-size="8" text-anchor="middle">payments.v1</text></g><g class="tp-label" data-label="ledger-a"><text class="tp-ft" x="580.5" y="87.2" font-size="8" text-anchor="middle">ledger-a</text></g><g class="tp-label" data-label="ledger-b"><text class="tp-ft" x="580.5" y="200.1" font-size="8" text-anchor="middle">ledger-b</text></g><g class="tp-elabel" data-elabel="0"><text class="tp-ft tp-elabel-text" x="170.1" y="107.8" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="1"><text class="tp-ft tp-elabel-text" x="508.3" y="51.4" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="2"><text class="tp-ft tp-elabel-text" x="442" y="124.1" font-size="6.2" text-anchor="middle"></text></g><g class="tp-packets" data-packets=""></g><g class="tp-node" data-node="ledger-a" data-kind="worker"><rect class="tp-f" x="547" y="32.6" width="67" height="44.6" rx="4"/><path class="k-line" data-tone="faint" d="M547 43.6L614 43.6"/><circle class="tp-led" data-led="ledger-a:0" cx="553" cy="38.1" r="1.7"/><circle class="tp-f-mark" cx="607" cy="38.1" r="2.6"/></g><g class="tp-node" data-node="api" data-kind="service"><rect class="tp-f tp-f-back" x="36.2" y="84" width="67" height="44.6" rx="4"/><rect class="tp-f tp-f-back" x="33.7" y="86.5" width="67" height="44.6" rx="4"/><rect class="tp-f" x="31.2" y="89" width="67" height="44.6" rx="4"/><path class="k-line" data-tone="faint" d="M31.2 100L98.2 100"/><circle class="tp-led" data-led="api:0" cx="37.2" cy="94.5" r="1.7"/><circle class="tp-led" data-led="api:1" cx="43.2" cy="94.5" r="1.7"/><circle class="tp-led" data-led="api:2" cx="49.2" cy="94.5" r="1.7"/></g><g class="tp-node" data-node="topic" data-kind="kafka"><rect class="tp-f" x="242" y="82.2" width="161.2" height="58.3" rx="4"/><g class="tp-lane" data-lane="topic:0"><rect class="tp-cell tp-fcell" data-cell="topic:0:0" x="289.9" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:1" x="298.6" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:2" x="307.3" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:3" x="316" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:4" x="324.6" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:5" x="333.3" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:6" x="342" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:7" x="350.7" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:8" x="359.4" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:9" x="368" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:10" x="376.7" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:11" x="385.4" y="91.7" width="7.1" height="8.3" rx="1"/><path class="tp-cursor tp-fcursor" data-cursor="topic:0:0" data-g="0" d="M289.1 88.9V102.8"/></g><g class="tp-lane" data-lane="topic:1"><rect class="tp-cell tp-fcell" data-cell="topic:1:0" x="289.9" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:1" x="298.6" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:2" x="307.3" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:3" x="316" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:4" x="324.6" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:5" x="333.3" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:6" x="342" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:7" x="350.7" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:8" x="359.4" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:9" x="368" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:10" x="376.7" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:11" x="385.4" y="105.3" width="7.1" height="8.3" rx="1"/><path class="tp-cursor tp-fcursor" data-cursor="topic:0:1" data-g="0" d="M289.1 102.5V116.4"/></g><g class="tp-lane" data-lane="topic:2"><rect class="tp-cell tp-fcell" data-cell="topic:2:0" x="289.9" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:1" x="298.6" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:2" x="307.3" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:3" x="316" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:4" x="324.6" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:5" x="333.3" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:6" x="342" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:7" x="350.7" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:8" x="359.4" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:9" x="368" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:10" x="376.7" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:11" x="385.4" y="118.9" width="7.1" height="8.3" rx="1"/><path class="tp-cursor tp-fcursor" data-cursor="topic:0:2" data-g="0" d="M289.1 116.1V130.1"/></g><g class="tp-broker" data-part="broker:0"><rect class="tp-f tp-f-chip" x="248.2" y="87.7" width="14.9" height="15.6" rx="1"/><circle class="tp-led" data-led="topic:b0" cx="260.1" cy="95.5" r="1.2"/></g><g class="tp-broker" data-part="broker:1"><rect class="tp-f tp-f-chip" x="248.2" y="104.5" width="14.9" height="15.6" rx="1"/><circle class="tp-led" data-led="topic:b1" cx="260.1" cy="112.3" r="1.2"/></g><g class="tp-broker" data-part="broker:2"><rect class="tp-f tp-f-chip" x="248.2" y="121.3" width="14.9" height="15.6" rx="1"/><circle class="tp-led" data-led="topic:b2" cx="260.1" cy="129" r="1.2"/></g></g><g class="tp-node" data-node="ledger-b" data-kind="worker"><rect class="tp-f" x="547" y="145.4" width="67" height="44.6" rx="4"/><path class="k-line" data-tone="faint" d="M547 156.4L614 156.4"/><circle class="tp-led" data-led="ledger-b:0" cx="553" cy="150.9" r="1.7"/><circle class="tp-f-mark" cx="607" cy="150.9" r="2.6"/></g></svg></div></div><figcaption class="k-legend"><span class="k-keys"><span class="k-key"><svg class="k-swatch" data-mark="lit" viewBox="0 0 16 10" aria-hidden="true"><path d="M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z"/></svg>Request</span><span class="k-key"><svg class="k-swatch" data-mark="raised" viewBox="0 0 16 10" aria-hidden="true"><path d="M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z"/></svg>Response</span><span class="k-key"><svg class="k-swatch" data-mark="blue" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Record pulled by a consumer</span><span class="k-key"><svg class="k-swatch" data-mark="amber" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Retry</span><span class="k-key"><svg class="k-swatch" data-mark="dashed" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Async link</span><span class="k-key"><svg class="k-swatch" data-mark="red" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Error, refused or dropped</span></span><span class="k-caption">payments.v1 has 3 partitions on 3 brokers (RF 3, min ISR 2) and producers wait for acks=all. Partition 0 is hot: it gets half the writes. Click a broker unit on the plinth to fail it yourself; a dimmed lane is a partition with no leader.</span></figcaption></figure></main><script type="module">// The model behind every figure: a small, seeded, tick-based simulation of requests moving
+// through a system. The page inlines this file (exports stripped) and draws `sim.packets`;
+// `scripts/build.mjs --check` runs the same code in Node and prints what the readout will say.
+// Every number a figure shows comes from here.
+//
+// Time. Sim time is real time for everything the model decides (service time, queue waits,
+// timeouts, backoff, breaker windows, rates), except packet travel, which is slowed down so
+// people can watch it. Latency is therefore built up in model time rather than measured off
+// the clock: a job costs its queue wait plus its service time plus its slowest sync call, and a
+// call costs its network round trip (`ms` on the edge, default `sim.net`) plus the callee's job,
+// plus any earlier failed attempts and their backoff.
+
+const SIM_DEFAULTS = { speed: 150, per: 1, rebalance: 0.9, window: 2, seed: 7, refuse: 0.02, net: 0.5, length: 0, loop: true };
+const SERVICE_MS = { client: 0, lb: 0.3, gateway: 1, service: 8, worker: 15, cache: 0.4, db: 4, storage: 20, kafka: 2, queue: 1, cdn: 0.5, dns: 1, external: 120, flags: 1, scheduler: 0, box: 5 };
+const DETECT = { lb: 0.6, gateway: 0.6, dns: 3 };
+
+function rngOf(seed) {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+}
+
+const isLog = (node) => node.kind === "kafka" || node.kind === "queue";
+const routeOf = (node) => node.route || (node.kind === "lb" || node.kind === "gateway" || node.kind === "dns" ? "roundrobin" : "all");
+
+function hashOf(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+// Scenario steps may name a phase instead of a time: { phase: "incident", after: 1.5 }.
+function normalizeScenario(scenario) {
+  if (!scenario) return null;
+  const phases = (scenario.phases || []).map((phase) => ({ ...phase })).sort((a, b) => a.at - b.at);
+  const byName = new Map(phases.map((phase) => [phase.name, phase]));
+  const steps = (scenario.steps || []).map((step, index) => {
+    let at = step.at;
+    if (at == null && step.phase != null) {
+      const phase = byName.get(step.phase);
+      if (!phase) throw new Error(`scenario step ${index}: unknown phase "${step.phase}"`);
+      at = phase.at + (step.after || 0);
+    }
+    if (at == null) throw new Error(`scenario step ${index}: needs \`at\` or \`phase\``);
+    return { ...step, at, index };
+  });
+  steps.sort((a, b) => a.at - b.at || a.index - b.index);
+  const last = Math.max(0, ...steps.map((step) => step.at), ...phases.map((phase) => phase.at));
+  const length = scenario.length || Math.ceil(last + 8);
+  phases.forEach((phase, index) => (phase.end = phases[index + 1]?.at ?? length));
+  return { length, loop: scenario.loop !== false, steps, phases };
+}
+
+const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
+
+// spec: { nodes, edges (with `len` in world units), sim, scenario, flags, features }.
+function createSim(spec) {
+  const features = spec.features || {};
+  const on = (name) => features[name] !== false;
+  const cfg = { ...SIM_DEFAULTS, ...(spec.sim || {}) };
+  const scenario = on("scenario") ? normalizeScenario(spec.scenario) : null;
+  if (scenario) cfg.length = scenario.length;
+  const rand = rngOf(cfg.seed);
+  const nodes = new Map();
+  const edges = spec.edges.map((edge, index) => ({
+    ...edge,
+    index,
+    sent: 0,
+    dropped: 0,
+    failed: 0,
+    fast: 0,
+    recent: [],
+    recentErrors: [],
+    flow: 0,
+    errorRate: 0,
+    breaker: on("breakers") && edge.breaker ? { errors: 0.5, min: 8, window: 2, open: 3, ...(edge.breaker === true ? {} : edge.breaker), state: "closed", outcomes: [], until: 0, trial: false } : null,
+  }));
+  for (const node of spec.nodes) {
+    nodes.set(node.id, {
+      ...node,
+      up: node.up !== false,
+      downSince: node.up === false ? 0 : null,
+      ms: node.ms ?? SERVICE_MS[node.kind] ?? 5,
+      queueMax: on("queues") ? node.queue || 0 : 0,
+      out: [],
+      into: [],
+      rr: 0,
+      tokens: 0,
+      bucket: node.capacity ? node.capacity * (node.burst ?? 0.25) + 1 : 0,
+      handled: 0,
+      jobs: new Set(),
+      working: [],
+      waiting: [],
+      clock: rand() / Math.max(typeof node.emit === "number" ? node.emit : 1, 0.001),
+      nextBurst: 0,
+      flow: 0,
+      dropRate: 0,
+      errorRate: 0,
+      recent: [],
+      recentDrops: [],
+      recentErrors: [],
+      service: [],
+      roots: [],
+      hist: [],
+      replica: 0,
+    });
+  }
+  for (const edge of edges) {
+    nodes.get(edge.from).out.push(edge);
+    nodes.get(edge.to).into.push(edge);
+  }
+
+  // Feature flags in the modelled system. A service evaluates flags locally from the last
+  // config it got; while the flag service is down, changes don't reach anyone.
+  const flags = new Map();
+  if (on("flags")) for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
+  const flagNode = on("flags") ? [...nodes.values()].find((node) => node.kind === "flags") : null;
+
+  // Logs: kafka topics (partitions, consumer groups with exclusive assignment) and queues
+  // (one lane, competing consumers).
+  const logs = new Map();
+  for (const node of nodes.values()) {
+    if (!isLog(node)) continue;
+    const partitions = node.kind === "queue" ? 1 : node.partitions || 3;
+    const groups = new Map();
+    for (const edge of node.out) {
+      const name = node.kind === "queue" ? "queue" : edge.group || "default";
+      if (!groups.has(name)) groups.set(name, { name, members: [], committed: Array(partitions).fill(0), assign: new Map(), pause: 0, generation: 0 });
+      groups.get(name).members.push(edge);
+    }
+    const log = { node, partitions, end: Array(partitions).fill(0), rr: 0, groups: [...groups.values()], appended: 0 };
+    // Brokers: each partition has `rf` replicas, led round-robin. Losing a leader pauses its
+    // partitions for `election` seconds; with acks "all", a partition whose in-sync replicas
+    // fall below `minIsr` refuses writes.
+    if (node.kind === "kafka" && node.brokers) {
+      const n = node.brokers;
+      log.brokers = Array(n).fill(true);
+      log.rf = Math.min(node.rf ?? 3, n);
+      log.minIsr = Math.min(node.minIsr ?? 2, log.rf);
+      log.acks = node.acks ?? 1;
+      log.election = node.election ?? 2;
+      log.parts = Array.from({ length: partitions }, (_, p) => ({ replicas: Array.from({ length: log.rf }, (_, i) => (p + i) % n), leader: p % n, electUntil: 0 }));
+    }
+    logs.set(node.id, log);
+  }
+
+  const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
+  // Timeouts are judged in model time when the reply arrives. For a reply that never comes,
+  // a backstop deadline in sim time: the call's animation round trip, the slowest sync call
+  // its target makes in turn, the timeout and a second's grace.
+  const allowance = new Map();
+  const allowanceOf = (edge, seen = new Set()) => {
+    if (allowance.has(edge.index)) return allowance.get(edge.index);
+    if (seen.has(edge.index)) return 0;
+    seen.add(edge.index);
+    const target = nodes.get(edge.to);
+    const below = target.out.filter((e) => e.sync && e.kind !== "replication").map((e) => allowanceOf(e, seen));
+    const value = 2 * durationOf(edge) + Math.max(0, ...below);
+    allowance.set(edge.index, value);
+    return value;
+  };
+  edges.forEach((edge) => allowanceOf(edge));
+
+  const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  let ids = 0;
+  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
+
+  function rebalance(log, group, now) {
+    const live = group.members.filter((edge) => nodes.get(edge.to).up);
+    group.assign = new Map();
+    if (log.node.kind === "queue") {
+      for (const edge of live) group.assign.set(edge.index, [0]);
+    } else {
+      live.forEach((edge) => group.assign.set(edge.index, []));
+      for (let p = 0; p < log.partitions; p++) if (live.length) group.assign.get(live[p % live.length].index).push(p);
+      group.generation++;
+      if (now > 0) group.pause = cfg.rebalance;
+    }
+    sim.events.push({ type: "rebalance", log: log.node.id, group: group.name, at: now });
+  }
+  for (const log of logs.values()) for (const group of log.groups) rebalance(log, group, 0);
+
+  function launch(edge, kind, extra = {}) {
+    const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    if (packet.dir > 0) {
+      edge.sent++;
+      edge.recent.push(sim.time);
+    }
+    sim.packets.push(packet);
+    return packet;
+  }
+
+  const burst = (edge, at = 1) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1 });
+
+  // --- jobs -----------------------------------------------------------------------------------
+
+  function startJob(node, msg, call, extra = {}) {
+    const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
+    node.jobs.add(job);
+    node.handled++;
+    node.recent.push(sim.time);
+    node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
+    sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
+    if (!node.capacity) return begin(job);
+    if (node.bucket >= 1) {
+      node.bucket -= 1;
+      return begin(job);
+    }
+    if (node.waiting.length < node.queueMax) return node.waiting.push(job);
+    reject(job);
+  }
+
+  function begin(job) {
+    const node = job.node;
+    // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
+    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
+    job.readyAt = sim.time + (base * spread) / 1000;
+    node.working.push(job);
+  }
+
+  // Over capacity with a full buffer: answer 503 at once.
+  function reject(job) {
+    const node = job.node;
+    node.recentDrops.push(sim.time);
+    if (job.call) {
+      job.call.edge.dropped++;
+      burst(job.call.edge);
+    } else if (job.via) burst(job.via);
+    respond(job, false);
+  }
+
+  function respond(job, ok) {
+    if (job.dead || job.done) return;
+    job.done = true;
+    const node = job.node;
+    node.jobs.delete(job);
+    if (!ok) node.recentErrors.push(sim.time);
+    const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
+    const ms = own + job.cost;
+    node.service.push({ at: sim.time, ms });
+    if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
+    if (job.root) node.roots.push({ at: sim.time, ms, ok });
+  }
+
+  function ready(job) {
+    if (job.dead || job.done) return;
+    const node = job.node;
+    if (!node.up) return;
+    if (isLog(node)) return respond(job, true);
+    if (node.errorRate && rand() < node.errorRate) return respond(job, false);
+    forward(job);
+    job.forwarded = true;
+    if (job.waiting === 0) respond(job, !job.failed);
+  }
+
+  const decide = (msg, name) => {
+    const flag = flags.get(name);
+    if (!flag) return false;
+    if (flag.sticky) return (hashOf(`${msg.source}:${name}`) % 10000) / 10000 < flag.effective;
+    msg.draws ??= {};
+    if (msg.draws[name] === undefined) msg.draws[name] = rand() < flag.effective;
+    return msg.draws[name];
+  };
+  const healthy = (node, router) => node.up || sim.time - node.downSince < (router.detect ?? router.ttl ?? DETECT[router.kind] ?? 0);
+
+  function forward(job) {
+    const node = job.node;
+    const usable = node.out.filter((edge) => edge.kind !== "config").filter((edge) => (edge.flag && on("flags") ? decide(job.msg, edge.flag) : edge.unless && on("flags") ? !decide(job.msg, edge.unless) : true));
+    for (const edge of usable) if (edge.kind === "replication") {
+      launch(edge, "replication", { msg: job.msg });
+    }
+    const data = usable.filter((edge) => edge.kind !== "replication");
+    if (!data.length) return;
+    const mode = routeOf(node);
+    const chosen = [];
+    if (mode === "roundrobin") {
+      // Health checks notice a dead target only after `detect` seconds (`ttl` for DNS).
+      for (let tries = 0; tries < data.length; tries++) {
+        const edge = data[node.rr++ % data.length];
+        if (node.health === false || healthy(nodes.get(edge.to), node)) {
+          chosen.push(edge);
+          break;
+        }
+      }
+      if (!chosen.length) job.failed = true;
+    } else if (mode === "random") {
+      const total = data.reduce((sum, edge) => sum + (edge.p ?? 1), 0);
+      let pick = rand() * total;
+      chosen.push(data.find((edge) => (pick -= edge.p ?? 1) <= 0) || data[data.length - 1]);
+    } else {
+      // A CDN or cache with `hit` sends only its misses on.
+      for (const edge of data) if (rand() < (edge.p ?? (node.hit != null ? 1 - node.hit : 1))) chosen.push(edge);
+    }
+    for (const edge of chosen) {
+      if (edge.sync) {
+        job.waiting++;
+        callOut(job, edge, 0);
+      } else launch(edge, "request", { msg: job.msg });
+    }
+  }
+
+  // --- calls: one attempt of a sync request ---------------------------------------------------
+
+  const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
+
+  function callOut(job, edge, attempt, prior = 0) {
+    const br = edge.breaker;
+    let trial = false;
+    if (br) {
+      if (br.state === "open" && sim.time >= br.until) setBreaker(edge, "half");
+      if (br.state === "open" || (br.state === "half" && br.trial)) {
+        edge.fast++;
+        return finish(job, false, prior);
+      }
+      if (br.state === "half") {
+        br.trial = true;
+        trial = true;
+      }
+    }
+    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
+    sim.calls.add(call);
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+  }
+
+  function setBreaker(edge, state) {
+    const br = edge.breaker;
+    br.state = state;
+    br.trial = false;
+    if (state === "open") br.until = sim.time + br.open;
+    if (state === "closed") br.outcomes = [];
+    sim.events.push({ type: "breaker", edge: edge.index, state, at: sim.time });
+  }
+
+  function settle(call, ok, ms) {
+    if (call.done) return;
+    const spent = call.prior + ms;
+    call.done = true;
+    sim.calls.delete(call);
+    const { edge, job } = call;
+    if (!ok) {
+      edge.failed++;
+      edge.recentErrors.push(sim.time);
+    }
+    const br = edge.breaker;
+    if (br) {
+      if (call.trial) setBreaker(edge, ok ? "closed" : "open");
+      else if (br.state === "closed") {
+        br.outcomes.push({ at: sim.time, ok });
+        while (br.outcomes.length && br.outcomes[0].at < sim.time - br.window) br.outcomes.shift();
+        const bad = br.outcomes.filter((o) => !o.ok).length;
+        if (br.outcomes.length >= br.min && bad / br.outcomes.length >= br.errors) setBreaker(edge, "open");
+      }
+    }
+    if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
+      const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
+      return;
+    }
+    finish(job, ok, spent);
+  }
+
+  function finish(job, ok, ms) {
+    job.waiting--;
+    job.cost = Math.max(job.cost, ms);
+    if (!ok) job.failed = true;
+    if (job.waiting === 0 && job.forwarded) respond(job, !job.failed);
+  }
+
+  // --- arrivals -------------------------------------------------------------------------------
+
+  function arrive(packet) {
+    const edge = edges[packet.edge];
+    if (packet.dir < 0) {
+      const call = packet.call;
+      if (!call || call.done) return;
+      const ms = netOf(edge) + (packet.ms || 0);
+      // The caller gave up at `timeout` in model time: this reply is late and ignored.
+      if (edge.timeout && ms > edge.timeout * 1000) {
+        call.timedOut = true;
+        return settle(call, false, edge.timeout * 1000);
+      }
+      return settle(call, packet.kind === "response", ms);
+    }
+    const node = nodes.get(edge.to);
+    if (!node.up) {
+      node.recentDrops.push(sim.time);
+      edge.dropped++;
+      burst(edge);
+      // Connection refused: the caller hears about it straight away.
+      if (packet.call) {
+        const call = packet.call;
+        sim.timers.push({ at: sim.time + cfg.refuse, run: () => !call.done && call.packets.push(launch(edge, "error", { call, ms: 0 })) });
+      }
+      return;
+    }
+    if (isLog(node)) {
+      const log = logs.get(node.id);
+      const p = chooseP(log, edge, packet);
+      if (!writable(log, p)) {
+        node.recentDrops.push(sim.time);
+        edge.dropped++;
+        burst(edge);
+        if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
+        return;
+      }
+      log.end[p]++;
+      log.appended++;
+    }
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge });
+  }
+
+  const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
+  const readable = (log, p) => !log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]);
+  const writable = (log, p) => readable(log, p) && (!log.parts || log.acks !== "all" || isrOf(log, log.parts[p]) >= log.minIsr);
+
+  function setBroker(id, b, up) {
+    const log = logs.get(id);
+    if (!log?.brokers || b < 0 || b >= log.brokers.length || log.brokers[b] === up) return;
+    log.brokers[b] = up;
+    sim.events.push({ type: up ? "broker-up" : "broker-down", node: id, broker: b, at: sim.time });
+    for (const part of log.parts) {
+      if (!up && part.leader === b) {
+        const next = part.replicas.find((r) => log.brokers[r]);
+        if (next != null) {
+          part.leader = next;
+          part.electUntil = sim.time + log.election;
+        }
+      } else if (up && !log.brokers[part.leader] && part.replicas.includes(b)) {
+        part.leader = b;
+        part.electUntil = sim.time + log.election;
+      }
+    }
+  }
+
+  function chooseP(log, edge, packet) {
+    if (packet.partition != null) return packet.partition;
+    if (edge.key != null) return hashOf(String(edge.key)) % log.partitions;
+    const skew = log.node.skew;
+    if (skew) {
+      const total = skew.reduce((a, b) => a + b, 0);
+      let pick = rand() * total;
+      for (let p = 0; p < log.partitions; p++) if ((pick -= skew[p] ?? 0) <= 0) return p;
+      return log.partitions - 1;
+    }
+    return log.rr++ % log.partitions;
+  }
+
+  // --- sources --------------------------------------------------------------------------------
+
+  const emitAt = (node, t) => {
+    const emit = node.emit;
+    if (typeof emit === "number") return emit;
+    if (Array.isArray(emit)) {
+      const span = cfg.length || emit[emit.length - 1][0] || 1;
+      const x = cfg.loop && cfg.length ? t % span : t;
+      if (x <= emit[0][0]) return emit[0][1];
+      for (let i = 1; i < emit.length; i++) {
+        const [t1, r1] = emit[i];
+        const [t0, r0] = emit[i - 1];
+        if (x <= t1) return r0 + ((r1 - r0) * (x - t0)) / Math.max(t1 - t0, 1e-6);
+      }
+      return emit[emit.length - 1][1];
+    }
+    return 0;
+  };
+
+  function emitOne(node) {
+    const msg = newMsg(node.id);
+    const job = { node, msg, call: null, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, root: true };
+    node.jobs.add(job);
+    node.handled++;
+    node.recent.push(sim.time);
+    sim.events.push({ type: "handle", node: node.id, replica: 0, at: sim.time });
+    forward(job);
+    job.forwarded = true;
+    if (job.waiting === 0) {
+      job.done = true;
+      node.jobs.delete(job);
+      if (node.out.some((edge) => edge.sync)) node.roots.push({ at: sim.time, ms: 0, ok: !job.failed });
+    }
+  }
+
+  // --- the tick -------------------------------------------------------------------------------
+
+  function step(dt) {
+    sim.time += dt;
+    const now = sim.time;
+    if (scenario) {
+      while (sim.stepIndex < scenario.steps.length && scenario.steps[sim.stepIndex].at <= now) {
+        const s = scenario.steps[sim.stepIndex++];
+        apply(s);
+        sim.events.push({ type: "step", index: s.index, at: now });
+      }
+    }
+    if (sim.timers.length) {
+      const due = sim.timers.filter((timer) => timer.at <= now);
+      if (due.length) {
+        sim.timers = sim.timers.filter((timer) => timer.at > now);
+        due.forEach((timer) => timer.run());
+      }
+    }
+    for (const node of nodes.values()) {
+      if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
+      if (!node.up) continue;
+      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+        // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
+        if (now >= node.nextBurst) {
+          node.nextBurst = now + node.emit.every;
+          for (let i = 0; i < node.emit.burst; i++) sim.timers.push({ at: now + (i / node.emit.burst) * 0.33, run: () => node.up && emitOne(node) });
+        }
+      } else if (node.emit) {
+        const rate = emitAt(node, now);
+        if (rate > 0) {
+          node.clock -= dt;
+          while (node.clock <= 0) {
+            node.clock += (0.6 + rand() * 0.8) / rate;
+            emitOne(node);
+          }
+        }
+      }
+      while (node.waiting.length && node.bucket >= 1) {
+        node.bucket -= 1;
+        begin(node.waiting.shift());
+      }
+      if (node.working.length) {
+        const due = node.working.filter((job) => job.readyAt <= now);
+        if (due.length) {
+          node.working = node.working.filter((job) => job.readyAt > now);
+          due.forEach(ready);
+        }
+      }
+    }
+    // Timeouts: the caller gives up; a reply still on its way arrives late and is ignored.
+    if (sim.calls.size) {
+      for (const call of [...sim.calls]) if (now >= call.deadline) {
+        for (const packet of call.packets) if (packet.dir < 0) packet.kind = "late";
+        call.timedOut = true;
+        settle(call, false, call.edge.timeout * 1000);
+      }
+    }
+    // Consumers pull from logs at their own rate.
+    for (const log of logs.values()) {
+      for (const group of log.groups) {
+        if (group.pause > 0) {
+          group.pause = Math.max(0, group.pause - dt);
+          continue;
+        }
+        for (const edge of group.members) {
+          const consumer = nodes.get(edge.to);
+          if (!consumer.up) continue;
+          const parts = group.assign.get(edge.index) || [];
+          const rate = edge.rate ?? consumer.rate ?? 40;
+          consumer.tokens = Math.min(consumer.tokens + rate * dt, 3);
+          while (consumer.tokens >= 1) {
+            let best = -1;
+            let most = 0;
+            for (const p of parts) {
+              if (!readable(log, p)) continue;
+              const lag = log.end[p] - group.committed[p];
+              if (lag > most) {
+                most = lag;
+                best = p;
+              }
+            }
+            if (best < 0) {
+              consumer.tokens = Math.min(consumer.tokens, 1);
+              break;
+            }
+            consumer.tokens -= 1;
+            group.committed[best]++;
+            launch(edge, "record", { partition: best, group: group.name, msg: newMsg(log.node.id) });
+          }
+        }
+      }
+    }
+    // Move packets; an arriving packet hands off.
+    const live = [];
+    const moving = sim.packets;
+    sim.packets = [];
+    for (const packet of moving) {
+      if (packet.kind === "drop") {
+        packet.age += dt;
+        if (packet.age < 0.6) live.push(packet);
+        continue;
+      }
+      packet.t += dt / packet.duration;
+      if (packet.t >= 1) {
+        if (packet.kind !== "late") arrive(packet);
+      } else live.push(packet);
+    }
+    sim.packets = live.concat(sim.packets);
+    const window = Math.min(cfg.window, Math.max(now, 0.25));
+    const trim = (list, keep = cfg.window) => {
+      while (list.length && (list[0].at ?? list[0]) < now - keep) list.shift();
+    };
+    for (const node of nodes.values()) {
+      trim(node.recent);
+      trim(node.recentDrops);
+      trim(node.recentErrors);
+      trim(node.service, 3);
+      trim(node.roots, 3);
+      node.flow = node.recent.length / window;
+      node.dropRate = node.recentDrops.length / window;
+      node.errorRateSeen = node.recentErrors.length / window;
+    }
+    for (const edge of edges) {
+      trim(edge.recent);
+      trim(edge.recentErrors);
+      edge.flow = edge.recent.length / window;
+      edge.errorRate = edge.recentErrors.length / window;
+    }
+    sim.histClock += dt;
+    if (sim.histClock >= 0.25) {
+      sim.histClock = 0;
+      for (const node of nodes.values()) {
+        node.hist.push(node.flow);
+        if (node.hist.length > 120) node.hist.shift();
+      }
+      sim.hist.push(totalIn());
+      if (sim.hist.length > 120) sim.hist.shift();
+    }
+    if (sim.events.length > 512) sim.events.splice(0, sim.events.length - 512);
+  }
+
+  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
+
+  function setUp(id, up) {
+    const broker = /^(.*):b(\d+)$/.exec(id);
+    if (broker && !nodes.has(id)) return setBroker(broker[1], +broker[2], up);
+    const node = nodes.get(id);
+    if (!node || node.up === up) return;
+    node.up = up;
+    node.downSince = up ? null : sim.time;
+    if (!up) {
+      // In-flight work is lost; callers waiting on it get a reset.
+      for (const job of node.jobs) {
+        if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
+        job.dead = true;
+      }
+      node.jobs.clear();
+      node.working = [];
+      node.waiting = [];
+    }
+    if (up && node === flagNode) for (const flag of flags.values()) syncFlag(flag);
+    sim.events.push({ type: up ? "recover" : "fail", node: id, at: sim.time });
+    for (const log of logs.values()) for (const group of log.groups) if (group.members.some((edge) => edge.to === id)) rebalance(log, group, sim.time);
+  }
+
+  function syncFlag(flag) {
+    if (flagNode && !flagNode.up) return;
+    if (flag.effective === flag.rollout) return;
+    flag.effective = flag.rollout;
+    sim.events.push({ type: "flag", flag: flag.name, rollout: flag.effective, at: sim.time });
+  }
+
+  // "from>to" in a scenario's `set` changes that edge: retries, timeout, backoff, p, breaker.
+  const EDGE_SETTABLE = new Set(["retries", "timeout", "backoff", "p", "breaker", "rate"]);
+  function setEdge(key, props) {
+    const [from, to] = key.split(">");
+    const list = edges.filter((edge) => edge.from === from && edge.to === to);
+    if (!list.length) throw new Error(`scenario: no edge "${key}"`);
+    for (const edge of list) for (const [name, value] of Object.entries(props)) {
+      if (!EDGE_SETTABLE.has(name)) throw new Error(`scenario: can't set "${name}" on an edge (settable: ${[...EDGE_SETTABLE].join(", ")})`);
+      if (name === "breaker") {
+        edge.breaker = value && on("breakers") ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], until: 0, trial: false } : null;
+        sim.events.push({ type: "breaker", edge: edge.index, state: edge.breaker ? "closed" : "none", at: sim.time });
+      } else edge[name] = value;
+      if (name === "timeout") allowanceOf(edge);
+    }
+  }
+
+  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs"]);
+  function apply(step) {
+    if (step.fail) [].concat(step.fail).forEach((id) => setUp(id, false));
+    if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
+    if (step.set) {
+      for (const [id, props] of Object.entries(step.set)) {
+        if (id.includes(">")) {
+          setEdge(id, props);
+          continue;
+        }
+        const node = nodes.get(id);
+        if (!node) throw new Error(`scenario: unknown node "${id}"`);
+        for (const [key, value] of Object.entries(props)) {
+          if (!SETTABLE.has(key)) throw new Error(`scenario: can't set "${key}" (settable: ${[...SETTABLE].join(", ")})`);
+          if (key === "queue") node.queueMax = on("queues") ? value : 0;
+          else node[key] = value;
+          if (key === "emit" && typeof value === "number") node.clock = Math.min(node.clock, 1 / Math.max(value, 0.001));
+        }
+      }
+    }
+    if (on("flags")) {
+      if (step.flag) {
+        const flag = flags.get(step.flag);
+        if (!flag) throw new Error(`scenario: unknown flag "${step.flag}"`);
+        flag.rollout = step.rollout ?? 1;
+        syncFlag(flag);
+      }
+      if (step.kill) {
+        const flag = flags.get(step.kill);
+        if (!flag) throw new Error(`scenario: unknown flag "${step.kill}"`);
+        flag.rollout = 0;
+        syncFlag(flag);
+      }
+    }
+  }
+
+  sim.step = (dt) => {
+    // Sub-step so a long frame doesn't teleport packets past their arrival.
+    const n = Math.max(1, Math.ceil(dt / (1 / 60)));
+    for (let i = 0; i < n; i++) step(dt / n);
+  };
+  sim.setUp = setUp;
+  sim.setBroker = setBroker;
+  sim.readable = readable;
+  sim.isrOf = isrOf;
+  sim.apply = apply;
+  sim.totalIn = totalIn;
+  sim.lagOf = (id, groupName) => {
+    const log = logs.get(id);
+    if (!log) return 0;
+    const group = groupName ? log.groups.find((g) => g.name === groupName) : log.groups[0];
+    if (!group) return 0;
+    return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+  };
+  sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
+  sim.statsOf = (id) => statsOf(sim, id);
+  sim.summary = () => summaryOf(sim);
+  return sim;
+}
+
+// p50 / p99 of completed requests started at these sources, over the last 3 s of model time.
+function latencyOf(sources) {
+  const samples = [];
+  let failed = 0;
+  for (const node of sources) for (const root of node?.roots || []) {
+    if (root.ok) samples.push(root.ms);
+    else failed++;
+  }
+  samples.sort((a, b) => a - b);
+  return { p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), count: samples.length, failed };
+}
+
+const fmt = (n) => (n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n >= 10 ? n.toFixed(0) : n.toFixed(1));
+const formatRate = (n, per = 1) => `${fmt(n * per)}/s`;
+const formatCount = (n, per = 1) => fmt(n * per).replace(/\.0$/, "");
+const formatMs = (ms) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : ms >= 10 ? `${ms.toFixed(0)}ms` : `${ms.toFixed(1)}ms`);
+
+function statsOf(sim, id) {
+  const node = sim.nodes.get(id);
+  if (!node) return "";
+  const per = sim.cfg.per;
+  const name = node.label || node.id;
+  if (!node.up) return `${name} · down${node.dropRate ? ` · ${formatRate(node.dropRate, per)} refused` : ""}`;
+  const log = sim.logs.get(id);
+  if (log) {
+    const parts = log.groups.map((group) => {
+      const lag = log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+      const live = [...group.assign.values()].filter((list) => list.length).length;
+      return `${log.groups.length > 1 ? group.name + " " : ""}lag ${formatCount(lag, per)}${group.pause > 0 ? " · rebalancing" : node.kind === "kafka" ? ` · ${live}/${group.members.length} consumers` : ""}`;
+    });
+    if (log.brokers) {
+      const live = log.brokers.filter(Boolean).length;
+      const electing = log.parts.filter((part) => sim.time < part.electUntil).length;
+      const offline = log.parts.filter((part) => !log.brokers[part.leader]).length;
+      const under = log.parts.filter((part) => sim.isrOf(log, part) < log.minIsr).length;
+      parts.push(`brokers ${live}/${log.brokers.length}`);
+      if (electing) parts.push(`${electing} electing`);
+      if (offline) parts.push(`${offline} offline`);
+      if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
+    }
+    return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
+  }
+  if (node.kind === "flags") {
+    const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
+    return `${name} · ${list.join(" · ") || "no flags"}`;
+  }
+  const bits = [`${name} · ${formatRate(node.flow, per)}`];
+  if (node.roots.length) {
+    const lat = latencyOf([node]);
+    if (lat.count) bits.push(`p50 ${formatMs(lat.p50)} · p99 ${formatMs(lat.p99)}`);
+  } else if (node.service.length) {
+    const sorted = node.service.map((s) => s.ms).sort((a, b) => a - b);
+    bits.push(`${formatMs(quantile(sorted, 0.5))} p50`);
+  }
+  if (node.capacity) bits.push(`cap ${formatRate(node.capacity, per)}`);
+  if (node.queueMax) bits.push(`queue ${node.waiting.length}/${node.queueMax}`);
+  if (node.dropRate) bits.push(`${formatRate(node.dropRate, per)} rejected`);
+  if (node.errorRateSeen) bits.push(`${formatRate(node.errorRateSeen, per)} errors`);
+  for (const edge of node.out) if (edge.breaker && edge.breaker.state !== "closed") bits.push(`breaker → ${sim.nodes.get(edge.to).label || edge.to} ${edge.breaker.state}`);
+  return bits.join(" · ");
+}
+
+function summaryOf(sim) {
+  const per = sim.cfg.per;
+  let lag = 0;
+  let drops = 0;
+  for (const node of sim.nodes.values()) drops += node.dropRate;
+  for (const id of sim.logs.keys()) lag += sim.lagOf(id);
+  const bits = [`${formatRate(sim.totalIn(), per)} in`];
+  const lat = sim.latencyOf();
+  if (lat.count) bits.push(`p50 ${formatMs(lat.p50)} · p99 ${formatMs(lat.p99)}`);
+  if (sim.logs.size) bits.push(`lag ${formatCount(lag, per)}`);
+  const failing = lat.failed / 3;
+  const down = [...sim.nodes.values()].filter((node) => !node.up).length;
+  bits.push(failing > 0.05 ? `${formatRate(failing, per)} failing` : drops ? `${formatRate(drops, per)} lost` : down ? `${down} down` : "healthy");
+  return bits.join(" · ");
+}
+
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[208,91],"positions":{"api":[0,0],"topic":[1,0],"ledger-a":[2,-0.5],"ledger-b":[2,0.5]},"spec":{"nodes":[{"id":"api","kind":"service","replicas":3,"label":"payments-api","emit":12,"partitions":0},{"id":"topic","kind":"kafka","partitions":3,"brokers":3,"rf":3,"minIsr":2,"acks":"all","election":2.5,"skew":[0.5,0.25,0.25],"label":"payments.v1","replicas":1},{"id":"ledger-a","kind":"worker","rate":11,"label":"ledger-a","partitions":0,"replicas":1},{"id":"ledger-b","kind":"worker","rate":11,"label":"ledger-b","partitions":0,"replicas":1}],"edges":[{"from":"api","to":"topic","sync":true,"retries":1,"backoff":0.2,"kind":"async","len":116},{"from":"topic","to":"ledger-a","group":"ledger","kind":"async","sync":false,"len":142.97149520792613},{"from":"topic","to":"ledger-b","group":"ledger","kind":"async","sync":false,"len":142.97149520792613}],"sim":{"per":30,"seed":2},"scenario":{"length":38,"phases":[{"name":"healthy","at":0},{"name":"one broker down","at":8},{"name":"two down","at":18},{"name":"restored","at":27}],"steps":[{"at":1,"say":"Every write waits for all in-sync replicas. Partition 0 takes half the traffic, so ledger-a (which owns it) works hardest."},{"phase":"one broker down","fail":"topic:b0","say":"Broker 0 dies. Partition 0 loses its leader and pauses for an election (dim lane); writes to it fail and are retried."},{"phase":"one broker down","after":4,"say":"A new leader is elected. With 2 of 3 replicas in sync, min ISR is still met: writes flow again."},{"phase":"two down","fail":"topic:b1","say":"Broker 1 dies too. Every partition is down to 1 in-sync replica, under min ISR 2: with acks=all every write is refused."},{"phase":"restored","recover":["topic:b0","topic:b1"],"say":"Both brokers return and rejoin the ISR; writes resume and the consumers catch up."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,116],[0,46.5,49.04,51.17,53.15,55.28,57.82,76.16,78.69,80.82,82.8,84.94,87.47,142.97],[0,55.5,58.04,60.17,62.15,64.28,66.82,85.16,87.69,89.82,91.8,93.94,96.47,142.97]],"views":{"iso":{"edges":[[[113.1,86.5],[239.7,131.8]],[[391.3,174.9],[442.1,193],[445.1,193.8],[447.8,194.1],[450.4,193.9],[452.7,193],[454.9,191.7],[468.4,181.1],[470.6,179.7],[472.9,178.9],[475.5,178.7],[478.2,179],[481.2,179.8],[541.8,201.4]],[[372,190.1],[432.6,211.8],[435.1,212.9],[436.6,214.2],[437.1,215.5],[436.6,217],[435,218.5],[421.5,229.1],[420,230.7],[419.5,232.2],[420,233.5],[421.5,234.8],[424,235.9],[474.8,254.1]]],"step":[7.641814087835371,2.7314522537950268],"flagStep":[0,0],"packet":{"top":"M4 -4.3L0.8 -1.8L-4 -3.5L-0.8 -6.1Z","sides":"M4 -4.3L0.8 -1.8L0.8 2.1L4 -0.4ZM0.8 -1.8L-4 -3.5L-4 0.4L0.8 2.1Z","outline":"M-4 -3.5L-0.8 -6.1L4 -4.3L4 -0.4L0.8 2.1L-4 0.4Z"}},"flat":{"edges":[[[98.2,111.3],[242,111.3]],[[403.2,95],[460.9,95],[464,94.7],[466.4,93.6],[468.2,91.9],[469.2,89.4],[469.5,86.3],[469.5,63.6],[469.9,60.5],[470.9,58],[472.7,56.3],[475.1,55.2],[478.2,54.9],[547,54.9]],[[403.2,127.6],[472,127.6],[475.1,128],[477.6,129],[479.3,130.8],[480.4,133.2],[480.7,136.3],[480.7,159.1],[481,162.2],[482.1,164.6],[483.8,166.4],[486.3,167.4],[489.4,167.7],[547,167.7]]],"step":[8.679881906368621,0],"flagStep":[0,0],"packet":null,"k":1.2399831294812316}}};
+// The live page. Inlined after topo-sim.mjs (exports stripped) and `const DATA = …`.
+// It steps the sim, draws its packets into the visible view and writes attributes:
+// it never re-renders markup per frame.
+const stage = document.querySelector(".tp-stage");
+const readout = document.querySelector("[data-readout]");
+const still = matchMedia("(prefers-reduced-motion: reduce)");
+let sim = createSim(DATA.spec);
+// Extension points for topo-story.js and topo-edit.js.
+const hooks = { tick: [], takeover: [], key: [] };
+let paused = false;
+const SLOTS = DATA.slots;
+const lens = DATA.lens;
+const POOL_MAX = 420;
+const NS = "http://www.w3.org/2000/svg";
+
+const views = {};
+for (const name of ["iso", "flat"]) {
+  const svg = stage.querySelector(`.tp-${name}`);
+  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), status: new Map() };
+  const all = (selector, fn) => svg.querySelectorAll(selector).forEach(fn);
+  all("[data-breaker]", (el) => v.breakers.set(+el.dataset.breaker, el));
+  all("[data-elabel]", (el) => v.elabels.set(+el.dataset.elabel, { el, text: el.querySelector("text") }));
+  all("[data-qcell]", (el) => v.qcells.set(el.dataset.qcell, el));
+  all("[data-flag]", (el) => v.knobs.set(el.dataset.flag, el));
+  all("[data-lane]", (el) => v.lanes.set(el.dataset.lane, el));
+  all("[data-part^='broker:']", (el) => v.brokers.set(`${el.closest("[data-node]").dataset.node}:${el.dataset.part.slice(7)}`, el));
+  svg.querySelectorAll("[data-led]").forEach((el) => v.leds.set(el.dataset.led, el));
+  svg.querySelectorAll("[data-cell]").forEach((el) => v.cells.set(el.dataset.cell, el));
+  svg.querySelectorAll("[data-cursor]").forEach((el) => {
+    const [id, g, p] = el.dataset.cursor.split(":");
+    v.cursors.push({ el, id, g: +g, p: +p, at: -1 });
+  });
+  svg.querySelectorAll("[data-node]").forEach((el) => v.nodes.set(el.dataset.node, el));
+  svg.querySelectorAll("[data-edge]").forEach((el) => (v.edges[+el.dataset.edge] = el));
+  svg.querySelectorAll("[data-label]").forEach((el) => v.labels.set(el.dataset.label, el));
+  views[name] = v;
+}
+let view = DATA.view;
+
+function packetEl(v) {
+  const g = document.createElementNS(NS, "g");
+  g.setAttribute("class", "tp-pk");
+  if (v.data.packet) {
+    const { sides, top, outline } = v.data.packet;
+    g.innerHTML = `<path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
+  } else {
+    g.innerHTML = `<circle r="1.9"/>`;
+  }
+  g.style.display = "none";
+  v.layer.appendChild(g);
+  return { g, kind: "", shown: false };
+}
+
+function pointOn(v, packet) {
+  const pts = v.data.edges[packet.edge];
+  const L = lens[packet.edge];
+  const total = L[L.length - 1];
+  const t = Math.min(1, Math.max(0, packet.dir > 0 ? packet.t : 1 - packet.t));
+  const want = t * total;
+  let i = 1;
+  while (i < L.length - 1 && L[i] < want) i++;
+  const span = L[i] - L[i - 1] || 1;
+  const f = Math.min(1, Math.max(0, (want - L[i - 1]) / span));
+  return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f];
+}
+
+function drawPackets() {
+  const v = views[view];
+  const list = still.matches ? [] : sim.packets;
+  const count = Math.min(list.length, POOL_MAX);
+  while (v.pool.length < count) v.pool.push(packetEl(v));
+  for (let i = 0; i < v.pool.length; i++) {
+    const slot = v.pool[i];
+    if (i >= count) {
+      if (slot.shown) {
+        slot.g.style.display = "none";
+        slot.shown = false;
+      }
+      continue;
+    }
+    const packet = list[i];
+    const [x, y] = pointOn(v, packet);
+    if (!slot.shown) {
+      slot.g.style.display = "";
+      slot.shown = true;
+    }
+    if (slot.kind !== packet.kind) {
+      slot.g.dataset.kind = packet.kind;
+      slot.kind = packet.kind;
+    }
+    const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
+    const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
+    slot.g.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})${grow !== 1 ? ` scale(${grow.toFixed(2)})` : ""}`);
+    slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
+  }
+}
+
+// LEDs blink when a node handles a message.
+const lit = new Map();
+function ledFor(event) {
+  const node = sim.nodes.get(event.node);
+  if (node.kind === "kafka" || node.kind === "queue") return `${event.node}:b${node.handled % (node.brokers || 3)}`;
+  if (node.kind === "service" || node.kind === "worker") return `${event.node}:${event.replica}`;
+  return `${event.node}:0`;
+}
+function events(now) {
+  for (const event of sim.events) {
+    if (event.type === "handle") {
+      const id = ledFor(event);
+      for (const v of Object.values(views)) {
+        const el = v.leds.get(id);
+        if (el) {
+          el.setAttribute("data-on", "");
+          lit.set(el, now + 90);
+        }
+      }
+    } else if (event.type === "flag") {
+      const panel = DATA.spec.nodes.find((node) => node.kind === "flags");
+      if (panel) for (const v of Object.values(views)) {
+        const el = v.leds.get(`${panel.id}:0`);
+        if (el) {
+          el.setAttribute("data-on", "");
+          lit.set(el, now + 600);
+        }
+      }
+    } else if (event.type === "fail" || event.type === "recover") {
+      for (const v of Object.values(views)) v.nodes.get(event.node)?.toggleAttribute("data-down", event.type === "fail");
+    }
+  }
+  sim.events.length = 0;
+  for (const [el, until] of lit) if (now >= until) {
+    el.removeAttribute("data-on");
+    lit.delete(el);
+  }
+}
+
+// Record cells show the last SLOTS offsets of each partition; a cell is bright while the
+// first consumer group hasn't committed it. Cursors sit at each group's committed offset.
+function drawLogs() {
+  const v = views[view];
+  for (const [id, log] of sim.logs) {
+    for (let p = 0; p < log.partitions; p++) {
+      const end = log.end[p];
+      const base = end - SLOTS;
+      const c0 = log.groups[0] ? log.groups[0].committed[p] : end;
+      for (let i = 0; i < SLOTS; i++) {
+        const key = `${id}:${p}:${i}`;
+        const off = base + i;
+        const on = off >= 0 && off >= c0;
+        if (v.cellState.get(key) === on) continue;
+        v.cellState.set(key, on);
+        v.cells.get(key)?.toggleAttribute("data-on", on);
+      }
+    }
+  }
+  for (const cursor of v.cursors) {
+    const log = sim.logs.get(cursor.id);
+    const group = log?.groups[cursor.g];
+    if (!group) continue;
+    const base = log.end[cursor.p] - SLOTS;
+    const s = Math.max(0, Math.min(SLOTS, group.committed[cursor.p] - base));
+    if (s === cursor.at) continue;
+    cursor.at = s;
+    cursor.el.setAttribute("transform", `translate(${(v.data.step[0] * s).toFixed(2)} ${(v.data.step[1] * s).toFixed(2)})`);
+  }
+}
+
+// Everything else that shows state, at 4 Hz: breakers, edge labels, buffers, flag switches,
+// paused partitions and failed brokers. Attributes are only written when they change.
+const setOnce = (v, key, el, attr, value) => {
+  if (v.status.get(key) === value) return;
+  v.status.set(key, value);
+  if (attr === "text") el.textContent = value;
+  else if (attr === "transform") el.setAttribute("transform", value);
+  else if (value === false || value == null) el.removeAttribute(attr);
+  else el.setAttribute(attr, value === true ? "" : value);
+};
+function drawStatus() {
+  const v = views[view];
+  const per = sim.cfg.per;
+  for (const [index, el] of v.breakers) {
+    const state = sim.edges[index].breaker?.state || "closed";
+    setOnce(v, `br${index}`, el, "data-state", state);
+    setOnce(v, `bre${index}`, v.edges[index], "data-breaker", state === "closed" ? false : state);
+  }
+  for (const [index, { el, text }] of v.elabels) {
+    const edge = sim.edges[index];
+    const bits = [];
+    if (edge.label) bits.push(edge.label);
+    else if (DATA.labels === "rate") bits.push(formatRate(edge.flow, per));
+    const flagName = edge.flag || edge.unless;
+    const flag = flagName && sim.flags.get(flagName);
+    if (flag) bits.push(`${edge.unless ? "¬" : ""}${flagName} ${Math.round((edge.unless ? 1 - flag.effective : flag.effective) * 100)}%`);
+    const bad = edge.flow > 0.3 && edge.errorRate / edge.flow > 0.1;
+    if (bad) bits.push(`${Math.round((100 * edge.errorRate) / edge.flow)}% err`);
+    setOnce(v, `el${index}`, text, "text", bits.join(" · "));
+    setOnce(v, `elb${index}`, el, "data-bad", bad);
+  }
+  for (const [key, el] of v.qcells) {
+    const [id, i] = key.split(":");
+    const node = sim.nodes.get(id);
+    const n = Math.min(8, node.queueMax || 1);
+    setOnce(v, `q${key}`, el, "data-on", node.waiting.length > 0 && +i < Math.ceil((node.waiting.length / Math.max(1, node.queueMax)) * n));
+  }
+  for (const [name, el] of v.knobs) {
+    const flag = sim.flags.get(name);
+    const f = flag ? flag.effective : 0;
+    setOnce(v, `k${name}`, el, "transform", `translate(${(v.data.flagStep[0] * f).toFixed(2)} ${(v.data.flagStep[1] * f).toFixed(2)})`);
+  }
+  for (const [key, el] of v.lanes) {
+    const [id, p] = key.split(":");
+    const log = sim.logs.get(id);
+    setOnce(v, `l${key}`, el, "data-paused", !!log && !sim.readable(log, +p));
+  }
+  for (const [key, el] of v.brokers) {
+    const [id, b] = key.split(":");
+    setOnce(v, `b${key}`, el, "data-down", !sim.logs.get(id).brokers[+b]);
+  }
+}
+
+// Focus: hover or keyboard picks a node; its links and neighbours stay lit.
+let focus = null;
+let pinned = false;
+const neighbours = (id) => {
+  const near = new Set([id]);
+  const edges = new Set();
+  DATA.spec.edges.forEach((edge, index) => {
+    if (edge.from === id || edge.to === id) {
+      near.add(edge.from);
+      near.add(edge.to);
+      edges.add(index);
+    }
+  });
+  return { near, edges };
+};
+function setFocus(id) {
+  focus = id;
+  const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
+  stage.toggleAttribute("data-focus", !!id);
+  for (const v of Object.values(views)) {
+    for (const [nid, el] of v.nodes) {
+      el.toggleAttribute("data-near", near.has(nid));
+      el.toggleAttribute("data-sel", nid === id);
+    }
+    for (const [nid, el] of v.labels) el.toggleAttribute("data-near", near.has(nid));
+    v.edges.forEach((el, index) => el.toggleAttribute("data-near", edges.has(index)));
+  }
+  say(true);
+}
+
+let lastSay = 0;
+function say(force, now = performance.now()) {
+  if (!force && now - lastSay < 250) return;
+  lastSay = now;
+  const text = focus ? sim.statsOf(focus) : sim.summary();
+  if (readout && readout.textContent !== text) readout.textContent = text;
+  stage.setAttribute("aria-valuetext", text);
+}
+
+function setView(name) {
+  if (!views[name] || name === view) return;
+  views[view].svg.setAttribute("hidden", "");
+  views[view].pool.forEach((slot) => {
+    slot.g.style.display = "none";
+    slot.shown = false;
+  });
+  view = name;
+  views[view].svg.removeAttribute("hidden");
+  views[view].cellState.clear();
+  views[view].cursors.forEach((cursor) => (cursor.at = -1));
+  views[view].status.clear();
+  document.querySelectorAll(".tp-views button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === name)));
+  drawLogs();
+  drawPackets();
+}
+
+let frame = 0;
+let last = 0;
+let visible = false;
+let logClock = 0;
+let statusClock = 0;
+function tick(now) {
+  const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
+  last = now;
+  if (!paused) sim.step(dt * (window.__topoSpeed ?? 1));
+  events(now);
+  for (const hook of hooks.tick) hook(dt);
+  logClock += dt;
+  statusClock += dt;
+  if (logClock > 0.05) {
+    logClock = 0;
+    drawLogs();
+  }
+  if (statusClock > 0.25) {
+    statusClock = 0;
+    drawStatus();
+  }
+  drawPackets();
+  say(false, now);
+  frame = visible ? requestAnimationFrame(tick) : 0;
+}
+const run = () => {
+  if (!frame && visible) {
+    last = 0;
+    frame = requestAnimationFrame(tick);
+  }
+};
+new IntersectionObserver((entries) => {
+  visible = entries[entries.length - 1].isIntersecting;
+  run();
+}, { rootMargin: "120px 0px" }).observe(stage);
+
+const nodeAt = (target) => target.closest?.("[data-node]")?.dataset.node;
+const toggle = (id) => {
+  for (const hook of hooks.takeover) hook(id);
+  const node = sim.nodes.get(id);
+  if (node) sim.setUp(id, !node.up);
+  say(true);
+};
+stage.addEventListener("pointerover", (event) => {
+  const id = nodeAt(event.target);
+  if (id && id !== focus) {
+    pinned = false;
+    setFocus(id);
+  }
+});
+stage.addEventListener("pointerleave", () => {
+  if (!pinned) setFocus(null);
+});
+stage.addEventListener("click", (event) => {
+  const part = event.target.closest?.("[data-part^='broker:']");
+  const id = nodeAt(event.target);
+  if (part && id) {
+    const b = +part.dataset.part.slice(7);
+    for (const hook of hooks.takeover) hook(id);
+    sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
+    drawStatus();
+    say(true);
+  } else if (id) toggle(id);
+});
+const ring = [...DATA.spec.nodes].map((node) => node.id);
+stage.addEventListener("keydown", (event) => {
+  const here = focus ? ring.indexOf(focus) : -1;
+  if (hooks.key.some((hook) => hook(event))) {
+    event.preventDefault();
+    return;
+  }
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    pinned = true;
+    setFocus(ring[(here + 1) % ring.length]);
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    pinned = true;
+    setFocus(ring[(here - 1 + ring.length) % ring.length]);
+  } else if ((event.key === "Enter" || event.key === " ") && focus) {
+    toggle(focus);
+  } else if (event.key === "v" || event.key === "V") {
+    setView(view === "iso" ? "flat" : "iso");
+  } else if (event.key === "Escape") {
+    pinned = false;
+    setFocus(null);
+  } else return;
+  event.preventDefault();
+});
+document.querySelectorAll(".tp-views button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+
+// Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
+function resetVisuals(next) {
+  sim = next;
+  for (const v of Object.values(views)) {
+    v.pool.forEach((slot) => {
+      slot.g.style.display = "none";
+      slot.shown = false;
+    });
+    v.cellState.clear();
+    v.cursors.forEach((cursor) => (cursor.at = -1));
+    v.status.clear();
+    for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
+  }
+  for (const el of lit.keys()) el.removeAttribute("data-on");
+  lit.clear();
+  sim.events.length = 0;
+  drawLogs();
+  drawStatus();
+  drawPackets();
+  say(true);
+}
+
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
+drawLogs();
+drawStatus();
+say(true);
+
+// The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
+// `scenario` feature is on. A timeline under the stage shows the named phases and each step;
+// the story plays and loops on its own. Scrubbing or jumping to a phase re-simulates from 0
+// (the sim is seeded, so the same time always looks the same). Clicking a node takes over:
+// the story stops applying and the reader plays freely until they press play again.
+(() => {
+  const story = normalizeScenario(DATA.spec.scenario);
+  if (!story) return;
+  const plate = stage.closest(".k-card");
+  const hint = plate.querySelector('[data-corner="hint"]');
+  const hintText = hint ? hint.textContent : "";
+  const pct = (t) => `${((100 * t) / story.length).toFixed(3)}%`;
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+  const phases = story.phases
+    .map((phase, index) => `<button type="button" class="tp-phase" data-at="${phase.at}" style="left:${pct(phase.at)};width:${pct(phase.end - phase.at)}" title="${esc(phase.name)} (${index + 1})"><span>${esc(phase.name)}</span></button>`)
+    .join("");
+  const ticks = story.steps.map((step) => `<i class="tp-tick" style="left:${pct(step.at)}"${step.say ? ` title="${esc(step.say)}"` : ""}></i>`).join("");
+  const bar = document.createElement("div");
+  bar.className = "tp-story";
+  bar.innerHTML = `<div class="tp-timeline"><button type="button" class="tp-play"></button><div class="tp-track" tabindex="0" role="slider" aria-label="Story time" aria-valuemin="0" aria-valuemax="${story.length}">${phases}${ticks}<div class="tp-head"></div></div><span class="tp-time"></span></div><p class="tp-say" aria-live="polite"></p>`;
+  stage.after(bar);
+  const play = bar.querySelector(".tp-play");
+  const track = bar.querySelector(".tp-track");
+  const head = bar.querySelector(".tp-head");
+  const clock = bar.querySelector(".tp-time");
+  const line = bar.querySelector(".tp-say");
+
+  let mode = "story";
+  let playing = !still.matches;
+  paused = !playing;
+  let preview = null;
+
+  function seek(t) {
+    const next = createSim(DATA.spec);
+    const steps = Math.round(Math.max(0, Math.min(t, story.length)) * 60);
+    for (let i = 0; i < steps; i++) next.step(1 / 60);
+    resetVisuals(next);
+    mode = "story";
+    render();
+  }
+
+  const phaseAt = (t) => story.phases.filter((phase) => phase.at <= t + 1e-6).pop();
+  const sayAt = (t) => story.steps.filter((step) => step.say && step.at <= t + 1e-6).pop();
+  let shown = { say: null, phase: null };
+  function render() {
+    const t = preview ?? Math.min(sim.time, story.length);
+    head.style.left = pct(t);
+    clock.textContent = `${t.toFixed(1)}s`;
+    track.setAttribute("aria-valuenow", t.toFixed(1));
+    bar.dataset.mode = mode;
+    play.textContent = playing && mode === "story" ? "❚❚" : "▶";
+    play.setAttribute("aria-label", mode === "free" ? "Resume the story" : playing ? "Pause" : "Play");
+    const phase = mode === "story" ? phaseAt(t) : null;
+    const step = mode === "story" ? sayAt(t) : null;
+    if (phase !== shown.phase) {
+      shown.phase = phase;
+      bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to take over · 1–${Math.min(9, story.phases.length)} jump` : hintText;
+    }
+    const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
+    if (text !== shown.say) {
+      shown.say = text;
+      line.textContent = text;
+    }
+  }
+
+  hooks.tick.push(() => {
+    if (mode === "story" && sim.time >= story.length) {
+      if (story.loop) seek(0);
+      else {
+        playing = false;
+        paused = true;
+      }
+    }
+    render();
+  });
+  hooks.takeover.push(() => {
+    if (mode !== "story") return;
+    mode = "free";
+    playing = true;
+    paused = false;
+    // Free play: the rest of the script no longer applies.
+    sim.stepIndex = Infinity;
+    shown.phase = undefined;
+    render();
+  });
+  hooks.key.push((event) => {
+    if (/^[1-9]$/.test(event.key) && story.phases[+event.key - 1]) {
+      seek(story.phases[+event.key - 1].at);
+      return true;
+    }
+    if (event.key === "p" || event.key === "P") {
+      toggle_();
+      return true;
+    }
+    return false;
+  });
+
+  function toggle_() {
+    if (mode === "free") {
+      seek(sim.time);
+      playing = true;
+    } else playing = !playing;
+    paused = !playing;
+    render();
+  }
+  play.addEventListener("click", toggle_);
+  bar.querySelectorAll(".tp-phase").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      seek(+el.dataset.at);
+    }),
+  );
+  const fractionOf = (event) => {
+    const box = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+  };
+  track.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".tp-phase")) return;
+    track.setPointerCapture(event.pointerId);
+    preview = fractionOf(event) * story.length;
+    render();
+  });
+  track.addEventListener("pointermove", (event) => {
+    if (preview == null) return;
+    preview = fractionOf(event) * story.length;
+    render();
+  });
+  const release = () => {
+    if (preview == null) return;
+    const t = preview;
+    preview = null;
+    seek(t);
+  };
+  track.addEventListener("pointerup", release);
+  track.addEventListener("pointercancel", release);
+  track.addEventListener("keydown", (event) => {
+    const t = Math.min(sim.time, story.length);
+    if (event.key === "ArrowRight") seek(t + 1);
+    else if (event.key === "ArrowLeft") seek(t - 1);
+    else if (event.key === "Home") seek(0);
+    else if (event.key === " ") toggle_();
+    else return;
+    event.preventDefault();
+  });
+  window.__topo.story = { seek, get mode() { return mode; }, get playing() { return playing; }, story };
+  render();
+})();
+</script></body></html>

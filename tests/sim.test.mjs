@@ -181,3 +181,51 @@ test("flag rollout splits traffic, kill switch stops it, flag service down freez
   run(sim, 2);
   assert.equal(sim.edges[2].sent, v2, "nothing to v2 after the kill");
 });
+
+test("kafka brokers: losing a leader pauses its partitions; under min ISR, acks=all refuses writes", () => {
+  const spec = {
+    nodes: [
+      { id: "p", kind: "service", emit: 20 },
+      { id: "t", kind: "kafka", partitions: 3, brokers: 3, rf: 3, minIsr: 2, acks: "all", election: 1 },
+      { id: "c", kind: "worker", rate: 40 },
+    ],
+    edges: [{ from: "p", to: "t", sync: true }, { from: "t", to: "c" }],
+  };
+  const sim = simOf(spec);
+  run(sim, 4);
+  const log = sim.logs.get("t");
+  sim.setUp("t:b0", false);
+  assert.equal(sim.readable(log, 0), false, "partition 0 is electing");
+  assert.equal(log.parts[0].leader, 1);
+  run(sim, 1.2);
+  assert.equal(sim.readable(log, 0), true, "elected");
+  const before = sim.edges[0].dropped;
+  sim.setUp("t:b1", false);
+  run(sim, 3);
+  assert.ok(sim.edges[0].dropped > before + 10, "writes refused under min ISR");
+  sim.setUp("t:b0", true);
+  sim.setUp("t:b1", true);
+  const after = sim.edges[0].dropped;
+  run(sim, 3);
+  assert.ok(sim.edges[0].dropped - after < 3, "writes accepted again");
+});
+
+test("a CDN with hit 0.9 sends about a tenth of requests to its origin", () => {
+  const spec = {
+    nodes: [{ id: "u", kind: "client", emit: 40 }, { id: "cdn", kind: "cdn", hit: 0.9 }, { id: "o", kind: "service" }],
+    edges: [["u", "cdn"], ["cdn", "o"]],
+    sim: { seed: 3 },
+  };
+  const sim = simOf(spec);
+  run(sim, 30);
+  const share = sim.edges[1].sent / sim.edges[0].sent;
+  assert.ok(Math.abs(share - 0.1) < 0.03, `share ${share}`);
+});
+
+test("scenario `set` can change an edge: a breaker added mid-run", () => {
+  const spec = { ...chain(), scenario: { steps: [{ at: 1, set: { "a>b": { breaker: true, timeout: 0.1 } } }] } };
+  const sim = simOf(spec);
+  run(sim, 1.5);
+  assert.equal(sim.edges[1].breaker.state, "closed");
+  assert.equal(sim.edges[1].timeout, 0.1);
+});

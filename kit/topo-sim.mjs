@@ -132,12 +132,26 @@ export function createSim(spec) {
       if (!groups.has(name)) groups.set(name, { name, members: [], committed: Array(partitions).fill(0), assign: new Map(), pause: 0, generation: 0 });
       groups.get(name).members.push(edge);
     }
-    logs.set(node.id, { node, partitions, end: Array(partitions).fill(0), rr: 0, groups: [...groups.values()], appended: 0 });
+    const log = { node, partitions, end: Array(partitions).fill(0), rr: 0, groups: [...groups.values()], appended: 0 };
+    // Brokers: each partition has `rf` replicas, led round-robin. Losing a leader pauses its
+    // partitions for `election` seconds; with acks "all", a partition whose in-sync replicas
+    // fall below `minIsr` refuses writes.
+    if (node.kind === "kafka" && node.brokers) {
+      const n = node.brokers;
+      log.brokers = Array(n).fill(true);
+      log.rf = Math.min(node.rf ?? 3, n);
+      log.minIsr = Math.min(node.minIsr ?? 2, log.rf);
+      log.acks = node.acks ?? 1;
+      log.election = node.election ?? 2;
+      log.parts = Array.from({ length: partitions }, (_, p) => ({ replicas: Array.from({ length: log.rf }, (_, i) => (p + i) % n), leader: p % n, electUntil: 0 }));
+    }
+    logs.set(node.id, log);
   }
 
   const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
-  // The animation time a sync call can take before its own timeout starts counting:
-  // its round trip plus the slowest sync call its target makes in turn.
+  // Timeouts are judged in model time when the reply arrives. For a reply that never comes,
+  // a backstop deadline in sim time: the call's animation round trip, the slowest sync call
+  // its target makes in turn, the timeout and a second's grace.
   const allowance = new Map();
   const allowanceOf = (edge, seen = new Set()) => {
     if (allowance.has(edge.index)) return allowance.get(edge.index);
@@ -256,7 +270,7 @@ export function createSim(spec) {
 
   function forward(job) {
     const node = job.node;
-    const usable = node.out.filter((edge) => (edge.flag && on("flags") ? decide(job.msg, edge.flag) : edge.unless && on("flags") ? !decide(job.msg, edge.unless) : true));
+    const usable = node.out.filter((edge) => edge.kind !== "config").filter((edge) => (edge.flag && on("flags") ? decide(job.msg, edge.flag) : edge.unless && on("flags") ? !decide(job.msg, edge.unless) : true));
     for (const edge of usable) if (edge.kind === "replication") {
       launch(edge, "replication", { msg: job.msg });
     }
@@ -279,7 +293,8 @@ export function createSim(spec) {
       let pick = rand() * total;
       chosen.push(data.find((edge) => (pick -= edge.p ?? 1) <= 0) || data[data.length - 1]);
     } else {
-      for (const edge of data) if (rand() < (edge.p ?? 1)) chosen.push(edge);
+      // A CDN or cache with `hit` sends only its misses on.
+      for (const edge of data) if (rand() < (edge.p ?? (node.hit != null ? 1 - node.hit : 1))) chosen.push(edge);
     }
     for (const edge of chosen) {
       if (edge.sync) {
@@ -307,7 +322,7 @@ export function createSim(spec) {
         trial = true;
       }
     }
-    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout : Infinity, done: false, packets: [] };
+    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
     sim.calls.add(call);
     call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
   }
@@ -363,7 +378,13 @@ export function createSim(spec) {
     if (packet.dir < 0) {
       const call = packet.call;
       if (!call || call.done) return;
-      return settle(call, packet.kind === "response", netOf(edge) + (packet.ms || 0));
+      const ms = netOf(edge) + (packet.ms || 0);
+      // The caller gave up at `timeout` in model time: this reply is late and ignored.
+      if (edge.timeout && ms > edge.timeout * 1000) {
+        call.timedOut = true;
+        return settle(call, false, edge.timeout * 1000);
+      }
+      return settle(call, packet.kind === "response", ms);
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
@@ -380,10 +401,40 @@ export function createSim(spec) {
     if (isLog(node)) {
       const log = logs.get(node.id);
       const p = chooseP(log, edge, packet);
+      if (!writable(log, p)) {
+        node.recentDrops.push(sim.time);
+        edge.dropped++;
+        burst(edge);
+        if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
+        return;
+      }
       log.end[p]++;
       log.appended++;
     }
     startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge });
+  }
+
+  const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
+  const readable = (log, p) => !log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]);
+  const writable = (log, p) => readable(log, p) && (!log.parts || log.acks !== "all" || isrOf(log, log.parts[p]) >= log.minIsr);
+
+  function setBroker(id, b, up) {
+    const log = logs.get(id);
+    if (!log?.brokers || b < 0 || b >= log.brokers.length || log.brokers[b] === up) return;
+    log.brokers[b] = up;
+    sim.events.push({ type: up ? "broker-up" : "broker-down", node: id, broker: b, at: sim.time });
+    for (const part of log.parts) {
+      if (!up && part.leader === b) {
+        const next = part.replicas.find((r) => log.brokers[r]);
+        if (next != null) {
+          part.leader = next;
+          part.electUntil = sim.time + log.election;
+        }
+      } else if (up && !log.brokers[part.leader] && part.replicas.includes(b)) {
+        part.leader = b;
+        part.electUntil = sim.time + log.election;
+      }
+    }
   }
 
   function chooseP(log, edge, packet) {
@@ -509,6 +560,7 @@ export function createSim(spec) {
             let best = -1;
             let most = 0;
             for (const p of parts) {
+              if (!readable(log, p)) continue;
               const lag = log.end[p] - group.committed[p];
               if (lag > most) {
                 most = lag;
@@ -578,6 +630,8 @@ export function createSim(spec) {
   const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
 
   function setUp(id, up) {
+    const broker = /^(.*):b(\d+)$/.exec(id);
+    if (broker && !nodes.has(id)) return setBroker(broker[1], +broker[2], up);
     const node = nodes.get(id);
     if (!node || node.up === up) return;
     node.up = up;
@@ -604,12 +658,32 @@ export function createSim(spec) {
     sim.events.push({ type: "flag", flag: flag.name, rollout: flag.effective, at: sim.time });
   }
 
+  // "from>to" in a scenario's `set` changes that edge: retries, timeout, backoff, p, breaker.
+  const EDGE_SETTABLE = new Set(["retries", "timeout", "backoff", "p", "breaker", "rate"]);
+  function setEdge(key, props) {
+    const [from, to] = key.split(">");
+    const list = edges.filter((edge) => edge.from === from && edge.to === to);
+    if (!list.length) throw new Error(`scenario: no edge "${key}"`);
+    for (const edge of list) for (const [name, value] of Object.entries(props)) {
+      if (!EDGE_SETTABLE.has(name)) throw new Error(`scenario: can't set "${name}" on an edge (settable: ${[...EDGE_SETTABLE].join(", ")})`);
+      if (name === "breaker") {
+        edge.breaker = value && on("breakers") ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], until: 0, trial: false } : null;
+        sim.events.push({ type: "breaker", edge: edge.index, state: edge.breaker ? "closed" : "none", at: sim.time });
+      } else edge[name] = value;
+      if (name === "timeout") allowanceOf(edge);
+    }
+  }
+
   const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs"]);
   function apply(step) {
     if (step.fail) [].concat(step.fail).forEach((id) => setUp(id, false));
     if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
     if (step.set) {
       for (const [id, props] of Object.entries(step.set)) {
+        if (id.includes(">")) {
+          setEdge(id, props);
+          continue;
+        }
         const node = nodes.get(id);
         if (!node) throw new Error(`scenario: unknown node "${id}"`);
         for (const [key, value] of Object.entries(props)) {
@@ -642,6 +716,9 @@ export function createSim(spec) {
     for (let i = 0; i < n; i++) step(dt / n);
   };
   sim.setUp = setUp;
+  sim.setBroker = setBroker;
+  sim.readable = readable;
+  sim.isrOf = isrOf;
   sim.apply = apply;
   sim.totalIn = totalIn;
   sim.lagOf = (id, groupName) => {
@@ -687,6 +764,16 @@ export function statsOf(sim, id) {
       const live = [...group.assign.values()].filter((list) => list.length).length;
       return `${log.groups.length > 1 ? group.name + " " : ""}lag ${formatCount(lag, per)}${group.pause > 0 ? " · rebalancing" : node.kind === "kafka" ? ` · ${live}/${group.members.length} consumers` : ""}`;
     });
+    if (log.brokers) {
+      const live = log.brokers.filter(Boolean).length;
+      const electing = log.parts.filter((part) => sim.time < part.electUntil).length;
+      const offline = log.parts.filter((part) => !log.brokers[part.leader]).length;
+      const under = log.parts.filter((part) => sim.isrOf(log, part) < log.minIsr).length;
+      parts.push(`brokers ${live}/${log.brokers.length}`);
+      if (electing) parts.push(`${electing} electing`);
+      if (offline) parts.push(`${offline} offline`);
+      if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
+    }
     return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
   }
   if (node.kind === "flags") {
