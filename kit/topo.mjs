@@ -3,6 +3,8 @@
 // One world layout feeds both views, so edges, packets and ports line up in each.
 
 import * as k from "./iso.mjs";
+import { validateSpec } from "./validate.mjs";
+import { COMPONENTS, baseKind, isoComponent, flatComponent } from "./components.mjs";
 import { groupOf, isLog } from "./topo-sim.mjs";
 import { resolveFeatures, stripFeatures } from "./topo-features.mjs";
 
@@ -25,6 +27,8 @@ export const KINDS = {
   scheduler: { w: 40, d: 34, h: 12 },
   flags: { w: 48, d: 34, h: 8 },
 };
+for (const [kind, component] of Object.entries(COMPONENTS)) KINDS[kind] = { ...KINDS[component.base], h: component.h };
+
 export const SLOTS = 12;
 const PITCH = 7;
 const LANE = 11;
@@ -56,7 +60,7 @@ export function prepare(spec) {
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
-  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && byId.get(edge.to).kind === "db") byId.get(edge.to).hasTables = true;
+  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && baseKind(byId.get(edge.to).kind) === "db") byId.get(edge.to).hasTables = true;
   for (const node of nodes) {
     if (!isLog(node)) continue;
     const names = [];
@@ -889,7 +893,10 @@ export function renderView(model, view, width = 640, camera, options) {
   const order = [...model.nodes].sort((a, b) => k.depthOf([a.cx, a.cy, 0], P) - k.depthOf([b.cx, b.cy, 0], P));
   for (const node of order) {
     const halo = iso ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
-    const body = iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
+    const component = COMPONENTS[node.kind];
+    const body = component
+      ? (iso ? isoComponent(node, iso, k) : flatComponent(node, flat, k))
+      : (iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat));
     const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue ? queueCellsOf(node, iso, flat) : "");
     out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}${extra}</g>`);
   }
@@ -980,6 +987,7 @@ function describe(model) {
 // out and route the spec, then add hops if they're on.
 export function modelOf(spec, featureLayers = []) {
   const features = resolveFeatures(spec.features, ...featureLayers);
+  validateSpec(spec, features, KINDS);
   const model = prepare(stripFeatures(spec, features));
   model.features = features;
   if (features.hops) applyHops(model);
@@ -992,7 +1000,7 @@ const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key
 // What the sim needs: everything in the spec except geometry, plus each edge's length.
 export function simSpec(model) {
   return {
-    nodes: model.nodes.map(strip),
+    nodes: model.nodes.map(node => ({ ...strip(node), ...(COMPONENTS[node.kind] ? { kind: baseKind(node.kind), component: node.kind } : {}) })),
     edges: model.edges.map((edge) => ({ ...strip(edge), len: edge.len })),
     sim: model.sim,
     scenario: model.scenario,

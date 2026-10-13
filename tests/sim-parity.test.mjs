@@ -1,16 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {createSim} from '../kit/topo-sim.mjs';
 import {observeSim,replayCase} from './helpers/sim-observation.mjs';
-const baseline=JSON.parse(readFileSync(new URL('./fixtures/sim-s4-baseline.json',import.meta.url)));
+import {original as baseline, updates, cases} from './helpers/release-cases.mjs';
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-for(const item of baseline.cases) test(`S4 parity: ${item.name} ${item.features || 'default'}`,()=>{
+for(const item of cases) test(`release parity: ${item.name} ${item.features || 'default'}`,()=>{
  let index=0;
  replayCase(createSim,item,(sim,at)=>{
   const expected=item.expected[index++];
   assert.equal(sim.summary(),expected.summary,`summary at ${at}s`);
+  assert.equal(sim.summary(),item.originalExpected[index-1].summary,`preserved S4 summary at ${at}s`);
   assert.equal(digest(observeSim(sim)),expected.sha256,`state at ${at}s`);
  });
 });
@@ -25,4 +25,13 @@ test('parity observation detects rows, packets, events and breaker changes',()=>
 
 test('public entry point preserves every S4 export', async () => {
   assert.deepEqual(Object.keys(await import('../kit/topo-sim.mjs')), baseline.exports);
+});
+
+test('v1 baseline updates are limited to table cases and preserve S4 summaries',()=>{
+ assert.equal(updates.changes.length,16);
+ for(const update of updates.changes) {
+  const original=baseline.cases.find(c=>c.name===update.name && c.features===update.features);
+  assert.ok(original?.spec.nodes.some(n=>n.tables));
+  assert.deepEqual(update.expected.map(e=>e.summary),original.expected.map(e=>e.summary));
+ }
 });

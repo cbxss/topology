@@ -18,7 +18,7 @@ Figure authors use `SKILL.md`, `spec.md`, examples and `verify.md`. This documen
 
 The state object retains its existing node maps, queues, call sets, packets and event arrays because the renderer and inspector consume them. Factories receive that state and explicit callbacks. Tables can launch WAL packets, complete an apply job, or resume a writer; logs can launch a record and allocate its message. Scenario controls delegate cancellation/edge changes to transport and broker/assignment changes to logs. Factories must not invoke transport callbacks during initialization. No module imports core or the public entry point.
 
-A tick advances time, applies scenario steps, runs due timers, processes nodes in insertion order, handles timeouts, pulls consumers, moves packets, and updates reporting. Preserve this sequence, map/set iteration order, substeps and RNG draw order. Packet travel affects scheduling even though reported call latency excludes its display duration. Requests remain one shared object through retries and stages; do not clone their record identity or trace context.
+A tick advances time, applies scenario steps, runs due timers, retries pending table replication, processes nodes in insertion order, handles timeouts, pulls consumers, moves packets, and updates reporting. Preserve this sequence, map/set iteration order, substeps and RNG draw order. Packet travel affects scheduling even though reported call latency excludes its display duration. Requests remain one shared object through retries and stages; do not clone their record identity or trace context.
 
 ## Packaging
 
@@ -52,3 +52,18 @@ snapshot contains `keyName`, `row`, the latest retained primary WAL entry
 and its direct replicas. Version belongs to row metadata, not the user fields.
 Do not reconstruct replication relationships or scan mutable WAL arrays in UI
 code. Reporting performs no writes, scheduling or RNG draws.
+
+### v1 behavioral corrections and release gate
+
+The original `sim-s4-baseline.json` remains immutable.
+`sim-v1-updates.json` overrides full-state hashes for 16 table cases: stores now
+retain version tombstones, replica arrival buffers and unacknowledged WAL.
+All 462 S4 summary checkpoints remain equal, and the other 50 cases retain
+their full original hashes. `release.test.mjs` independently asserts recovery,
+LSN ordering, delete/recreate, empty endpoint stages, invalid inputs, queue
+outages, CLI failure status and malformed server URLs. These checks justify
+the state changes; the new hashes alone do not establish correctness.
+
+CI runs both Node tests and the generated-page Chrome verifier, checks every
+example, rebuilds both themes and catalogs, and rejects generated-file drift.
+Release tags must point to a commit whose complete CI run passed.

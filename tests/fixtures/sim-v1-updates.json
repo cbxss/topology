@@ -1,0 +1,677 @@
+{
+  "description": "Intentional v1 corrections over unchanged S4 inputs. Original S4 fixture is preserved. Table cases gain monotonic versions, contiguous WAL buffering and acknowledged retry state. release.test.mjs independently verifies the fixed behaviors; non-table cases must remain identical.",
+  "changes": [
+    {
+      "name": "idempotent-retries",
+      "features": "",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "a506e9f507bb4d890218e13bce1672124a202d83f9cdac24b959980132f903a3",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "87b19bedb0343bc2656c6fb56acae037702b343a829c6a334ccbfdd95dd66036",
+          "summary": "1.5/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "f1820a9b41d0984c69bb52fb995fe7636cf4f04644fb21bcce81a5fc1feaf8b9",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "e1b57291cc3cbfce3e58237734550e2289cb8a265610204aa02d09720cba10f1",
+          "summary": "2.0/s in · 1.7/s failing"
+        },
+        {
+          "at": 22,
+          "sha256": "3f9e1e4078e85ad88e2b3095a5f1d43768d19cd4dde84b9e370b56b76e786b0e",
+          "summary": "1.5/s in · 1.7/s failing"
+        },
+        {
+          "at": 32,
+          "sha256": "0ea64f2366b75c2c7ca32763ad24e3f92865faa528495519ff83687ea1aabc43",
+          "summary": "2.0/s in · 1.7/s failing"
+        },
+        {
+          "at": 48,
+          "sha256": "87b30bac4cce2e9abb09f8af353ca9c08dd59f587131b4f0a98b4815cead824f",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "idempotent-retries",
+      "features": "-endpoints",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "bcd01182db66192771bf1585770c80dbd9925807e0ffd0396716cfea0b57c372",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "19539a73c8bcabaab40572ec139f19dd08c85cf9399e3cc42ab2e16be0464c50",
+          "summary": "1.5/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "640614785dd87946f055a10fe8469a9dfb2a44394d6abe9c0ba097e66d6bd5d5",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "89f82f17f257013d46c04d6dfb85119c968af10f4a3f48958813c27fc95c299c",
+          "summary": "2.0/s in · 2.0/s failing"
+        },
+        {
+          "at": 22,
+          "sha256": "3ab65ab48c27ccb87e27dc4f7a474d13c792cfbc23463de588ea46d8302a0a08",
+          "summary": "1.5/s in · 2.0/s failing"
+        },
+        {
+          "at": 32,
+          "sha256": "24bd073d5a335348160356a28f220b805a15fb3049a94d044c1d552b2c0591d7",
+          "summary": "2.0/s in · 2.0/s failing"
+        },
+        {
+          "at": 48,
+          "sha256": "122010433d984ade35e9bae9f3e4c078cb64589d81c4e306cc9c78b911f4a436",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "idempotent-retries",
+      "features": "-flags,-queues,-breakers",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "ad6e58040010a492c6d10b60974baba15b6ef992dc414f1e729c3d17797fb05d",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "7633782ac3d4e2ce6b247b07c7ca415382eccd558d6b30a4f7b2f2cdf6c03f15",
+          "summary": "1.5/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "2ce70676ab9d7ec5a409417c6015f345e2c32cb7908c9a6d92f8d0d753975fe6",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "880d6f7626314e13bd13aac873c1817b761c245986544cd3b3362f47f3f88a40",
+          "summary": "2.0/s in · 1.7/s failing"
+        },
+        {
+          "at": 22,
+          "sha256": "f3ffea2e5856747ce2acfca923c52dfa9ba8c1db595b200cb5f7f0ce5430298a",
+          "summary": "1.5/s in · 1.7/s failing"
+        },
+        {
+          "at": 32,
+          "sha256": "e897fcda2d880c71c7bdaca9b20cd6e62f3542a7c4db7d3257a176eb57cf478c",
+          "summary": "2.0/s in · 1.7/s failing"
+        },
+        {
+          "at": 48,
+          "sha256": "e36bd6a61da3937ae4a9d4f90a2d5a760d11fcb9eb829cc13696ce7431343c8e",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "idempotent-retries",
+      "features": "-scenario",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "3704ac6651dde2ebb5764ee9da7531044facdce49724148d9a70aa23b73282a8",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "4a8c43f49993f30421cd2abc9a9e20d4427fb2eab39426e36bf50141b7620a9a",
+          "summary": "1.5/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "77f172629a06cbe3483216a004698ad8e4023bb7ba8405c1ae0affc0fb25a590",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "1f5102361a200ab4b2dc76ffc5fab00631034c1ab0b3d1e76e6e435c5789fe14",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · 0.7/s failing"
+        },
+        {
+          "at": 22,
+          "sha256": "5b70eab10b03869f879bd49d561604e50ce91e8e0664536d13efce2cfef985f1",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · 0.3/s failing"
+        },
+        {
+          "at": 32,
+          "sha256": "2391dd3b314422f946b0a7d0d092363b54258682a2ebe7e0f5ef37198f52295a",
+          "summary": "2.5/s in · p50 14ms · p99 14ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "877f58de21179f2d95941d577fdf9dbfc55b514d3be74d36dbc2cbe34195681f",
+          "summary": "2.0/s in · p50 14ms · p99 14ms · 1.7/s failing"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "lost-update",
+      "features": "",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "4f59c7c62cef20e07c0fe1ac449a27087f698820afc5d4211a95df56d3fc83e0",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "854bb6a83c67997304478fbe976cb144a02e2e1f782988c3eca235d765b75ac4",
+          "summary": "8.5/s in · p50 177ms · p99 203ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "fbf4a6987f938341b7a5ebb2b552a95c471ea840ced9ff41e8ba804bcc1d28d1",
+          "summary": "8.0/s in · p50 146ms · p99 391ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "d32230adbb93529e4e433d85a6cde75c8b54ad270836e4803c6043cec92cfd7b",
+          "summary": "8.0/s in · p50 158ms · p99 558ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "8077c773d4c093e01e58e30b00411abc390b72686789426a7ea823788c05c9ce",
+          "summary": "7.5/s in · p50 211ms · p99 932ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "1b18c8a74c41a4af8b28efc6c07473650efd96fa5d59550e5bcc73deb803ff28",
+          "summary": "7.5/s in · p50 14ms · p99 29ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "6697a05c0f89cdca6021b76b93270adec6900009a5bbf558a562fc746444c206",
+          "summary": "7.5/s in · p50 15ms · p99 23ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "lost-update",
+      "features": "-endpoints",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "8f318e14b7ad97934b31c0eaf3d151202877c377555d9c729bf4280022461fa6",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "fe44e0f7b7c76004d32061ef51887a18dec0d1873048e0fe671e809e5a9247d0",
+          "summary": "8.0/s in · p50 131ms · p99 208ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "27492957ee4db81d022ff9bd976824d9a6e5224c7c2a36d865a4f9b7e465e01a",
+          "summary": "9.5/s in · p50 140ms · p99 217ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "0b3a48afd78a4341b8218fc522c4ebb842117cccca1853d11863f8c621f528c2",
+          "summary": "7.5/s in · p50 151ms · p99 860ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "affc862dd92539c483f828d5c7f784d73d1615119f188436f8e53fca46332f23",
+          "summary": "7.5/s in · p50 153ms · p99 215ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "3599ecf1234591bac8650f811cc5a7c1c99db4a80d4500a36f150f5c99b33849",
+          "summary": "8.0/s in · p50 14ms · p99 19ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "05527b225e799e525620938892cec4577a952ccfd526c21468f19ccea2fa877e",
+          "summary": "8.5/s in · p50 13ms · p99 55ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "lost-update",
+      "features": "-flags,-queues,-breakers",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "46710a85a4b552389a82c0efaf7034df2005d265dc076c90af563e1a480e989e",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "e77f7a7ca3ed1da55ef6549e5658911f9ff308173d590c986cb50a96dbd078ef",
+          "summary": "8.5/s in · p50 177ms · p99 203ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "32f3c92c34ac9ace5350a607b25d3974fc4a11e4d00fac067cfb4c60c8e34f11",
+          "summary": "8.0/s in · p50 146ms · p99 391ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "f245fc8f15423d609fe1e22a3da671c66381d35226f3db0345603d1c60ee6b5f",
+          "summary": "8.0/s in · p50 158ms · p99 558ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "0801f308274eaedf74716afd44658359479d233a5b6cad1b310c6018ba27d98f",
+          "summary": "7.5/s in · p50 211ms · p99 932ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "2e2e46c2c59e46cd377679c4452878e7444f19380103d4deb6fb1b5be7040fa1",
+          "summary": "7.5/s in · p50 14ms · p99 29ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "7dcc37bbea6b371f1f4453fa661544ddd186a682495374d245999bfa30f87e1f",
+          "summary": "7.5/s in · p50 15ms · p99 23ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "lost-update",
+      "features": "-scenario",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "7b9355a8e331139f7e6c626e70adb2776ba2d15c202300ffd1bf57efdeacf484",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "e3b34bb6a46154629cefaebaa79209565adfc8d73a6a6a0876ce7b02e632ce71",
+          "summary": "8.0/s in · p50 134ms · p99 212ms · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "c4d77169be4a0b4671c420b425388dd9b93b9e9b2ebb3c4f04365ebe4152bef6",
+          "summary": "8.0/s in · p50 149ms · p99 209ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "fe51803ae9269e7d3a0e91e2113a5f2846c05bd69e1fe7a647dcd8e2b8d87519",
+          "summary": "8.0/s in · p50 172ms · p99 796ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "2cfd14e3ff09fa584068f06ca66bca4ce0f5204a47bccaabba018631ffc51f7e",
+          "summary": "7.5/s in · p50 147ms · p99 205ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "630baf9f5c56bb02a6fb55412f51ccf0fd7aaaa86b1dce241b37a01bcca1a6f2",
+          "summary": "6.5/s in · p50 150ms · p99 421ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "a43fae48777844040bec119494925d7b0b22c932a83d63b1fd977bd2eddf3ebe",
+          "summary": "8.0/s in · p50 158ms · p99 216ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "orders-api",
+      "features": "",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "49204c8f9d1e72ffdf42e299d3048c0c47f4d5ff228961e4b30d3df67f7c1829",
+          "summary": "0.0/s in · lag 0 · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "cc1aefe9a89021c73d51593bf1df8c1785716a1653047948921dbb317a761b01",
+          "summary": "16/s in · lag 0 · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "aab73eac346a06e2f0f071261bcd1c179ec0bd2fc14839a3e294b4c7ee2ce848",
+          "summary": "14/s in · p50 7.3ms · p99 33ms · lag 0 · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "14895254d0ad0895fa2f945bf10b3138ebb13730617c79a330e18e3cfaa4cdf4",
+          "summary": "15/s in · p50 6.9ms · p99 29ms · lag 0 · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "66d026240b1ab516ee771cb4b553c7d94b5406605f80f49b8559e85e45a0330e",
+          "summary": "16/s in · p50 7.1ms · p99 23ms · lag 0 · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "3fae4287bde305dd14b2c3788f3ffe808e5028a0b34778ef7a2e249ba7377f2c",
+          "summary": "15/s in · p50 7.0ms · p99 22ms · lag 0 · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "6e7e85e070f027a7e15ed47608f0857e400df0ce6af60d13ea12e4747c31d8d2",
+          "summary": "15/s in · p50 6.8ms · p99 41ms · lag 0 · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "orders-api",
+      "features": "-endpoints",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "a1578565277b1f978a1a0b55b3ee667c29521704b5fca7b925393aa6b93375c7",
+          "summary": "0.0/s in · lag 0 · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "c7f24d22fe128fdb969581c2ab4acb1262148466eff347ca26618b9a80acb1ec",
+          "summary": "15/s in · lag 0 · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "e10a10aa7dcdf5478b846a483b64ff86137a154b666b387f27bfac745464ba37",
+          "summary": "17/s in · p50 17ms · p99 33ms · lag 0 · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "d2609767fee59294b4391b58f760790e4ec68952b69914a2468e3d1f70763f12",
+          "summary": "15/s in · p50 16ms · p99 33ms · lag 0 · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "f7631af50644a2410e9c56899ec51e5fa27c2bf90b8b1e6bea4b9acadd5113fa",
+          "summary": "16/s in · p50 17ms · p99 54ms · lag 0 · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "487be0a37ec30ba728e145a3cb9e4d18e531120ed18988a1580e04d0d6462eeb",
+          "summary": "14/s in · p50 16ms · p99 24ms · lag 0 · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "5e0ec2cc18aaf8adbf43e7d2b03acff41ca939c2737028377d9b22879f12b492",
+          "summary": "15/s in · p50 17ms · p99 37ms · lag 0 · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "orders-api",
+      "features": "-flags,-queues,-breakers",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "0b08ded3ec17b3ea4a3552e31066f10987221951fb433757bdae1d3e771ddb5d",
+          "summary": "0.0/s in · lag 0 · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "8991179caa50f476e87679e037e05a74e4709fcd3ee33c0679306b4af4cd26ff",
+          "summary": "16/s in · lag 0 · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "eebf3cf4e0c17df5a052fba9dbd37fd8bd555978f81006513c295374989de62a",
+          "summary": "14/s in · p50 7.3ms · p99 33ms · lag 0 · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "8486829326a6922e1ac1c078a2d4c403fcc28d4e64e6e9a55e506def1dc0aa32",
+          "summary": "15/s in · p50 6.9ms · p99 29ms · lag 0 · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "a1e5e521093a9090e6bcaebc218c4ef9a4db1ef8b144e3fccf26920d49dd9e44",
+          "summary": "16/s in · p50 7.1ms · p99 23ms · lag 0 · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "8b1b1fc6d6a7409af597c36a3175df3a9087728d247c4560a52663b4496f75db",
+          "summary": "15/s in · p50 7.0ms · p99 22ms · lag 0 · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "9c655845fd496e25cf9fe70cec299da1c0d2e30f22c10c41da38b0ab8e8fe549",
+          "summary": "15/s in · p50 6.8ms · p99 41ms · lag 0 · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "orders-api",
+      "features": "-scenario",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "9d4a53d5030f8b549c688ce63fb39f704bf491d97234dec2593bae9bf9ae7bcf",
+          "summary": "0.0/s in · lag 0 · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "b5dc6ba78ed31cb58223bff5107d2e157b25cadc5e4a620441e1480044d4fcdf",
+          "summary": "15/s in · lag 0 · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "f0839e95eb7921fc168e40b7d80cf7437ad59ac4cfed881eb36a69e47e5b2e63",
+          "summary": "15/s in · p50 7.3ms · p99 45ms · lag 0 · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "567fed1a044798eb1d8e79484ec11e249981941f39ae7e14103a5278fba80b44",
+          "summary": "15/s in · p50 6.6ms · p99 27ms · lag 0 · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "795afc1ffa2a80c56aa0ebe84d9d105d38bbc3deea164c2506878b5d373af2a9",
+          "summary": "15/s in · p50 6.7ms · p99 28ms · lag 0 · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "a7a7586a2c5225474247a80e85078f63024fddb38c54957427324efbd0716a8d",
+          "summary": "15/s in · p50 6.7ms · p99 19ms · lag 0 · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "1f3e485b479990e0b4b70a553e58484e825f43489d30cd000221abbcadeacdbb",
+          "summary": "14/s in · p50 6.6ms · p99 36ms · lag 0 · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "read-your-writes",
+      "features": "",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "f01754e298ad077c2bbb61d22c0a03acdb1842173c461faad342889d1186b16a",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "8e9ee799578690b35024961b22308bd4a214ece5bb812b346ce324a26e85dc28",
+          "summary": "6.5/s in · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "659379e9e74fd708cd68729a2e265ff66e6df8f69a377949abdef909f278632b",
+          "summary": "5.0/s in · p50 16ms · p99 37ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "e5536499e4a7d285d09c320427d93bce5660e99f0a943c48f94579f55c1ec060",
+          "summary": "6.0/s in · p50 16ms · p99 48ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "cad6ba4833193ce53077463fa52bcba245dad157c82aec664e9ea1db01e1b5eb",
+          "summary": "6.5/s in · p50 15ms · p99 26ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "9fa31f8a0bd864d504817b5a3ca9afb30944c10126f3277a4414ff46fb810cb5",
+          "summary": "5.5/s in · p50 15ms · p99 22ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "82288a4c744fb69b02fa3f0f9e8ec3bacfd9556f95bebe14143739cddfabbf97",
+          "summary": "6.0/s in · p50 15ms · p99 42ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "read-your-writes",
+      "features": "-endpoints",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "a7e6e77c761d7445477c83cd887b1c15e2d113dcecab6074401a83bbea7277a0",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "3e6cb3d5d51fb3f7c4577ab8d5b101df2287f4afc1e748cc073975b83045cc69",
+          "summary": "6.5/s in · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "b88cb615e057d4d5e089fffe41a6d2e8d83da39416091a293ca9d5ed582f9ce2",
+          "summary": "5.5/s in · p50 14ms · p99 24ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "9205bf2a09f7431a5bdb8c1822b7143e753aec05999e6ba7dd4ac04559f59b36",
+          "summary": "6.0/s in · p50 15ms · p99 35ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "54b71c6c47f1d27a79c6f188d6d80b0de3f62c3104b7570e58dc5935c210f2e8",
+          "summary": "7.0/s in · p50 15ms · p99 25ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "23671211a711cd4d3102ce556c3a946d72eda2284aa30fac09e446de9e9c4a24",
+          "summary": "5.5/s in · p50 16ms · p99 18ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "32c1396c2dbecb6710efeb390f00a49fe86daf10beab8e2a40dd3ab71b8d2f2d",
+          "summary": "6.5/s in · p50 15ms · p99 27ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "read-your-writes",
+      "features": "-flags,-queues,-breakers",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "b4b9d175a5472a5d3876895e5227f1b0c92e77c7620b868fc7b8f747ba8ca1d5",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "ba5665235a778cb57d7e528612caa8ee702f9ef9f885a449ff68c37472900346",
+          "summary": "6.5/s in · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "41e6719cf6513c855dac274c6807e1b932dcc5ad99621c53cb9b58ac976ac3d1",
+          "summary": "5.0/s in · p50 16ms · p99 37ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "23622745e52b49c5cf851188d0ec4fdceffcb394c83a7af280db1b650630f5f0",
+          "summary": "6.0/s in · p50 16ms · p99 48ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "df5693899bf7a7439b92f97694b9b2b4d08c91ce65c8e9766e75f488488bd5bb",
+          "summary": "6.5/s in · p50 15ms · p99 26ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "4b620c4ccfa8836e8439f222014dc49218aadd55ad249a74832469a1d78d7fc4",
+          "summary": "5.5/s in · p50 15ms · p99 22ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "38001a9e72950b0e01bf269b15c27e0c2a96ceb918ef33ee51f65550725559a0",
+          "summary": "6.0/s in · p50 15ms · p99 42ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    },
+    {
+      "name": "read-your-writes",
+      "features": "-scenario",
+      "expected": [
+        {
+          "at": 0,
+          "sha256": "4f7743e14c15758ba3161f0e2d471af47b0628d784028906aa878fec82627f22",
+          "summary": "0.0/s in · healthy"
+        },
+        {
+          "at": 3,
+          "sha256": "60c81f43c16b8fa7c27407a5f58b4e3bbc02316f80f6a3e1c732379531617261",
+          "summary": "6.5/s in · healthy"
+        },
+        {
+          "at": 8,
+          "sha256": "47cb54873ce7652145bce64f3c4ccb48ab3c5795c0e878529c9c16610f1ad5b6",
+          "summary": "6.0/s in · p50 16ms · p99 35ms · healthy"
+        },
+        {
+          "at": 14,
+          "sha256": "34e659b350cf86eb7aba736a0de457d449bc8419d8960c85ec67ce55aaf81a97",
+          "summary": "6.5/s in · p50 15ms · p99 28ms · healthy"
+        },
+        {
+          "at": 22,
+          "sha256": "e983087c8b77875d1d97645f4865d1f16400568ae8c5f007d5e18c6be53f5db6",
+          "summary": "5.0/s in · p50 17ms · p99 36ms · healthy"
+        },
+        {
+          "at": 32,
+          "sha256": "eb568b12174991d84e9de75527850faabaebb6d3f42ad70171ed789af089037c",
+          "summary": "6.0/s in · p50 15ms · p99 28ms · healthy"
+        },
+        {
+          "at": 48,
+          "sha256": "b7a7359b53815d47c5ea0ace76bee262d6ee19b374f796367136ef229403f44d",
+          "summary": "5.5/s in · p50 16ms · p99 33ms · healthy"
+        }
+      ],
+      "summaryChanges": []
+    }
+  ]
+}

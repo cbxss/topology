@@ -46,12 +46,9 @@ test("each route has its own service time and calls", () => {
   assert.ok(Math.abs(getShare - 0.25) < 0.08, `GET → pg share ${getShare}`);
 });
 
-test("--check prints routes and warns about a call with no edge", () => {
+test("--check rejects a call with no edge", () => {
   const broken = { ...spec, nodes: spec.nodes.map((n) => (n.id === "api" ? { ...n, endpoints: { ...n.endpoints, "DELETE /orders": { calls: [{ to: "archive" }] } } } : n)) };
-  const lines = [];
-  const { warnings } = check(broken, { seconds: 5, log: (line) => lines.push(line) });
-  assert.ok(lines.some((line) => line.includes("POST /orders") && line.includes("p99")));
-  assert.ok(warnings.some((w) => w.includes("DELETE /orders on api calls archive")));
+  assert.throws(() => check(broken, { log: () => {} }), /missing call edge/);
 });
 
 test("endpoints feature off: one total rate, plain routing", () => {

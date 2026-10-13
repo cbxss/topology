@@ -47,7 +47,7 @@ function createLogs(sim, { launch, newMsg }) {
   for (const log of logs.values()) for (const group of log.groups) rebalance(log, group, 0);
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
-  const readable = (log, p) => !log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]);
+  const readable = (log, p) => log.node.up && (!log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]));
   const writable = (log, p) => readable(log, p) && (!log.parts || log.acks !== "all" || isrOf(log, log.parts[p]) >= log.minIsr);
 
   function setBroker(id, b, up) {

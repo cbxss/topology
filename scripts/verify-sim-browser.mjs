@@ -1,4 +1,4 @@
-// Run the generated, self-contained HTML in Chrome and compare it with frozen S4
+// Run the generated, self-contained HTML in Chrome and compare it with versioned release
 // checkpoints and Node. Also exercise real inspector, record, trace and story controls.
 import assert from 'node:assert/strict';
 import {mkdtempSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
@@ -10,7 +10,7 @@ import {openBrowser, sleep} from './browser.mjs';
 import {createSim} from '../kit/topo-sim.mjs';
 import {observeSim, replayCase} from '../tests/helpers/sim-observation.mjs';
 
-const baseline = JSON.parse(readFileSync(new URL('../tests/fixtures/sim-s4-baseline.json', import.meta.url)));
+import { cases } from '../tests/helpers/release-cases.mjs';
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const directory = mkdtempSync(join(tmpdir(), 'topology-parity-'));
 const browser = await openBrowser({scale: 1, preload: 'window.__topoSpeed = 0;'});
@@ -42,7 +42,7 @@ async function until(expression) {
 }
 try {
   let count = 0;
-  for (const item of baseline.cases) {
+  for (const item of cases) {
     await load(item.name, item.features);
     const node = [];
     replayCase(createSim, item, sim => node.push(digest(observeSim(sim))));
@@ -56,7 +56,7 @@ try {
       }));
     }, item);
     assert.deepEqual(result, node, `${item.name} ${item.features}: browser/Node`);
-    assert.deepEqual(result, item.expected.map(e => e.sha256), `${item.name} ${item.features}: frozen S4`);
+    assert.deepEqual(result, item.expected.map(e => e.sha256), `${item.name} ${item.features}: release baseline`);
     if (++count % 6 === 0) console.log(`browser parity: ${item.name} (6 configurations)`);
   }
 
@@ -110,6 +110,17 @@ try {
   assert.ok(Math.abs(await browser.eval('window.__topo.sim.time') - 5) < 1e-8);
   await browser.eval('window.__topo.select("replica"); document.querySelector(".tp-ins-fail").click();');
   assert.equal(await browser.eval('window.__topo.story.mode'), 'free');
+  await browser.eval('window.__topo.setView("flat");');
+  await until('window.__topo.view === "flat" && !window.__topo.morphing');
+  await browser.eval('window.__topo.setView("iso");');
+  await until('window.__topo.view === "iso" && !window.__topo.morphing');
+
+  await load('data-stores');
+  await browser.eval('for(let i=0;i<900;i++) window.__topo.sim.step(1/60); window.__topo.select("items"); document.querySelector("button.tp-row").click();');
+  assert.equal(await browser.eval('document.querySelector(".tp-inspect .tp-ins-kind").textContent'), 'dynamodb');
+  assert.equal(await browser.eval('document.querySelector(".tp-record dt").textContent'), 'itemId');
+  await browser.eval('document.querySelector("[data-follow-record]").click();');
+  assert.equal(await browser.eval('window.__topo.records.following.table'), 'items');
   await browser.eval('window.__topo.setView("flat");');
   await until('window.__topo.view === "flat" && !window.__topo.morphing');
   await browser.eval('window.__topo.setView("iso");');

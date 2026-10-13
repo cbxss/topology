@@ -57,7 +57,7 @@ const inspector = (() => {
           if (t.stale) bits.push(`<em>${rate(t.stale)} stale reads</em>`);
           if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
           if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
-          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${value}`).join(" · ");
+          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ");
           const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}" aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
           // WAL: the newest entries; amber ones haven't reached every replica yet.
           const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
@@ -78,7 +78,7 @@ const inspector = (() => {
     if (!open) return;
     const node = sim.nodes.get(open);
     const spec = specOf.get(open);
-    write("kind", $(".tp-ins-kind"), esc(spec.kind));
+    write("kind", $(".tp-ins-kind"), esc(spec.component || spec.kind));
     write("name", $(".tp-ins-name"), esc(spec.label || open));
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");

@@ -85,6 +85,7 @@ function build(file, params) {
     let err = "";
     child.stdout.on("data", (chunk) => (out += chunk));
     child.stderr.on("data", (chunk) => (err += chunk));
+    child.on("error", (error) => done({ ok: false, out: "", err: error.message }));
     child.on("close", (code) => done({ ok: code === 0, out, err }));
   });
 }
@@ -95,6 +96,7 @@ function index(specs) {
 }
 
 const server = http.createServer(async (req, res) => {
+  try {
   const url = new URL(req.url, "http://x");
   const specs = discovered();
   if (url.pathname === "/events") {
@@ -151,9 +153,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   res.writeHead(404).end("not found");
+  } catch (error) {
+    if (res.headersSent) return res.end();
+    res.writeHead(error instanceof URIError ? 400 : 500, { "content-type": "text/plain; charset=utf-8" });
+    res.end(error instanceof URIError ? "malformed URL" : "request failed");
+  }
 });
 server.listen(port, host, () => {
   const specs = discovered();
-  console.log(`topology serve: http://${host}:${port}/  (${specs.size} spec${specs.size === 1 ? "" : "s"}: ${[...specs.keys()].join(", ")})`);
+  console.log(`topology serve: http://${host}:${server.address().port}/  (${specs.size} spec${specs.size === 1 ? "" : "s"}: ${[...specs.keys()].join(", ")})`);
   if (!existsSync(join(ROOT, "kit"))) console.log("warning: kit/ not found");
 });

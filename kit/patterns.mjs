@@ -45,9 +45,10 @@ export function queueWorkers(id, { label = id, workers = 2, rate = 20, worker = 
 }
 
 // A service reading through a cache: every request checks the cache, misses (1 − hit) go to db.
-export function cacheAside(service, { id = `${service}-cache`, db, hit = 0.8, label = "cache", at } = {}) {
+export function cacheAside(service, { id = `${service}-cache`, db, hit = 0.8, label = "cache", kind = "cache", at } = {}) {
+  if (!["cache", "redis", "elasticache"].includes(kind)) throw new Error("cacheAside: kind must be cache, redis or elasticache");
   if (!db) throw new Error("cacheAside: needs `db`, the id of the database behind the cache");
-  return { nodes: [{ id, kind: "cache", label, ...place(at, 0, 0) }], edges: [{ from: service, to: id }, { from: service, to: db, p: Math.round((1 - hit) * 1000) / 1000 }], in: service, out: [db] };
+  return { nodes: [{ id, kind, label, ...place(at, 0, 0) }], edges: [{ from: service, to: id }, { from: service, to: db, p: Math.round((1 - hit) * 1000) / 1000 }], in: service, out: [db] };
 }
 
 // A database primary with streaming replicas.

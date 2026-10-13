@@ -309,8 +309,8 @@ function createTables(sim, records, { launch, respond, begin }) {
     if (!node.tables && primaryEdge && node.kind === "db") node.tables = nodes.get(primaryEdge.from).tables;
     if (!node.tables) continue;
     node.primary = primaryEdge ? nodes.get(primaryEdge.from) : null;
-    node.store = new Map(Object.entries(node.tables).map(([name, t]) => [name, { name, key: t.key || "id", show: t.show || 6, rows: new Map(), touched: [] }]));
-    node.wal = { lsn: 0, applied: 0, recent: [] };
+    node.store = new Map(Object.entries(node.tables).map(([name, t]) => [name, { name, key: t.key || "id", show: t.show || 6, rows: new Map(), versions: new Map(), touched: [] }]));
+    node.wal = { lsn: 0, applied: 0, recent: [], received: new Map(), pending: new Map() };
     node.tableStats = { writes: [], inserts: [], updates: [], conflicts: [], stale: [], misses: [], lockWaits: [], lost: [], applied: [] };
     node.locked = new Map();
   }
@@ -318,13 +318,13 @@ function createTables(sim, records, { launch, respond, begin }) {
   // The record a request is about, one per table: a key from the table's keyspace (with
   // `skew`, that share of requests hits the hottest 5% of keys) and a value for each field.
   const recordOf = (msg, table) => {
-    msg.records ??= {};
-    if (!msg.records[table]) {
+    msg.records ??= Object.create(null);
+    if (!Object.hasOwn(msg.records, table)) {
       const def = records[table] || {};
       const keys = def.keys || 100;
       const hot = Math.max(1, Math.round(keys * 0.05));
       const n = def.skew && rand() < def.skew ? Math.floor(rand() * hot) : Math.floor(rand() * keys);
-      const fields = {};
+      const fields = Object.create(null);
       for (const [name, values] of Object.entries(def.fields || {})) fields[name] = values[Math.floor(rand() * values.length)];
       msg.records[table] = { key: (def.start ?? 1000) + n, fields };
     }
@@ -357,7 +357,11 @@ function createTables(sim, records, { launch, respond, begin }) {
     const node = job.node;
     if (job.holdsLock) {
       const waiters = node.locked.get(job.holdsLock) || [];
-      const next = waiters.shift();
+      let next;
+      while (waiters.length && !next) {
+        const candidate = waiters.shift();
+        if (!candidate.dead && !candidate.done) next = candidate;
+      }
       if (next) {
         next.holdsLock = job.holdsLock;
         node.locked.set(job.holdsLock, waiters);
@@ -369,6 +373,10 @@ function createTables(sim, records, { launch, respond, begin }) {
 
   const touch = (table, key) => {
     table.touched = [key, ...table.touched.filter((k) => k !== key)].slice(0, 16);
+  };
+  const retryDelay = (edge) => {
+    const target = nodes.get(edge.to);
+    return Math.max(1, edge.len / sim.cfg.speed + target.ms * 5 / 1000 + (target.lag || 0) + 1);
   };
   const rowEvent = (node, op, table, key, extra) => !sim.quiet && sim.events.push({ type: "row", node: node.id, table: table.name, key, op, at: sim.time, ...extra });
 
@@ -392,7 +400,7 @@ function createTables(sim, records, { launch, respond, begin }) {
       }
       // On a replica: stale if the primary has a newer version, or if this same request
       // wrote a newer one (read-your-writes).
-      const newest = Math.max(node.primary?.store.get(op.table)?.rows.get(key)?.version ?? 0, job.msg.wrote?.[`${op.table}:${key}`] ?? 0);
+      const newest = Math.max(node.primary?.store.get(op.table)?.versions.get(key) ?? 0, job.msg.wrote?.[`${op.table}:${key}`] ?? 0);
       const stale = newest > row.version;
       if (stale) stats.stale.push(sim.time);
       rowEvent(node, "select", table, key, { version: row.version, stale });
@@ -410,6 +418,7 @@ function createTables(sim, records, { launch, respond, begin }) {
       rowEvent(node, "miss", table, key);
       return true;
     }
+    const version = (table.versions.get(key) ?? 0) + 1;
     let kind = "delete";
     if (op.op === "delete") {
       if (!row) return true;
@@ -418,39 +427,60 @@ function createTables(sim, records, { launch, respond, begin }) {
       // An unlocked read-modify-write that read an older version overwrites a newer one.
       if (op.op === "rmw" && row && row.version !== job.readVersion) stats.lost.push(sim.time);
       kind = row ? "update" : "insert";
-      table.rows.set(key, { key, version: (row?.version ?? 0) + 1, fields: record.fields, at: sim.time });
+      table.rows.set(key, { key, version, fields: record.fields, at: sim.time });
     }
-    const version = (row?.version ?? 0) + 1;
+    table.versions.set(key, version);
     touch(table, key);
     stats.writes.push(sim.time);
     if (kind === "insert") stats.inserts.push(sim.time);
     if (kind === "update") stats.updates.push(sim.time);
-    job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: version };
+    job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: op.op === "delete" ? -version : version };
     const entry = { lsn: ++node.wal.lsn, table: op.table, key, op: kind, version, fields: record.fields, at: sim.time };
     node.wal.recent = [...node.wal.recent.slice(-23), entry];
     node.wal.applied = entry.lsn;
     rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
     if (job.span) job.span.label = `${op.op} ${op.table}/${key} → ${kind} v${version}`;
-    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry, parentJob: job });
+    for (const edge of node.repl) {
+      if (nodes.get(edge.to).store) {
+        const pending = node.wal.pending.get(edge.index) || new Map();
+        node.wal.pending.set(edge.index, pending);
+        pending.set(entry.lsn, { entry, msg: job.msg, retryAt: sim.time + retryDelay(edge) });
+      }
+      launch(edge, "replication", { msg: job.msg, entry, parentJob: job });
+    }
     return true;
   }
 
   // A replica applies a WAL entry, `lag` seconds after it arrives if it has one.
   function applyEntry(job) {
     const node = job.node;
+    // Lag is chosen on arrival; a scenario may change it after launch.
+    const pendingItem = node.primary?.wal.pending.get(job.via.index)?.get(job.entry.lsn);
+    if (pendingItem) pendingItem.retryAt = Math.max(pendingItem.retryAt, sim.time + (node.lag || 0) + 1);
     const apply = () => {
       const { entry } = job;
       const table = node.store?.get(entry.table);
       if (table) {
-        const row = table.rows.get(entry.key);
-        if (entry.op === "delete") table.rows.delete(entry.key);
-        else if (!row || row.version < entry.version) table.rows.set(entry.key, { key: entry.key, version: entry.version, fields: entry.fields, at: sim.time });
-        touch(table, entry.key);
-        node.tableStats.applied.push(sim.time);
-        node.wal.applied = Math.max(node.wal.applied, entry.lsn);
-        node.wal.lsn = Math.max(node.wal.lsn, entry.lsn);
-        node.wal.recent = [...node.wal.recent.slice(-23), entry];
-        rowEvent(node, "apply", table, entry.key, { version: entry.version, lsn: entry.lsn });
+        // Buffer arrivals until the preceding LSN has applied. A late delete must
+        // never erase a newer recreation, and "applied" must not skip missing writes.
+        if (entry.lsn > node.wal.applied) node.wal.received.set(entry.lsn, entry);
+        while (node.wal.received.has(node.wal.applied + 1)) {
+          const next = node.wal.received.get(node.wal.applied + 1);
+          node.wal.received.delete(next.lsn);
+          const target = node.store.get(next.table);
+          if (next.op === "delete") target.rows.delete(next.key);
+          else target.rows.set(next.key, { key: next.key, version: next.version, fields: next.fields, at: sim.time });
+          target.versions.set(next.key, next.version);
+          touch(target, next.key);
+          node.tableStats.applied.push(sim.time);
+          node.wal.applied = next.lsn;
+          node.wal.lsn = next.lsn;
+          node.wal.recent = [...node.wal.recent.slice(-23), next];
+          rowEvent(node, "apply", target, next.key, { version: next.version, lsn: next.lsn });
+        }
+        // Acknowledge contiguous progress, including duplicates retried after downtime.
+        const pending = node.primary?.wal.pending.get(job.via.index);
+        if (pending) for (const lsn of pending.keys()) if (lsn <= node.wal.applied) pending.delete(lsn);
       }
       respond(job, true);
     };
@@ -458,7 +488,33 @@ function createTables(sim, records, { launch, respond, begin }) {
     else apply();
   }
 
-  return { recordOf, tableOp, acquireWrite, releaseWrite, commit, applyEntry };
+  function reset(node) {
+    node.locked?.clear();
+    // Stored rows and buffered WAL survive node failure in this simplified model.
+    for (const source of nodes.values()) for (const edge of source.repl) {
+      if (edge.to !== node.id) continue;
+      for (const item of source.wal?.pending.get(edge.index)?.values() || []) item.retryAt = -Infinity;
+    }
+  }
+
+  function retryReplication() {
+    for (const source of nodes.values()) {
+      if (!source.up || !source.wal) continue;
+      for (const edge of source.repl) {
+        const target = nodes.get(edge.to);
+        if (!target.up) continue;
+        // Bound retries by travel, service and configured lag; delivery is still
+        // subject to the normal transport, admission and node failure paths.
+        for (const item of source.wal.pending.get(edge.index)?.values() || []) {
+          if (sim.time < item.retryAt || target.wal.received.has(item.entry.lsn)) continue;
+          item.retryAt = sim.time + retryDelay(edge);
+          launch(edge, "replication", { msg: item.msg, entry: item.entry });
+        }
+      }
+    }
+  }
+
+  return { recordOf, tableOp, acquireWrite, releaseWrite, commit, applyEntry, reset, retryReplication };
 }
 
 
@@ -517,7 +573,7 @@ function createLogs(sim, { launch, newMsg }) {
   for (const log of logs.values()) for (const group of log.groups) rebalance(log, group, 0);
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
-  const readable = (log, p) => !log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]);
+  const readable = (log, p) => log.node.up && (!log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]));
   const writable = (log, p) => readable(log, p) && (!log.parts || log.acks !== "all" || isrOf(log, log.parts[p]) >= log.minIsr);
 
   function setBroker(id, b, up) {
@@ -869,7 +925,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     if (op) return respond(job, commit(job, op));
     forward(job);
     job.forwarded = true;
-    if (job.waiting === 0) respond(job, !job.failed);
+    if (job.waiting === 0) advance(job);
   }
 
   const healthy = (node, router) => node.up || sim.time - node.downSince < (router.detect ?? router.ttl ?? DETECT[router.kind] ?? 0);
@@ -887,7 +943,7 @@ function createTransport(sim, { tables, logModel, decide }) {
         job.stages[job.stages.length - 1].push(call);
       }
       job.stage = 0;
-      issue(job, job.stages[0]);
+      issue(job, job.stages[0] || []);
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
@@ -1096,6 +1152,7 @@ function createTransport(sim, { tables, logModel, decide }) {
       if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
       job.dead = true;
     }
+    tables.reset(node);
     node.jobs.clear();
     node.working = [];
     node.waiting = [];
@@ -1543,6 +1600,7 @@ function createSim(spec) {
         due.forEach((timer) => timer.run());
       }
     }
+    tables.retryReplication();
     transport.tickNodes(dt);
     transport.tickTimeouts();
     logModel.pull(dt);
@@ -1599,6 +1657,7 @@ return module7;
 
 const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"grid":[182,91],"positions":{"web":[0,-0.5],"mobile":[0,0.5],"alb":[1,0],"orders":[2,0],"pg":[3,-1],"replica":[3,0],"topic":[3,1],"billing-a":[4,-1],"billing-b":[4,0],"indexer":[4,1]},"spec":{"nodes":[{"id":"web","kind":"client","emit":6,"partitions":0,"replicas":1,"label":"web"},{"id":"mobile","kind":"client","emit":4,"partitions":0,"replicas":1,"label":"mobile"},{"id":"alb","kind":"lb","partitions":0,"replicas":1,"label":"alb"},{"id":"orders","kind":"service","replicas":3,"label":"orders-api","partitions":0},{"id":"pg","kind":"db","label":"postgres","role":"primary","partitions":0,"replicas":1},{"id":"replica","kind":"db","label":"pg-replica","role":"replica","partitions":0,"replicas":1},{"id":"topic","kind":"kafka","partitions":3,"label":"orders.v1","replicas":1},{"id":"billing-a","kind":"worker","rate":8,"label":"billing-a","partitions":0,"replicas":1},{"id":"billing-b","kind":"worker","rate":8,"label":"billing-b","partitions":0,"replicas":1},{"id":"indexer","kind":"worker","rate":14,"label":"indexer","partitions":0,"replicas":1}],"edges":[{"from":"web","to":"alb","kind":"sync","sync":true,"len":174.94037583013522},{"from":"mobile","to":"alb","kind":"sync","sync":true,"len":174.94037583013522},{"from":"alb","to":"orders","kind":"sync","sync":true,"len":135.59852981726297},{"from":"orders","to":"pg","kind":"sync","sync":true,"len":209.5514952079261},{"from":"pg","to":"replica","kind":"replication","sync":false,"len":49},{"from":"orders","to":"topic","kind":"async","sync":false,"len":178.5514952079261},{"from":"topic","to":"billing-a","group":"billing","kind":"async","sync":false,"len":266.4714952079262},{"from":"topic","to":"billing-b","group":"billing","kind":"async","sync":false,"len":188.63149520792618},{"from":"topic","to":"indexer","group":"search","kind":"async","sync":false,"len":111.11360549545056}],"sim":{"per":40,"seed":3},"scenario":{"length":40,"phases":[{"name":"steady","at":0},{"name":"consumer lost","at":10},{"name":"recovery","at":22}],"steps":[{"at":1,"say":"Orders flow in at ~400/s. Billing and the search indexer read orders.v1 as separate consumer groups; both keep up."},{"phase":"consumer lost","fail":"billing-a","say":"billing-a crashes. The billing group pauses to rebalance, then billing-b owns all three partitions: 8 rec/s against ~10 coming in."},{"phase":"consumer lost","after":5,"say":"Billing lag climbs (bright cells, the white cursor falls behind). Search is unaffected: its blue cursor stays at the head."},{"phase":"recovery","recover":"billing-a","say":"billing-a returns, the group rebalances again and the backlog drains."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,61.78,64.32,66.45,68.43,70.56,73.1,92.84,95.38,97.51,99.49,101.62,104.16,174.94],[0,70.78,73.32,75.45,77.43,79.56,82.1,101.84,104.38,106.51,108.49,110.62,113.16,174.94],[0,135.6],[0,60,62.54,64.67,66.65,68.78,71.32,138.24,140.77,142.9,144.88,147.02,149.55,209.55],[0,49],[0,44.5,47.04,49.17,51.15,53.28,55.82,122.74,125.27,127.4,129.38,131.52,134.05,178.55],[0,35.5,38.04,40.17,42.15,44.28,46.82,201.66,204.19,206.32,208.3,210.44,212.97,266.47],[0,44.5,47.04,49.17,51.15,53.28,55.82,132.82,135.35,137.48,139.46,141.6,144.13,188.63],[0,53.92,56.3,58.31,60.17,62.17,64.56,64.56,66.94,68.94,70.81,72.81,75.19,111.11]],"views":{"iso":{"edges":[[[102.6,54.5],[143.2,69],[144.8,69.7],[145.7,70.5],[146,71.3],[145.7,72.2],[144.7,73.1],[136,80],[135,80.9],[134.7,81.8],[135,82.6],[135.9,83.4],[137.5,84.1],[184,100.7]],[[62.3,86.2],[108.8,102.9],[110.6,103.4],[112.2,103.5],[113.8,103.4],[115.2,102.9],[116.5,102.1],[125.3,95.2],[126.6,94.4],[128,93.9],[129.5,93.7],[131.2,93.9],[133,94.4],[173.6,108.9]],[[201.7,113],[290.9,144.9]],[[330.8,154],[370.3,168.1],[372.1,168.6],[373.7,168.8],[375.3,168.6],[376.7,168.2],[378,167.4],[407.7,144],[409,143.2],[410.4,142.7],[411.9,142.6],[413.6,142.7],[415.4,143.2],[454.8,157.3]],[[459.3,169.6],[437.6,186.7]],[[321.9,161.1],[351.1,171.5],[352.7,172.2],[353.6,173],[353.9,173.8],[353.6,174.7],[352.6,175.6],[323,198.9],[322,199.9],[321.7,200.7],[322,201.6],[322.9,202.3],[324.5,203],[353.7,213.5]],[[427.9,233.3],[451.3,241.7],[453,242.2],[454.7,242.3],[456.2,242.2],[457.7,241.7],[459,240.9],[527.6,186.9],[528.9,186.1],[530.4,185.6],[531.9,185.5],[533.6,185.6],[535.3,186.1],[570.5,198.7]],[[422.1,237.9],[451.3,248.4],[453.1,248.9],[454.8,249],[456.3,248.9],[457.8,248.4],[459.1,247.6],[493.2,220.7],[494.5,219.9],[495.9,219.4],[497.5,219.3],[499.1,219.5],[500.9,219.9],[530.2,230.4]],[[416.3,242.5],[451.7,255.2],[453.4,255.6],[454.9,255.8],[456.4,255.6],[457.7,255.2],[458.9,254.4],[458.9,254.4],[460.2,253.7],[461.5,253.2],[463,253],[464.5,253.2],[466.2,253.7],[489.8,262.1]]],"step":[4.602110263149044,1.6449555440640609],"flagStep":[0,0],"packet":{"top":"M2.4 -2.6L0.5 -1.1L-2.4 -2.1L-0.5 -3.7Z","sides":"M2.4 -2.6L0.5 -1.1L0.5 1.3L2.4 -0.2ZM0.5 -1.1L-2.4 -2.1L-2.4 0.2L0.5 1.3Z","outline":"M-2.4 -2.1L-0.5 -3.7L2.4 -2.6L2.4 -0.2L0.5 1.3L-2.4 0.2Z"}},"flat":{"edges":[[[56.3,79.2],[103.2,79.2],[105.1,79.4],[106.6,80.1],[107.7,81.1],[108.3,82.6],[108.5,84.5],[108.5,99.5],[108.7,101.4],[109.4,102.9],[110.4,104],[111.9,104.6],[113.8,104.8],[167.6,104.8]],[[56.3,148.3],[110.1,148.3],[112,148],[113.5,147.4],[114.5,146.3],[115.2,144.9],[115.4,143],[115.4,128],[115.6,126.1],[116.2,124.6],[117.3,123.5],[118.8,122.9],[120.7,122.7],[167.6,122.7]],[[194,113.7],[296.9,113.7]],[[337.8,106.1],[383.4,106.1],[385.3,105.9],[386.8,105.2],[387.8,104.2],[388.5,102.7],[388.7,100.8],[388.7,50],[388.9,48.1],[389.5,46.6],[390.6,45.5],[392.1,44.9],[394,44.7],[439.5,44.7]],[[455.4,60.6],[455.4,97.8]],[[337.8,121.4],[371.6,121.4],[373.5,121.6],[375,122.2],[376.1,123.3],[376.7,124.8],[376.9,126.7],[376.9,177.5],[377.1,179.4],[377.8,180.9],[378.8,181.9],[380.3,182.6],[382.2,182.8],[416,182.8]],[[494.9,172.8],[521.8,172.8],[523.7,172.6],[525.2,171.9],[526.3,170.9],[526.9,169.4],[527.1,167.5],[527.1,50],[527.3,48.1],[528,46.6],[529,45.5],[530.5,44.9],[532.4,44.7],[573,44.7]],[[494.9,182.8],[528.6,182.8],[530.6,182.6],[532,181.9],[533.1,180.9],[533.7,179.4],[534,177.5],[534,119.1],[534.2,117.1],[534.8,115.7],[535.9,114.6],[537.4,114],[539.3,113.7],[573,113.7]],[[494.9,192.8],[535.8,192.8],[537.6,192.6],[539,192],[540,191],[540.6,189.6],[540.8,187.8],[540.8,187.8],[541,186],[541.6,184.6],[542.6,183.6],[544,183],[545.8,182.8],[573,182.8]]],"step":[5.310967741935485,0],"flagStep":[0,0],"packet":null,"k":0.7587096774193548}},"raw":{"title":"Order events","fig":"Fig 1","caption":"Clients call orders-api through the load balancer. Each order is written to Postgres, replicated to a read replica, and published to orders.v1 (3 partitions). Billing (2 consumers) and the search indexer (1 consumer) read the topic as separate consumer groups, each with its own committed offset: the white and blue cursors on each partition.","sim":{"per":40,"seed":3},"scenario":{"length":40,"phases":[{"name":"steady","at":0},{"name":"consumer lost","at":10},{"name":"recovery","at":22}],"steps":[{"at":1,"say":"Orders flow in at ~400/s. Billing and the search indexer read orders.v1 as separate consumer groups; both keep up."},{"phase":"consumer lost","fail":"billing-a","say":"billing-a crashes. The billing group pauses to rebalance, then billing-b owns all three partitions: 8 rec/s against ~10 coming in."},{"phase":"consumer lost","after":5,"say":"Billing lag climbs (bright cells, the white cursor falls behind). Search is unaffected: its blue cursor stays at the head."},{"phase":"recovery","recover":"billing-a","say":"billing-a returns, the group rebalances again and the backlog drains."}]},"nodes":[{"id":"web","kind":"client","emit":6},{"id":"mobile","kind":"client","emit":4},{"id":"alb","kind":"lb"},{"id":"orders","kind":"service","replicas":3,"label":"orders-api"},{"id":"pg","kind":"db","label":"postgres","role":"primary"},{"id":"replica","kind":"db","label":"pg-replica","role":"replica"},{"id":"topic","kind":"kafka","partitions":3,"label":"orders.v1"},{"id":"billing-a","kind":"worker","rate":8,"label":"billing-a"},{"id":"billing-b","kind":"worker","rate":8,"label":"billing-b"},{"id":"indexer","kind":"worker","rate":14,"label":"indexer"}],"edges":[{"from":"web","to":"alb"},{"from":"mobile","to":"alb"},{"from":"alb","to":"orders"},{"from":"orders","to":"pg"},{"from":"pg","to":"replica","kind":"replication"},{"from":"orders","to":"topic"},{"from":"topic","to":"billing-a","group":"billing"},{"from":"topic","to":"billing-b","group":"billing"},{"from":"topic","to":"indexer","group":"search"}]}};
 const k = (() => {
+
 // The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
 // lines laid on faces, SVG string emitters, and the framed card a figure sits in.
 // World units are about one pixel of the real thing; the camera is fitted to the scene.
@@ -1984,10 +2043,225 @@ const KIT_CSS = `
 
 return { cameraOf, iso, depthOf, fitProjection, pointsAt, pathOf, convexHull, insetPlan, roundedPlan, circleRing, corners, boxCorners, extrude, slabOf, cylinder, haloOf, onTop, lineOnTop, segment, planOutline, ring, sideArc, sideSeam, radialTicks, topMatrix, escape, solidSvg, lineSvg, dotsSvg, faceTextSvg, figureSvg, plateHtml, pageHtml, KIT_CSS };
 })();
+const PRODUCTS = (() => {
+
+// Product components share simulation behavior with the generic node vocabulary.
+// Keep product identity in the drawing; do not duplicate cache/table engines.
+const COMPONENTS = {
+  redis: { base: "cache", h: 11 },
+  elasticache: { base: "cache", h: 15 },
+  dynamodb: { base: "db", h: 27 },
+};
+const baseKind = kind => COMPONENTS[kind]?.base || kind;
+
+// Drawing adapters use the existing kits, so theme, camera, LEDs and morphing stay shared.
+function isoComponent(node, c, k) {
+  const { plan } = node;
+  const out = [];
+  if (node.kind === "dynamodb") {
+    out.push(c.S(k.slabOf(plan, 0, node.h, c.P, 2, 0.6), { tone: "mid" }));
+    const front = plan.y + plan.d;
+    for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++) {
+      const x = plan.x + 5 + col * (plan.w - 10) / 3;
+      out.push(c.L(c.faceY(x, x + (plan.w - 10) / 3 - 2, front, 5 + row * 9, 11 + row * 9), { tone: "lo" }));
+    }
+    out.push(c.L(k.planOutline(k.insetPlan(plan, 4), node.h, c.P, 2), { tone: "lo" }));
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${k.escape(node.id)}">${k.faceTextSvg(k.topMatrix([node.cx, node.cy + 3], node.h, c.P, "x"), "0 rows", { size: 5, tone: "mid", anchor: "middle" })}</g>`);
+    out.push(c.led(`${node.id}:0`, [plan.x + plan.w - 4, front, node.h - 3], 1));
+  } else {
+    const managed = node.kind === "elasticache";
+    if (managed) {
+      out.push(c.S(k.slabOf(plan, 0, 4, c.P, 3, 0.6), { tone: "mid" }));
+      out.push(c.L(k.planOutline(k.insetPlan(plan, 2), 4, c.P, 3), { tone: "lo" }));
+    }
+    const tile = managed ? k.insetPlan(plan, 6) : plan;
+    const floor = managed ? 4 : 0;
+    for (let level = 0; level < 3; level++) out.push(c.S(k.slabOf(tile, floor + level * 4, 3, c.P, 3, 0.5), { tone: "mid", crease: "lo" }));
+    out.push(c.L(k.planOutline(k.insetPlan(tile, 4), floor + 11, c.P, 2), { tone: "lo" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, managed ? 2 : 1.5], 1));
+  }
+  return out.join("");
+}
+
+function flatComponent(node, f, k) {
+  const b = f.box(node.plan);
+  const out = [];
+  if (node.kind === "dynamodb") {
+    out.push(f.rect(b, "tp-f", 2));
+    const gap = b.w * 0.08;
+    const cellW = (b.w - gap * 4) / 3;
+    const cellH = b.h * 0.19;
+    for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++)
+      out.push(f.rect({ x: b.x + gap + col * (cellW + gap), y: b.y + b.h * 0.12 + row * (cellH + b.h * 0.07), w: cellW, h: cellH }, "tp-f tp-f-chip", 1));
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${k.escape(node.id)}">${f.text(b.x + b.w / 2, b.y + b.h * 0.81, "0 rows", 6, "tp-ft tp-ft-dim")}</g>`);
+  } else {
+    const managed = node.kind === "elasticache";
+    if (managed) out.push(f.rect(b, "tp-f", 4));
+    const pad = managed ? b.w * 0.12 : 0;
+    const inner = { x: b.x + pad, y: b.y + pad, w: b.w - pad * 2, h: b.h - pad * 2 };
+    for (let level = 2; level >= 0; level--) out.push(f.rect({ x: inner.x, y: inner.y + level * inner.h * 0.24, w: inner.w, h: inner.h * 0.52 }, "tp-f", 3));
+  }
+  out.push(f.led(`${node.id}:0`, b.x + b.w - 5, b.y + b.h - 4, 1.3));
+  return out.join("");
+}
+
+return { COMPONENTS, baseKind, isoComponent, flatComponent };
+})();
+const VALIDATION = (() => {
+
+// Validate the public authoring contract before layout, browser packaging or simulation.
+const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
+const fail = (path, message) => { throw new Error(`spec ${path}: ${message}`); };
+const object = (value, path) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail(path, "expected an object");
+};
+const name = (value, path) => {
+  if (typeof value !== "string" || !value.length) fail(path, "expected a nonempty string");
+};
+const number = (value, path, min = 0, max = Infinity, integer = false) => {
+  if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) fail(path, `expected ${integer ? "an integer" : "a finite number"} in [${min}, ${max}]`);
+};
+function rate(value, path) {
+  if (typeof value === "number") return number(value, path);
+  if (!Array.isArray(value) || !value.length) fail(path, "expected a rate or nonempty time/rate curve");
+  let last = -1;
+  for (const point of value) {
+    if (!Array.isArray(point) || point.length !== 2) fail(path, "expected [seconds, rate]");
+    number(point[0], path); number(point[1], path);
+    if (point[0] <= last) fail(path, "curve times must increase");
+    last = point[0];
+  }
+}
+function emit(value, path) {
+  if (typeof value === "number" || Array.isArray(value)) return rate(value, path);
+  object(value, path);
+  if (Object.hasOwn(value, "every")) {
+    number(value.every, path + ".every", Number.MIN_VALUE);
+    number(value.burst, path + ".burst", 1, Infinity, true);
+  } else for (const [route, mix] of Object.entries(value)) { name(route, path); rate(mix, path + "." + route); }
+}
+function jsonValue(value, path, seen = new Set()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") { if (!Number.isFinite(value)) fail(path, "field samples must be finite"); return; }
+  if (typeof value !== "object" || seen.has(value)) fail(path, "field samples must be acyclic JSON values");
+  seen.add(value);
+  for (const child of Object.values(value)) jsonValue(child, path, seen);
+  seen.delete(value);
+}
+
+function validateSpec(spec, features = {}, kinds) {
+  object(spec, "");
+  if (!Array.isArray(spec.nodes) || !spec.nodes.length) fail("nodes", "expected a nonempty array");
+  const nodes = new Map();
+  for (const node of spec.nodes) {
+    object(node, "node"); name(node.id, "node.id");
+    if (nodes.has(node.id)) fail(node.id, "duplicate node id");
+    if (kinds && !Object.hasOwn(kinds, node.kind)) fail(node.id + ".kind", "unknown kind");
+    nodes.set(node.id, node);
+    for (const key of ["ms", "lag", "capacity", "queue", "rate", "detect", "ttl", "burst", "sidecarMs"])
+      if (node[key] != null) number(node[key], node.id + "." + key);
+    for (const key of ["partitions", "brokers", "replicas", "rf", "minIsr"])
+      if (node[key] != null) number(node[key], node.id + "." + key, 1, Infinity, true);
+    for (const key of ["hit", "errorRate"]) if (node[key] != null) number(node[key], node.id + "." + key, 0, 1);
+    if (node.emit != null) emit(node.emit, node.id + ".emit");
+    if (node.tables) {
+      object(node.tables, node.id + ".tables");
+      for (const [table, def] of Object.entries(node.tables)) {
+        name(table, node.id + ".tables"); object(def, table);
+        if (def.key != null) name(def.key, table + ".key");
+        if (def.show != null) number(def.show, table + ".show", 1, 16, true);
+      }
+    }
+  }
+  if (spec.edges != null && !Array.isArray(spec.edges)) fail("edges", "expected an array");
+  const edges = (spec.edges || []).map(e => Array.isArray(e) ? {from: e[0], to: e[1]} : e);
+  for (const edge of edges) {
+    object(edge, "edge");
+    if (!nodes.has(edge.from) || !nodes.has(edge.to)) fail("edge", `unknown endpoint ${edge.from} → ${edge.to}`);
+    for (const key of ["ms", "timeout", "backoff", "rate"]) if (edge[key] != null) number(edge[key], "edge." + key);
+    if (edge.p != null) number(edge.p, "edge.p"); // random routing accepts weights > 1
+    if (edge.retries != null) number(edge.retries, "edge.retries", 0, Infinity, true);
+  }
+  const parents = new Map();
+  for (const edge of edges.filter(e => e.kind === "replication" && ["db", "dynamodb"].includes(nodes.get(e.from).kind) && ["db", "dynamodb"].includes(nodes.get(e.to).kind))) {
+    if (parents.has(edge.to)) fail(edge.to, "a table replica must have one primary");
+    parents.set(edge.to, edge.from);
+  }
+  for (const [child, parent] of parents) {
+    if (parents.has(parent)) fail(child, "cascading table replication is unsupported; use direct replicas");
+    const declared = nodes.get(child).tables;
+    if (declared && JSON.stringify(Object.keys(declared).sort()) !== JSON.stringify(Object.keys(nodes.get(parent).tables || {}).sort()))
+      fail(child, "replicas must contain the same tables as their primary");
+  }
+  for (const [table, def] of Object.entries(spec.records || {})) {
+    object(def, "records." + table);
+    if (def.key != null) name(def.key, table + ".key");
+    if (def.keys != null) number(def.keys, table + ".keys", 1, Infinity, true);
+    if (def.start != null) number(def.start, table + ".start", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true);
+    if (def.skew != null) number(def.skew, table + ".skew", 0, 1);
+    object(def.fields || {}, table + ".fields");
+    for (const [field, samples] of Object.entries(def.fields || {})) {
+      if (!Array.isArray(samples) || !samples.length) fail(table + "." + field, "expected a nonempty array of field samples");
+      if (field === (def.key || "id")) fail(table + "." + field, "key is generated separately; do not duplicate it in fields");
+      jsonValue(samples, table + "." + field);
+    }
+  }
+  for (const node of nodes.values()) for (const [route, endpoint] of Object.entries(features.endpoints === false ? {} : node.endpoints || {})) {
+    object(endpoint, node.id + "." + route);
+    if (endpoint.ms != null) number(endpoint.ms, route + ".ms");
+    if (endpoint.calls == null) continue;
+    if (!Array.isArray(endpoint.calls)) fail(route + ".calls", "expected an array");
+    for (const call of endpoint.calls) {
+      object(call, route + ".call");
+      if (!edges.some(e => e.from === node.id && e.to === call.to && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${call.to}`);
+      if (call.p != null) number(call.p, route + ".p", 0, 1);
+      if (features.tables !== false && (call.op != null || call.table != null)) {
+        if (!OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
+        const target = nodes.get(call.to);
+        const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
+        if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${call.to}`);
+        if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+      }
+    }
+  }
+  for (const key of ["speed", "window", "length", "per"]) if (spec.sim?.[key] != null) number(spec.sim[key], "sim." + key, Number.MIN_VALUE);
+  if (spec.scenario) {
+    const phases = new Set((spec.scenario.phases || []).map(p => p.name));
+    const targetExists = id => nodes.has(id) || edges.some(e => id === e.from + ">" + e.to) || (() => {
+      const match = /^(.*):b(\d+)$/.exec(id);
+      return match && +match[2] < (nodes.get(match[1])?.brokers || 0);
+    })();
+    for (const phase of spec.scenario.phases || []) number(phase.at, "phase.at");
+    for (const step of spec.scenario.steps || []) {
+      if (step.at == null && !phases.has(step.phase)) fail("step", "expected at or a known phase");
+      for (const id of [...[].concat(step.fail || []), ...[].concat(step.recover || []), ...Object.keys(step.set || {})])
+        if (!targetExists(id)) fail("scenario", `unknown target ${id}`);
+      for (const flag of [step.flag, step.kill]) if (flag && !Object.hasOwn(spec.flags || {}, flag)) fail("scenario", `unknown flag ${flag}`);
+      if (step.rollout != null) number(step.rollout, "step.rollout", 0, 1);
+      for (const [id, values] of Object.entries(step.set || {})) {
+        object(values, "step.set." + id);
+        for (const [key, value] of Object.entries(values)) {
+          if (key === "emit") emit(value, id + ".emit");
+          if (["ms", "lag", "capacity", "burst", "rate", "queue", "detect", "ttl", "sidecarMs", "timeout", "backoff", "retries"].includes(key)) number(value, id + "." + key);
+          if (key === "errorRate") number(value, id + "." + key, 0, 1);
+        }
+      }
+      if (step.at != null) number(step.at, "step.at");
+      if (step.after != null) number(step.after, "step.after");
+    }
+    if (spec.scenario.length != null) number(spec.scenario.length, "scenario.length", Number.MIN_VALUE);
+  }
+}
+
+return { validateSpec };
+})();
 const TOPO = (() => {
+const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION;
 // Topology: turn a declarative system spec into an interactive figure, drawn either
 // isometric (solids on a floor, built with kit/iso.mjs) or flat (2D glyphs on the same layout).
 // One world layout feeds both views, so edges, packets and ports line up in each.
+
+
 
 
 
@@ -2012,6 +2286,8 @@ const KINDS = {
   scheduler: { w: 40, d: 34, h: 12 },
   flags: { w: 48, d: 34, h: 8 },
 };
+for (const [kind, component] of Object.entries(COMPONENTS)) KINDS[kind] = { ...KINDS[component.base], h: component.h };
+
 const SLOTS = 12;
 const PITCH = 7;
 const LANE = 11;
@@ -2043,7 +2319,7 @@ function prepare(spec) {
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
-  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && byId.get(edge.to).kind === "db") byId.get(edge.to).hasTables = true;
+  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && baseKind(byId.get(edge.to).kind) === "db") byId.get(edge.to).hasTables = true;
   for (const node of nodes) {
     if (!isLog(node)) continue;
     const names = [];
@@ -2876,7 +3152,10 @@ function renderView(model, view, width = 640, camera, options) {
   const order = [...model.nodes].sort((a, b) => k.depthOf([a.cx, a.cy, 0], P) - k.depthOf([b.cx, b.cy, 0], P));
   for (const node of order) {
     const halo = iso ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
-    const body = iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
+    const component = COMPONENTS[node.kind];
+    const body = component
+      ? (iso ? isoComponent(node, iso, k) : flatComponent(node, flat, k))
+      : (iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat));
     const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue ? queueCellsOf(node, iso, flat) : "");
     out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}${extra}</g>`);
   }
@@ -2967,6 +3246,7 @@ function describe(model) {
 // out and route the spec, then add hops if they're on.
 function modelOf(spec, featureLayers = []) {
   const features = resolveFeatures(spec.features, ...featureLayers);
+  validateSpec(spec, features, KINDS);
   const model = prepare(stripFeatures(spec, features));
   model.features = features;
   if (features.hops) applyHops(model);
@@ -2979,7 +3259,7 @@ const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key
 // What the sim needs: everything in the spec except geometry, plus each edge's length.
 function simSpec(model) {
   return {
-    nodes: model.nodes.map(strip),
+    nodes: model.nodes.map(node => ({ ...strip(node), ...(COMPONENTS[node.kind] ? { kind: baseKind(node.kind), component: node.kind } : {}) })),
     edges: model.edges.map((edge) => ({ ...strip(edge), len: edge.len })),
     sim: model.sim,
     scenario: model.scenario,
@@ -3746,7 +4026,7 @@ const inspector = (() => {
           if (t.stale) bits.push(`<em>${rate(t.stale)} stale reads</em>`);
           if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
           if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
-          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${value}`).join(" · ");
+          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ");
           const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}" aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
           // WAL: the newest entries; amber ones haven't reached every replica yet.
           const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
@@ -3767,7 +4047,7 @@ const inspector = (() => {
     if (!open) return;
     const node = sim.nodes.get(open);
     const spec = specOf.get(open);
-    write("kind", $(".tp-ins-kind"), esc(spec.kind));
+    write("kind", $(".tp-ins-kind"), esc(spec.component || spec.kind));
     write("name", $(".tp-ins-name"), esc(spec.label || open));
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
@@ -4088,7 +4368,7 @@ const tracer = (() => {
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
       if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to inspect · 1–${Math.min(9, story.phases.length)} jump` : hintText;
     }
-    const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
+    const text = mode === "free" ? "You've taken over: inspect a node, then use Fail/Restore or F." : step ? step.say : "";
     if (text !== shown.say) {
       shown.say = text;
       line.textContent = text;

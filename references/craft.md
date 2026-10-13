@@ -13,6 +13,9 @@ Each kind has one object in iso and one glyph in flat, on the same footprint, so
 | `worker` | As `service`, with a fan ring on top | As `service`, with a ring in the header | one per replica |
 | `cache` | A board with two rows of memory chips | A box with a row of chips | one |
 | `db` | Three stacked disks, `role` on the top | A cylinder, `role` on the lid | one per disk (the top one blinks) |
+| `redis` | Three low memory tiles | Three overlapping tiles | one |
+| `elasticache` | Memory tiles on an enclosing base | Tile stack inside a frame | one |
+| `dynamodb` | Rectangular cabinet with six cells | Framed cell grid | one |
 | `storage` | Three disks widening upward: a bucket | A bucket | one |
 | `kafka` | A broker plinth with one lane per partition, 12 record cells each, and a cursor per consumer group | A box with lanes of cells and cursor ticks | three broker LEDs |
 | `queue` | `kafka` with one lane | as `kafka` | three |
@@ -92,7 +95,9 @@ Each of these has an example to copy:
 3. `FLAT.<kind>(node, f)`: the glyph inside `f.box(node.plan)`, with `f.rect`, `f.line`, `f.led`.
 4. `heightOf` if it is taller than its `KINDS.h`, and `ledFor` in `kit/topo-live.js` if its LEDs aren't `<node>:0`.
 5. Add it to `KINDS` in `scripts/catalog.mjs` so it shows in the catalog, with a one-line description and its typical fields.
-6. If it behaves differently (a new kind of buffer, say), the behaviour goes in `kit/topo-sim.mjs`, and `--check` must still read true.
+Product components that share existing behavior belong in `kit/components.mjs`; `simSpec` maps them to their base kind while both drawings retain product identity.
+
+6. If it behaves differently (a new kind of buffer, say), the behaviour goes in the appropriate `kit/sim/` module, and `--check` must still read true.
 
 ## Disclosure and evidence
 

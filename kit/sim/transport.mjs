@@ -141,7 +141,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     if (op) return respond(job, commit(job, op));
     forward(job);
     job.forwarded = true;
-    if (job.waiting === 0) respond(job, !job.failed);
+    if (job.waiting === 0) advance(job);
   }
 
   const healthy = (node, router) => node.up || sim.time - node.downSince < (router.detect ?? router.ttl ?? DETECT[router.kind] ?? 0);
@@ -159,7 +159,7 @@ function createTransport(sim, { tables, logModel, decide }) {
         job.stages[job.stages.length - 1].push(call);
       }
       job.stage = 0;
-      issue(job, job.stages[0]);
+      issue(job, job.stages[0] || []);
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
@@ -368,6 +368,7 @@ function createTransport(sim, { tables, logModel, decide }) {
       if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
       job.dead = true;
     }
+    tables.reset(node);
     node.jobs.clear();
     node.working = [];
     node.waiting = [];

@@ -309,8 +309,8 @@ function createTables(sim, records, { launch, respond, begin }) {
     if (!node.tables && primaryEdge && node.kind === "db") node.tables = nodes.get(primaryEdge.from).tables;
     if (!node.tables) continue;
     node.primary = primaryEdge ? nodes.get(primaryEdge.from) : null;
-    node.store = new Map(Object.entries(node.tables).map(([name, t]) => [name, { name, key: t.key || "id", show: t.show || 6, rows: new Map(), touched: [] }]));
-    node.wal = { lsn: 0, applied: 0, recent: [] };
+    node.store = new Map(Object.entries(node.tables).map(([name, t]) => [name, { name, key: t.key || "id", show: t.show || 6, rows: new Map(), versions: new Map(), touched: [] }]));
+    node.wal = { lsn: 0, applied: 0, recent: [], received: new Map(), pending: new Map() };
     node.tableStats = { writes: [], inserts: [], updates: [], conflicts: [], stale: [], misses: [], lockWaits: [], lost: [], applied: [] };
     node.locked = new Map();
   }
@@ -318,13 +318,13 @@ function createTables(sim, records, { launch, respond, begin }) {
   // The record a request is about, one per table: a key from the table's keyspace (with
   // `skew`, that share of requests hits the hottest 5% of keys) and a value for each field.
   const recordOf = (msg, table) => {
-    msg.records ??= {};
-    if (!msg.records[table]) {
+    msg.records ??= Object.create(null);
+    if (!Object.hasOwn(msg.records, table)) {
       const def = records[table] || {};
       const keys = def.keys || 100;
       const hot = Math.max(1, Math.round(keys * 0.05));
       const n = def.skew && rand() < def.skew ? Math.floor(rand() * hot) : Math.floor(rand() * keys);
-      const fields = {};
+      const fields = Object.create(null);
       for (const [name, values] of Object.entries(def.fields || {})) fields[name] = values[Math.floor(rand() * values.length)];
       msg.records[table] = { key: (def.start ?? 1000) + n, fields };
     }
@@ -357,7 +357,11 @@ function createTables(sim, records, { launch, respond, begin }) {
     const node = job.node;
     if (job.holdsLock) {
       const waiters = node.locked.get(job.holdsLock) || [];
-      const next = waiters.shift();
+      let next;
+      while (waiters.length && !next) {
+        const candidate = waiters.shift();
+        if (!candidate.dead && !candidate.done) next = candidate;
+      }
       if (next) {
         next.holdsLock = job.holdsLock;
         node.locked.set(job.holdsLock, waiters);
@@ -369,6 +373,10 @@ function createTables(sim, records, { launch, respond, begin }) {
 
   const touch = (table, key) => {
     table.touched = [key, ...table.touched.filter((k) => k !== key)].slice(0, 16);
+  };
+  const retryDelay = (edge) => {
+    const target = nodes.get(edge.to);
+    return Math.max(1, edge.len / sim.cfg.speed + target.ms * 5 / 1000 + (target.lag || 0) + 1);
   };
   const rowEvent = (node, op, table, key, extra) => !sim.quiet && sim.events.push({ type: "row", node: node.id, table: table.name, key, op, at: sim.time, ...extra });
 
@@ -392,7 +400,7 @@ function createTables(sim, records, { launch, respond, begin }) {
       }
       // On a replica: stale if the primary has a newer version, or if this same request
       // wrote a newer one (read-your-writes).
-      const newest = Math.max(node.primary?.store.get(op.table)?.rows.get(key)?.version ?? 0, job.msg.wrote?.[`${op.table}:${key}`] ?? 0);
+      const newest = Math.max(node.primary?.store.get(op.table)?.versions.get(key) ?? 0, job.msg.wrote?.[`${op.table}:${key}`] ?? 0);
       const stale = newest > row.version;
       if (stale) stats.stale.push(sim.time);
       rowEvent(node, "select", table, key, { version: row.version, stale });
@@ -410,6 +418,7 @@ function createTables(sim, records, { launch, respond, begin }) {
       rowEvent(node, "miss", table, key);
       return true;
     }
+    const version = (table.versions.get(key) ?? 0) + 1;
     let kind = "delete";
     if (op.op === "delete") {
       if (!row) return true;
@@ -418,39 +427,60 @@ function createTables(sim, records, { launch, respond, begin }) {
       // An unlocked read-modify-write that read an older version overwrites a newer one.
       if (op.op === "rmw" && row && row.version !== job.readVersion) stats.lost.push(sim.time);
       kind = row ? "update" : "insert";
-      table.rows.set(key, { key, version: (row?.version ?? 0) + 1, fields: record.fields, at: sim.time });
+      table.rows.set(key, { key, version, fields: record.fields, at: sim.time });
     }
-    const version = (row?.version ?? 0) + 1;
+    table.versions.set(key, version);
     touch(table, key);
     stats.writes.push(sim.time);
     if (kind === "insert") stats.inserts.push(sim.time);
     if (kind === "update") stats.updates.push(sim.time);
-    job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: version };
+    job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: op.op === "delete" ? -version : version };
     const entry = { lsn: ++node.wal.lsn, table: op.table, key, op: kind, version, fields: record.fields, at: sim.time };
     node.wal.recent = [...node.wal.recent.slice(-23), entry];
     node.wal.applied = entry.lsn;
     rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
     if (job.span) job.span.label = `${op.op} ${op.table}/${key} → ${kind} v${version}`;
-    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry, parentJob: job });
+    for (const edge of node.repl) {
+      if (nodes.get(edge.to).store) {
+        const pending = node.wal.pending.get(edge.index) || new Map();
+        node.wal.pending.set(edge.index, pending);
+        pending.set(entry.lsn, { entry, msg: job.msg, retryAt: sim.time + retryDelay(edge) });
+      }
+      launch(edge, "replication", { msg: job.msg, entry, parentJob: job });
+    }
     return true;
   }
 
   // A replica applies a WAL entry, `lag` seconds after it arrives if it has one.
   function applyEntry(job) {
     const node = job.node;
+    // Lag is chosen on arrival; a scenario may change it after launch.
+    const pendingItem = node.primary?.wal.pending.get(job.via.index)?.get(job.entry.lsn);
+    if (pendingItem) pendingItem.retryAt = Math.max(pendingItem.retryAt, sim.time + (node.lag || 0) + 1);
     const apply = () => {
       const { entry } = job;
       const table = node.store?.get(entry.table);
       if (table) {
-        const row = table.rows.get(entry.key);
-        if (entry.op === "delete") table.rows.delete(entry.key);
-        else if (!row || row.version < entry.version) table.rows.set(entry.key, { key: entry.key, version: entry.version, fields: entry.fields, at: sim.time });
-        touch(table, entry.key);
-        node.tableStats.applied.push(sim.time);
-        node.wal.applied = Math.max(node.wal.applied, entry.lsn);
-        node.wal.lsn = Math.max(node.wal.lsn, entry.lsn);
-        node.wal.recent = [...node.wal.recent.slice(-23), entry];
-        rowEvent(node, "apply", table, entry.key, { version: entry.version, lsn: entry.lsn });
+        // Buffer arrivals until the preceding LSN has applied. A late delete must
+        // never erase a newer recreation, and "applied" must not skip missing writes.
+        if (entry.lsn > node.wal.applied) node.wal.received.set(entry.lsn, entry);
+        while (node.wal.received.has(node.wal.applied + 1)) {
+          const next = node.wal.received.get(node.wal.applied + 1);
+          node.wal.received.delete(next.lsn);
+          const target = node.store.get(next.table);
+          if (next.op === "delete") target.rows.delete(next.key);
+          else target.rows.set(next.key, { key: next.key, version: next.version, fields: next.fields, at: sim.time });
+          target.versions.set(next.key, next.version);
+          touch(target, next.key);
+          node.tableStats.applied.push(sim.time);
+          node.wal.applied = next.lsn;
+          node.wal.lsn = next.lsn;
+          node.wal.recent = [...node.wal.recent.slice(-23), next];
+          rowEvent(node, "apply", target, next.key, { version: next.version, lsn: next.lsn });
+        }
+        // Acknowledge contiguous progress, including duplicates retried after downtime.
+        const pending = node.primary?.wal.pending.get(job.via.index);
+        if (pending) for (const lsn of pending.keys()) if (lsn <= node.wal.applied) pending.delete(lsn);
       }
       respond(job, true);
     };
@@ -458,7 +488,33 @@ function createTables(sim, records, { launch, respond, begin }) {
     else apply();
   }
 
-  return { recordOf, tableOp, acquireWrite, releaseWrite, commit, applyEntry };
+  function reset(node) {
+    node.locked?.clear();
+    // Stored rows and buffered WAL survive node failure in this simplified model.
+    for (const source of nodes.values()) for (const edge of source.repl) {
+      if (edge.to !== node.id) continue;
+      for (const item of source.wal?.pending.get(edge.index)?.values() || []) item.retryAt = -Infinity;
+    }
+  }
+
+  function retryReplication() {
+    for (const source of nodes.values()) {
+      if (!source.up || !source.wal) continue;
+      for (const edge of source.repl) {
+        const target = nodes.get(edge.to);
+        if (!target.up) continue;
+        // Bound retries by travel, service and configured lag; delivery is still
+        // subject to the normal transport, admission and node failure paths.
+        for (const item of source.wal.pending.get(edge.index)?.values() || []) {
+          if (sim.time < item.retryAt || target.wal.received.has(item.entry.lsn)) continue;
+          item.retryAt = sim.time + retryDelay(edge);
+          launch(edge, "replication", { msg: item.msg, entry: item.entry });
+        }
+      }
+    }
+  }
+
+  return { recordOf, tableOp, acquireWrite, releaseWrite, commit, applyEntry, reset, retryReplication };
 }
 
 
@@ -517,7 +573,7 @@ function createLogs(sim, { launch, newMsg }) {
   for (const log of logs.values()) for (const group of log.groups) rebalance(log, group, 0);
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
-  const readable = (log, p) => !log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]);
+  const readable = (log, p) => log.node.up && (!log.parts || (sim.time >= log.parts[p].electUntil && log.brokers[log.parts[p].leader]));
   const writable = (log, p) => readable(log, p) && (!log.parts || log.acks !== "all" || isrOf(log, log.parts[p]) >= log.minIsr);
 
   function setBroker(id, b, up) {
@@ -869,7 +925,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     if (op) return respond(job, commit(job, op));
     forward(job);
     job.forwarded = true;
-    if (job.waiting === 0) respond(job, !job.failed);
+    if (job.waiting === 0) advance(job);
   }
 
   const healthy = (node, router) => node.up || sim.time - node.downSince < (router.detect ?? router.ttl ?? DETECT[router.kind] ?? 0);
@@ -887,7 +943,7 @@ function createTransport(sim, { tables, logModel, decide }) {
         job.stages[job.stages.length - 1].push(call);
       }
       job.stage = 0;
-      issue(job, job.stages[0]);
+      issue(job, job.stages[0] || []);
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
@@ -1096,6 +1152,7 @@ function createTransport(sim, { tables, logModel, decide }) {
       if (job.call && !job.done && !job.call.done) job.call.packets.push(launch(job.call.edge, "error", { call: job.call, ms: 0 }));
       job.dead = true;
     }
+    tables.reset(node);
     node.jobs.clear();
     node.working = [];
     node.waiting = [];
@@ -1543,6 +1600,7 @@ function createSim(spec) {
         due.forEach((timer) => timer.run());
       }
     }
+    tables.retryReplication();
     transport.tickNodes(dt);
     transport.tickTimeouts();
     logModel.pull(dt);
@@ -1599,6 +1657,7 @@ return module7;
 
 const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"grid":[132,86],"positions":{"app":[0,0],"api":[1,0],"pg":[2,0]},"spec":{"nodes":[{"id":"app","kind":"client","emit":{"POST /orders":2},"partitions":0,"replicas":1,"label":"app"},{"id":"api","kind":"service","endpoints":{"POST /orders":{"calls":[{"to":"pg","op":"insert","table":"orders"}]},"PUT /orders":{"calls":[{"to":"pg","op":"upsert","table":"orders"}]}},"partitions":0,"replicas":1,"label":"api"},{"id":"pg","kind":"db","tables":{"orders":{"key":"orderId","show":6}},"partitions":0,"replicas":1,"label":"pg"}],"edges":[{"from":"app","to":"api","kind":"sync","sync":true,"len":85},{"from":"api","to":"pg","timeout":0.2,"retries":1,"backoff":0.05,"kind":"sync","sync":true,"len":84}],"sim":{"seed":12,"jitter":false},"scenario":{"length":48,"phases":[{"name":"insert","at":0},{"name":"ambiguous timeout","at":8},{"name":"upsert","at":22},{"name":"recovered","at":36}],"steps":[{"at":1,"inspect":"pg","say":"INSERT creates a row. Reusing an existing key is a conflict."},{"at":8,"set":{"pg":{"ms":400}},"say":"The write commits, but its reply exceeds the timeout. The retry reuses the same key and conflicts."},{"at":12,"follow":"POST /orders","say":"Follow a request: a timeout does not mean that its write was rolled back."},{"at":22,"follow":false,"inspect":"pg","set":{"app":{"emit":{"PUT /orders":2}}},"say":"UPSERT preserves one row per key. Repeated writes still create versions; the timeout remains."},{"at":36,"set":{"pg":{"ms":4}},"say":"Latency recovers. Upserts now succeed without retries; conflicts have stopped."}]},"records":{"orders":{"key":"orderId","keys":100,"fields":{"status":["new"]}}},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,85],[0,84]],"views":{"iso":{"edges":[[[115.6,103.1],[267.3,157.4]],[[363.7,191.8],[513.6,245.4]]],"step":[12.49584401199624,4.466452716243239],"flagStep":[0,0],"packet":{"top":"M6.6 -7.1L1.3 -2.9L-6.6 -5.8L-1.3 -9.9Z","sides":"M6.6 -7.1L1.3 -2.9L1.3 3.5L6.6 -0.7ZM1.3 -2.9L-6.6 -5.8L-6.6 0.7L1.3 3.5Z","outline":"M-6.6 -5.8L-1.3 -9.9L6.6 -7.1L6.6 -0.7L1.3 3.5L-6.6 0.7Z"}},"flat":{"edges":[[[103.1,106.5],[267,106.5]],[[371.1,106.5],[533,106.5]]],"step":[13.49508196721311,0],"flagStep":[0,0],"packet":null,"k":1.9278688524590164}},"raw":{"title":"Idempotent retries","fig":"Fig 10","caption":"Illustrative rates: 2 requests/s over 100 order keys. A 400 ms database write exceeds the 200 ms timeout: it commits, but the caller retries. INSERT then conflicts on the same key. Switching to UPSERT keeps one row per key; restoring latency lets callers succeed. This is idempotent row content, not exactly-once execution: each upsert still increments the version and WAL, and external side effects are not deduplicated.","sim":{"seed":12,"jitter":false},"records":{"orders":{"key":"orderId","keys":100,"fields":{"status":["new"]}}},"nodes":[{"id":"app","kind":"client","emit":{"POST /orders":2}},{"id":"api","kind":"service","endpoints":{"POST /orders":{"calls":[{"to":"pg","op":"insert","table":"orders"}]},"PUT /orders":{"calls":[{"to":"pg","op":"upsert","table":"orders"}]}}},{"id":"pg","kind":"db","tables":{"orders":{"key":"orderId","show":6}}}],"edges":[["app","api"],{"from":"api","to":"pg","timeout":0.2,"retries":1,"backoff":0.05}],"scenario":{"length":48,"phases":[{"name":"insert","at":0},{"name":"ambiguous timeout","at":8},{"name":"upsert","at":22},{"name":"recovered","at":36}],"steps":[{"at":1,"inspect":"pg","say":"INSERT creates a row. Reusing an existing key is a conflict."},{"at":8,"set":{"pg":{"ms":400}},"say":"The write commits, but its reply exceeds the timeout. The retry reuses the same key and conflicts."},{"at":12,"follow":"POST /orders","say":"Follow a request: a timeout does not mean that its write was rolled back."},{"at":22,"follow":false,"inspect":"pg","set":{"app":{"emit":{"PUT /orders":2}}},"say":"UPSERT preserves one row per key. Repeated writes still create versions; the timeout remains."},{"at":36,"set":{"pg":{"ms":4}},"say":"Latency recovers. Upserts now succeed without retries; conflicts have stopped."}]}}};
 const k = (() => {
+
 // The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
 // lines laid on faces, SVG string emitters, and the framed card a figure sits in.
 // World units are about one pixel of the real thing; the camera is fitted to the scene.
@@ -1984,10 +2043,225 @@ const KIT_CSS = `
 
 return { cameraOf, iso, depthOf, fitProjection, pointsAt, pathOf, convexHull, insetPlan, roundedPlan, circleRing, corners, boxCorners, extrude, slabOf, cylinder, haloOf, onTop, lineOnTop, segment, planOutline, ring, sideArc, sideSeam, radialTicks, topMatrix, escape, solidSvg, lineSvg, dotsSvg, faceTextSvg, figureSvg, plateHtml, pageHtml, KIT_CSS };
 })();
+const PRODUCTS = (() => {
+
+// Product components share simulation behavior with the generic node vocabulary.
+// Keep product identity in the drawing; do not duplicate cache/table engines.
+const COMPONENTS = {
+  redis: { base: "cache", h: 11 },
+  elasticache: { base: "cache", h: 15 },
+  dynamodb: { base: "db", h: 27 },
+};
+const baseKind = kind => COMPONENTS[kind]?.base || kind;
+
+// Drawing adapters use the existing kits, so theme, camera, LEDs and morphing stay shared.
+function isoComponent(node, c, k) {
+  const { plan } = node;
+  const out = [];
+  if (node.kind === "dynamodb") {
+    out.push(c.S(k.slabOf(plan, 0, node.h, c.P, 2, 0.6), { tone: "mid" }));
+    const front = plan.y + plan.d;
+    for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++) {
+      const x = plan.x + 5 + col * (plan.w - 10) / 3;
+      out.push(c.L(c.faceY(x, x + (plan.w - 10) / 3 - 2, front, 5 + row * 9, 11 + row * 9), { tone: "lo" }));
+    }
+    out.push(c.L(k.planOutline(k.insetPlan(plan, 4), node.h, c.P, 2), { tone: "lo" }));
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${k.escape(node.id)}">${k.faceTextSvg(k.topMatrix([node.cx, node.cy + 3], node.h, c.P, "x"), "0 rows", { size: 5, tone: "mid", anchor: "middle" })}</g>`);
+    out.push(c.led(`${node.id}:0`, [plan.x + plan.w - 4, front, node.h - 3], 1));
+  } else {
+    const managed = node.kind === "elasticache";
+    if (managed) {
+      out.push(c.S(k.slabOf(plan, 0, 4, c.P, 3, 0.6), { tone: "mid" }));
+      out.push(c.L(k.planOutline(k.insetPlan(plan, 2), 4, c.P, 3), { tone: "lo" }));
+    }
+    const tile = managed ? k.insetPlan(plan, 6) : plan;
+    const floor = managed ? 4 : 0;
+    for (let level = 0; level < 3; level++) out.push(c.S(k.slabOf(tile, floor + level * 4, 3, c.P, 3, 0.5), { tone: "mid", crease: "lo" }));
+    out.push(c.L(k.planOutline(k.insetPlan(tile, 4), floor + 11, c.P, 2), { tone: "lo" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, managed ? 2 : 1.5], 1));
+  }
+  return out.join("");
+}
+
+function flatComponent(node, f, k) {
+  const b = f.box(node.plan);
+  const out = [];
+  if (node.kind === "dynamodb") {
+    out.push(f.rect(b, "tp-f", 2));
+    const gap = b.w * 0.08;
+    const cellW = (b.w - gap * 4) / 3;
+    const cellH = b.h * 0.19;
+    for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++)
+      out.push(f.rect({ x: b.x + gap + col * (cellW + gap), y: b.y + b.h * 0.12 + row * (cellH + b.h * 0.07), w: cellW, h: cellH }, "tp-f tp-f-chip", 1));
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${k.escape(node.id)}">${f.text(b.x + b.w / 2, b.y + b.h * 0.81, "0 rows", 6, "tp-ft tp-ft-dim")}</g>`);
+  } else {
+    const managed = node.kind === "elasticache";
+    if (managed) out.push(f.rect(b, "tp-f", 4));
+    const pad = managed ? b.w * 0.12 : 0;
+    const inner = { x: b.x + pad, y: b.y + pad, w: b.w - pad * 2, h: b.h - pad * 2 };
+    for (let level = 2; level >= 0; level--) out.push(f.rect({ x: inner.x, y: inner.y + level * inner.h * 0.24, w: inner.w, h: inner.h * 0.52 }, "tp-f", 3));
+  }
+  out.push(f.led(`${node.id}:0`, b.x + b.w - 5, b.y + b.h - 4, 1.3));
+  return out.join("");
+}
+
+return { COMPONENTS, baseKind, isoComponent, flatComponent };
+})();
+const VALIDATION = (() => {
+
+// Validate the public authoring contract before layout, browser packaging or simulation.
+const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
+const fail = (path, message) => { throw new Error(`spec ${path}: ${message}`); };
+const object = (value, path) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail(path, "expected an object");
+};
+const name = (value, path) => {
+  if (typeof value !== "string" || !value.length) fail(path, "expected a nonempty string");
+};
+const number = (value, path, min = 0, max = Infinity, integer = false) => {
+  if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) fail(path, `expected ${integer ? "an integer" : "a finite number"} in [${min}, ${max}]`);
+};
+function rate(value, path) {
+  if (typeof value === "number") return number(value, path);
+  if (!Array.isArray(value) || !value.length) fail(path, "expected a rate or nonempty time/rate curve");
+  let last = -1;
+  for (const point of value) {
+    if (!Array.isArray(point) || point.length !== 2) fail(path, "expected [seconds, rate]");
+    number(point[0], path); number(point[1], path);
+    if (point[0] <= last) fail(path, "curve times must increase");
+    last = point[0];
+  }
+}
+function emit(value, path) {
+  if (typeof value === "number" || Array.isArray(value)) return rate(value, path);
+  object(value, path);
+  if (Object.hasOwn(value, "every")) {
+    number(value.every, path + ".every", Number.MIN_VALUE);
+    number(value.burst, path + ".burst", 1, Infinity, true);
+  } else for (const [route, mix] of Object.entries(value)) { name(route, path); rate(mix, path + "." + route); }
+}
+function jsonValue(value, path, seen = new Set()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+  if (typeof value === "number") { if (!Number.isFinite(value)) fail(path, "field samples must be finite"); return; }
+  if (typeof value !== "object" || seen.has(value)) fail(path, "field samples must be acyclic JSON values");
+  seen.add(value);
+  for (const child of Object.values(value)) jsonValue(child, path, seen);
+  seen.delete(value);
+}
+
+function validateSpec(spec, features = {}, kinds) {
+  object(spec, "");
+  if (!Array.isArray(spec.nodes) || !spec.nodes.length) fail("nodes", "expected a nonempty array");
+  const nodes = new Map();
+  for (const node of spec.nodes) {
+    object(node, "node"); name(node.id, "node.id");
+    if (nodes.has(node.id)) fail(node.id, "duplicate node id");
+    if (kinds && !Object.hasOwn(kinds, node.kind)) fail(node.id + ".kind", "unknown kind");
+    nodes.set(node.id, node);
+    for (const key of ["ms", "lag", "capacity", "queue", "rate", "detect", "ttl", "burst", "sidecarMs"])
+      if (node[key] != null) number(node[key], node.id + "." + key);
+    for (const key of ["partitions", "brokers", "replicas", "rf", "minIsr"])
+      if (node[key] != null) number(node[key], node.id + "." + key, 1, Infinity, true);
+    for (const key of ["hit", "errorRate"]) if (node[key] != null) number(node[key], node.id + "." + key, 0, 1);
+    if (node.emit != null) emit(node.emit, node.id + ".emit");
+    if (node.tables) {
+      object(node.tables, node.id + ".tables");
+      for (const [table, def] of Object.entries(node.tables)) {
+        name(table, node.id + ".tables"); object(def, table);
+        if (def.key != null) name(def.key, table + ".key");
+        if (def.show != null) number(def.show, table + ".show", 1, 16, true);
+      }
+    }
+  }
+  if (spec.edges != null && !Array.isArray(spec.edges)) fail("edges", "expected an array");
+  const edges = (spec.edges || []).map(e => Array.isArray(e) ? {from: e[0], to: e[1]} : e);
+  for (const edge of edges) {
+    object(edge, "edge");
+    if (!nodes.has(edge.from) || !nodes.has(edge.to)) fail("edge", `unknown endpoint ${edge.from} → ${edge.to}`);
+    for (const key of ["ms", "timeout", "backoff", "rate"]) if (edge[key] != null) number(edge[key], "edge." + key);
+    if (edge.p != null) number(edge.p, "edge.p"); // random routing accepts weights > 1
+    if (edge.retries != null) number(edge.retries, "edge.retries", 0, Infinity, true);
+  }
+  const parents = new Map();
+  for (const edge of edges.filter(e => e.kind === "replication" && ["db", "dynamodb"].includes(nodes.get(e.from).kind) && ["db", "dynamodb"].includes(nodes.get(e.to).kind))) {
+    if (parents.has(edge.to)) fail(edge.to, "a table replica must have one primary");
+    parents.set(edge.to, edge.from);
+  }
+  for (const [child, parent] of parents) {
+    if (parents.has(parent)) fail(child, "cascading table replication is unsupported; use direct replicas");
+    const declared = nodes.get(child).tables;
+    if (declared && JSON.stringify(Object.keys(declared).sort()) !== JSON.stringify(Object.keys(nodes.get(parent).tables || {}).sort()))
+      fail(child, "replicas must contain the same tables as their primary");
+  }
+  for (const [table, def] of Object.entries(spec.records || {})) {
+    object(def, "records." + table);
+    if (def.key != null) name(def.key, table + ".key");
+    if (def.keys != null) number(def.keys, table + ".keys", 1, Infinity, true);
+    if (def.start != null) number(def.start, table + ".start", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true);
+    if (def.skew != null) number(def.skew, table + ".skew", 0, 1);
+    object(def.fields || {}, table + ".fields");
+    for (const [field, samples] of Object.entries(def.fields || {})) {
+      if (!Array.isArray(samples) || !samples.length) fail(table + "." + field, "expected a nonempty array of field samples");
+      if (field === (def.key || "id")) fail(table + "." + field, "key is generated separately; do not duplicate it in fields");
+      jsonValue(samples, table + "." + field);
+    }
+  }
+  for (const node of nodes.values()) for (const [route, endpoint] of Object.entries(features.endpoints === false ? {} : node.endpoints || {})) {
+    object(endpoint, node.id + "." + route);
+    if (endpoint.ms != null) number(endpoint.ms, route + ".ms");
+    if (endpoint.calls == null) continue;
+    if (!Array.isArray(endpoint.calls)) fail(route + ".calls", "expected an array");
+    for (const call of endpoint.calls) {
+      object(call, route + ".call");
+      if (!edges.some(e => e.from === node.id && e.to === call.to && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${call.to}`);
+      if (call.p != null) number(call.p, route + ".p", 0, 1);
+      if (features.tables !== false && (call.op != null || call.table != null)) {
+        if (!OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
+        const target = nodes.get(call.to);
+        const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
+        if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${call.to}`);
+        if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+      }
+    }
+  }
+  for (const key of ["speed", "window", "length", "per"]) if (spec.sim?.[key] != null) number(spec.sim[key], "sim." + key, Number.MIN_VALUE);
+  if (spec.scenario) {
+    const phases = new Set((spec.scenario.phases || []).map(p => p.name));
+    const targetExists = id => nodes.has(id) || edges.some(e => id === e.from + ">" + e.to) || (() => {
+      const match = /^(.*):b(\d+)$/.exec(id);
+      return match && +match[2] < (nodes.get(match[1])?.brokers || 0);
+    })();
+    for (const phase of spec.scenario.phases || []) number(phase.at, "phase.at");
+    for (const step of spec.scenario.steps || []) {
+      if (step.at == null && !phases.has(step.phase)) fail("step", "expected at or a known phase");
+      for (const id of [...[].concat(step.fail || []), ...[].concat(step.recover || []), ...Object.keys(step.set || {})])
+        if (!targetExists(id)) fail("scenario", `unknown target ${id}`);
+      for (const flag of [step.flag, step.kill]) if (flag && !Object.hasOwn(spec.flags || {}, flag)) fail("scenario", `unknown flag ${flag}`);
+      if (step.rollout != null) number(step.rollout, "step.rollout", 0, 1);
+      for (const [id, values] of Object.entries(step.set || {})) {
+        object(values, "step.set." + id);
+        for (const [key, value] of Object.entries(values)) {
+          if (key === "emit") emit(value, id + ".emit");
+          if (["ms", "lag", "capacity", "burst", "rate", "queue", "detect", "ttl", "sidecarMs", "timeout", "backoff", "retries"].includes(key)) number(value, id + "." + key);
+          if (key === "errorRate") number(value, id + "." + key, 0, 1);
+        }
+      }
+      if (step.at != null) number(step.at, "step.at");
+      if (step.after != null) number(step.after, "step.after");
+    }
+    if (spec.scenario.length != null) number(spec.scenario.length, "scenario.length", Number.MIN_VALUE);
+  }
+}
+
+return { validateSpec };
+})();
 const TOPO = (() => {
+const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION;
 // Topology: turn a declarative system spec into an interactive figure, drawn either
 // isometric (solids on a floor, built with kit/iso.mjs) or flat (2D glyphs on the same layout).
 // One world layout feeds both views, so edges, packets and ports line up in each.
+
+
 
 
 
@@ -2012,6 +2286,8 @@ const KINDS = {
   scheduler: { w: 40, d: 34, h: 12 },
   flags: { w: 48, d: 34, h: 8 },
 };
+for (const [kind, component] of Object.entries(COMPONENTS)) KINDS[kind] = { ...KINDS[component.base], h: component.h };
+
 const SLOTS = 12;
 const PITCH = 7;
 const LANE = 11;
@@ -2043,7 +2319,7 @@ function prepare(spec) {
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
-  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && byId.get(edge.to).kind === "db") byId.get(edge.to).hasTables = true;
+  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && baseKind(byId.get(edge.to).kind) === "db") byId.get(edge.to).hasTables = true;
   for (const node of nodes) {
     if (!isLog(node)) continue;
     const names = [];
@@ -2876,7 +3152,10 @@ function renderView(model, view, width = 640, camera, options) {
   const order = [...model.nodes].sort((a, b) => k.depthOf([a.cx, a.cy, 0], P) - k.depthOf([b.cx, b.cy, 0], P));
   for (const node of order) {
     const halo = iso ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
-    const body = iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
+    const component = COMPONENTS[node.kind];
+    const body = component
+      ? (iso ? isoComponent(node, iso, k) : flatComponent(node, flat, k))
+      : (iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat));
     const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue ? queueCellsOf(node, iso, flat) : "");
     out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}${extra}</g>`);
   }
@@ -2967,6 +3246,7 @@ function describe(model) {
 // out and route the spec, then add hops if they're on.
 function modelOf(spec, featureLayers = []) {
   const features = resolveFeatures(spec.features, ...featureLayers);
+  validateSpec(spec, features, KINDS);
   const model = prepare(stripFeatures(spec, features));
   model.features = features;
   if (features.hops) applyHops(model);
@@ -2979,7 +3259,7 @@ const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key
 // What the sim needs: everything in the spec except geometry, plus each edge's length.
 function simSpec(model) {
   return {
-    nodes: model.nodes.map(strip),
+    nodes: model.nodes.map(node => ({ ...strip(node), ...(COMPONENTS[node.kind] ? { kind: baseKind(node.kind), component: node.kind } : {}) })),
     edges: model.edges.map((edge) => ({ ...strip(edge), len: edge.len })),
     sim: model.sim,
     scenario: model.scenario,
@@ -3746,7 +4026,7 @@ const inspector = (() => {
           if (t.stale) bits.push(`<em>${rate(t.stale)} stale reads</em>`);
           if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
           if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
-          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${value}`).join(" · ");
+          const field = (r) => Object.entries(r.fields).map(([name, value]) => `${name}: ${typeof value === "object" ? JSON.stringify(value) : value}`).join(" · ");
           const rows = t.rows.map((r) => `<button type="button" class="tp-row" data-table="${esc(t.name)}" data-key="${esc(r.key)}" aria-label="Inspect ${esc(t.name)} ${esc(t.key)} ${esc(r.key)}"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></button>`).join("");
           // WAL: the newest entries; amber ones haven't reached every replica yet.
           const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
@@ -3767,7 +4047,7 @@ const inspector = (() => {
     if (!open) return;
     const node = sim.nodes.get(open);
     const spec = specOf.get(open);
-    write("kind", $(".tp-ins-kind"), esc(spec.kind));
+    write("kind", $(".tp-ins-kind"), esc(spec.component || spec.kind));
     write("name", $(".tp-ins-name"), esc(spec.label || open));
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
@@ -4088,7 +4368,7 @@ const tracer = (() => {
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
       if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to inspect · 1–${Math.min(9, story.phases.length)} jump` : hintText;
     }
-    const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
+    const text = mode === "free" ? "You've taken over: inspect a node, then use Fail/Restore or F." : step ? step.say : "";
     if (text !== shown.say) {
       shown.say = text;
       line.textContent = text;

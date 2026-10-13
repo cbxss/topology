@@ -111,7 +111,7 @@ Open every PNG and ask:
 - Kafka: are bright cells and cursors where the lag says they should be, for each group?
 - Light theme: do packets and cursors stay legible on paper?
 - Phone (390 wide): does it still read, with no sideways scroll?
-- Reduced motion (`--reduced`): no packets move, and the readout still updates.
+- Reduced motion (`--reduced`): packets and morph animation are suppressed. A scenario opens paused at time zero until Play is pressed; verify that initial state, then explicitly play or seek when inspecting model metrics.
 - Story: does each phase show what its narration says, at the moment it says it? Does it loop without a jump?
 - Breakers, queue cells, edge labels and flag knobs: do they change when the readout says they should?
 - Console: clean.
@@ -119,3 +119,15 @@ Open every PNG and ask:
 For engine refactors, also run `node scripts/verify-sim-browser.mjs`: it exercises generated HTML, compares browser/Node state with the frozen S4 baseline, and checks inspector, saved-record, follow, failure and view controls. See `engine.md` for the comparison's limits. If `/tmp` is quota-limited, set `TMPDIR` to a directory with room for Chrome profiles.
 
 For record inspection, open a database, click a row, check all named fields against the saved version, then select Follow writes. Confirm that the selected key stays pinned even when it leaves the recent-row list, and that the primary and replica show the same fields once replication applies. Check this on a phone too.
+
+
+### Static SVGs
+
+`build.mjs diagram.spec.mjs --svg --light` writes `diagram-light.html`,
+`diagram-light-iso.svg` and `diagram-light-flat.svg`. With `--out slides.html`,
+the SVGs are named `slides-iso.svg` and `slides-flat.svg`.
+Open the delivered SVG directly, or use a local HTML wrapper containing
+`<img src="diagram-light-flat.svg" alt="System architecture">` to inspect it at
+the intended display size. The generated HTML can also run the line-end check.
+For a structural diagram with no emit, idle-edge and no-traffic warnings are
+expected; layout warnings still need attention.

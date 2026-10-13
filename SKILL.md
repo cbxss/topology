@@ -4,6 +4,7 @@ description: Create or edit distributed-system architecture diagrams, request an
 license: MIT
 metadata:
   opencode/slash: "true"
+  version: "1.0.0"
 ---
 
 # Topology
@@ -22,6 +23,7 @@ Start with `references/spec.md` and the closest example. The minimal endpoint/ta
 | Regional failover | `examples/failover/` |
 | Broker elections and min ISR | `examples/kafka-brokers/` |
 | Flag rollout and rollback | `examples/canary/` |
+| Redis, ElastiCache and DynamoDB components | `examples/data-stores/` |
 | Route mixes, rows and WAL inspection | `examples/orders-api/` |
 | Save then read back from a replica | `examples/read-your-writes/` |
 | Committed writes retried after a timeout | `examples/idempotent-retries/` |
@@ -38,7 +40,18 @@ Build one with `node scripts/build.mjs examples/checkout/checkout.spec.mjs` (add
 - **Tune it to the edge.** Set rates so the interesting failure is visible: consumers with a little headroom, a gateway cap just under the offered load. `--check` shows you the steady state before you look at a pixel.
 - **One story per figure.** About 6–14 nodes. A larger system becomes several figures with the same scale and vocabulary (`fig: "Fig 2"`), each with its own question.
 
-## Workflow
+## Static figures
+
+For a slide or static diagram, omit traffic and scenarios unless requested. Run
+`node scripts/build.mjs my.spec.mjs --svg --light`: this emits
+`my-light.html`, `my-light-iso.svg` and `my-light-flat.svg` next to the spec.
+Deliver the requested SVG; HTML is a build byproduct. Check layout with
+`--check`; idle edges and missing emit are expected for a structural diagram.
+Inspect the actual SVG in a browser or an HTML `<img>` wrapper at the intended
+slide size. Failure driving, phone tests and extra themes are unnecessary unless
+those are part of the requested deliverable.
+
+## Interactive workflow
 
 1. **Name the question and collect the numbers.** Write down: the sources and their rates, each hop, what fans out, what is sync (request/response) and what is async (logs, queues), partitions, consumer groups and their throughput, caches and hit ratios, replicas, capacities.
 2. **Write the spec.** A `.spec.mjs` (or `.json`) with a default export; `references/spec.md` has every field and exactly what the simulation does with it. For the common shapes (a region, a Kafka topic with consumer groups, cache-aside, replicas, a job queue, a canary) use the patterns in `kit/patterns.mjs` and join them with `compose()` and `link()`; `examples/catalog/catalog.html` shows every node kind and pattern with the spec that makes it. Start without coordinates and let auto-layout rank it left to right; add `at: [col, row]` when you need control (zones, a particular reading order), or drag nodes on a `serve.mjs` `?edit` page.

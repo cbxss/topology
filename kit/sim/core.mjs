@@ -128,6 +128,7 @@ function createSim(spec) {
         due.forEach((timer) => timer.run());
       }
     }
+    tables.retryReplication();
     transport.tickNodes(dt);
     transport.tickTimeouts();
     logModel.pull(dt);

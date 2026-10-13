@@ -265,3 +265,54 @@ A disabled feature removes its UI and owned behavior; shared inlined code can re
 - **`--check`** warns about overlapping nodes, edges passing under a node, and iso labels hidden behind a nearer node.
 
 With `endpoints` disabled, route mixes become total rates and endpoint declarations are ignored. With `tables` disabled, stores and table operations are removed. With `trace` disabled, the following panel is omitted. Feature removal strips owned behavior; shared simulation code can remain in the bundle.
+
+
+## Product components
+
+Use `kind: "redis"`, `kind: "elasticache"`, or `kind: "dynamodb"` anywhere a
+node is accepted. Both views use distinct silhouettes: a low tile stack for Redis, an enclosed stack for ElastiCache, and a rectangular cell cabinet for DynamoDB.
+Redis and ElastiCache reuse `cache` behavior and its default service time;
+DynamoDB reuses `db` behavior, including `tables`, saved fields and write following.
+Rates, service times and capacities are illustrative knobs, not vendor defaults.
+
+```js
+{ id: "sessions", kind: "redis", label: "Redis sessions" }
+{ id: "cache", kind: "elasticache", label: "ElastiCache" }
+{ id: "items", kind: "dynamodb", tables: { items: { key: "itemId" } } }
+```
+
+`cacheAside("api", { db: "items", kind: "elasticache", hit: 0.8 })` composes the
+same probabilistic cache-aside pattern with the selected component. The default
+`kind` remains `cache`; `redis` is also accepted.
+See [data-stores.spec.mjs](../examples/data-stores/data-stores.spec.mjs) for a runnable
+composition with real simulated writes and record inspection.
+
+These are product-labelled components over the existing model: Redis commands,
+TTL/eviction, ElastiCache provisioning/failover, and DynamoDB capacity units,
+conditional expressions, consistency options and global tables are not modeled.
+The record query display is illustrative; it does not imply DynamoDB supports SQL.
+
+## Validation and recovery limits
+
+Build and `--check` reject unknown kinds/operations, missing call edges or tables,
+invalid field-sample arrays, duplicate IDs, invalid numeric rates and unknown
+scenario targets. Runtime scenario errors also exit nonzero. Workload warnings
+such as intended overload or idle edges remain nonfatal; explain those in the
+caption. Phase summaries report dropped traffic separately from client-visible
+failures, which matters for asynchronous publishes.
+
+Table row versions remain monotonic across delete/recreate. Direct replicas
+buffer out-of-order WAL and advance their applied position contiguously.
+Unacknowledged entries are retained separately from the bounded inspection
+history and retried through the simulated transport after failures. Rows,
+buffered entries and pending WAL survive a node outage; they are still only
+in-memory simulation state, not disk durability. Pending replication consumes
+memory in proportion to unacknowledged writes during an outage. Write to the
+primary; cascading table replication and independently writable replicas are
+unsupported.
+
+Queues and Kafka nodes stop serving consumers while down. Existing backlog
+remains in memory; publishes arriving during downtime are dropped/refused.
+Consumers resume on recovery. Consumption advances offsets when dispatched,
+not after a durable consumer acknowledgement; crash redelivery and durable
+broker storage are outside this model.

@@ -67,7 +67,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   let script = bundleSim() + `\nconst DATA = ${JSON.stringify(data)};\n`;
   // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
   // each wrapped in its own scope so none of their names meet the live code's.
-  if (features.morph) script += scoped("iso.mjs", "k") + scoped("topo.mjs", "TOPO");
+  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("validate.mjs", "VALIDATION") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION;");
   script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
   if (features.tables) script += "\n" + readFileSync(join(KIT, "topo-records.js"), "utf8");
   if (features.trace) script += "\n" + readFileSync(join(KIT, "topo-trace.js"), "utf8");
@@ -77,10 +77,10 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   return { html, rendered, model };
 }
 
-function scoped(file, name) {
+function scoped(file, name, bindings = "") {
   const source = readFileSync(join(KIT, file), "utf8").replace(/^import .*$/gm, "");
   const names = [...source.matchAll(/^export (?:async )?(?:function|const|let|class) (\w+)/gm)].map((m) => m[1]);
-  return `const ${name} = (() => {\n${source.replace(/^export /gm, "")}\nreturn { ${names.join(", ")} };\n})();\n`;
+  return `const ${name} = (() => {\n${bindings}\n${source.replace(/^export /gm, "")}\nreturn { ${names.join(", ")} };\n})();\n`;
 }
 
 export function svgOf(rendered, view, theme) {
@@ -142,7 +142,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
       const t = i / 60;
       if (i % 15 === 0) {
         const lat = sim.latencyOf();
-        samples.push({ t, in: sim.totalIn(), p50: lat.count ? lat.p50 : null, p99: lat.count ? lat.p99 : null, failing: lat.failed / 3, ...tableRates(), lag: totalLag() });
+        samples.push({ t, in: sim.totalIn(), p50: lat.count ? lat.p50 : null, p99: lat.count ? lat.p99 : null, failing: lat.failed / 3, dropped: [...sim.nodes.values()].reduce((sum, node) => sum + node.dropRate, 0), ...tableRates(), lag: totalLag() });
       }
       while (next < marks.length && t >= marks[next].at) {
         const mark = marks[next++];
@@ -155,7 +155,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
       }
     }
   } catch (error) {
-    warnings.push(`scenario: ${error.message}`);
+    throw new Error(`simulation at ${sim.time.toFixed(2)}s: ${error.message}`, { cause: error });
   }
   if (story) reportStory(story, samples, lines, per, sim.logs.size > 0, [...sim.nodes.values()].some((node) => node.store), log, warnings);
   progress.forEach((line) => log(line));
@@ -252,7 +252,7 @@ function reportStory(story, samples, lines, per, hasLogs, hasTables, log, warnin
   const ms = (n) => (n == null ? "—" : formatMs(n));
   for (const phase of phases) {
     const window = within(Math.max(phase.at, phase.end - 3), phase.end);
-    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean(window, "in"), per)} in · p50 ${ms(mean(window, "p50"))} · p99 ${ms(mean(window, "p99"))}${hasLogs ? ` · lag ${formatCount(mean(window, "lag"), per)}` : ""} · ${formatRate(mean(window, "failing"), per)} failing${hasTables ? ` · ${formatRate(mean(window, "stale"), per)} stale reads · ${formatRate(mean(window, "conflicts"), per)} conflicts · ${formatRate(mean(window, "lost"), per)} lost updates` : ""}`);
+    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean(window, "in"), per)} in · p50 ${ms(mean(window, "p50"))} · p99 ${ms(mean(window, "p99"))}${hasLogs ? ` · lag ${formatCount(mean(window, "lag"), per)}` : ""} · ${formatRate(mean(window, "failing"), per)} failing · ${formatRate(mean(window, "dropped"), per)} dropped${hasTables ? ` · ${formatRate(mean(window, "stale"), per)} stale reads · ${formatRate(mean(window, "conflicts"), per)} conflicts · ${formatRate(mean(window, "lost"), per)} lost updates` : ""}`);
     for (const line of lines) if (line.at >= phase.at - 0.2 && line.at < phase.end - 0.2) log(line.text);
   }
   // Compare the story's last second with the first phase's settled state.

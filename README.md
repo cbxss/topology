@@ -112,6 +112,7 @@ MIT. See [LICENSE](LICENSE).
 
 ### Endpoint and data stories
 
+- [Reusable data stores](examples/data-stores/data-stores.spec.mjs): Redis, ElastiCache and DynamoDB components with saved-field inspection.
 - [Orders API](examples/orders-api/orders-api.spec.mjs): route mixes, synthetic records and table inspection.
 - [Read your writes](examples/read-your-writes/read-your-writes.spec.mjs): replica lag and stale reads.
 - [Idempotent retries](examples/idempotent-retries/idempotent-retries.spec.mjs): committed writes, timeouts, conflicts and upserts.
