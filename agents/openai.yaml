@@ -1,0 +1,3 @@
+interface:
+  display_name: "Topology"
+  short_description: "Draw a distributed system as a live, simulated isometric or 2D figure"

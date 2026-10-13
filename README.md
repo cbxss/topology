@@ -30,6 +30,21 @@ Install as a skill by copying or symlinking this folder to `~/.claude/skills/top
 /topology show our checkout path: CloudFront → ALB → 3 api pods → Redis (85% hit) → Aurora with a reader, and the outbox to Kafka
 ```
 
+<details>
+<summary><b>More prompts</b>, from the skill's <a href="evals/evals.json">evals</a></summary>
+
+- "I'm writing a blog post about why our Kafka consumers fall behind. Checkout publishes to a 6-partition topic at ~1,200 msgs/s; fulfillment has 3 consumers at ~450/s each, analytics 1 at ~1,500/s. Show what happens to fulfillment's lag when one consumer dies."
+- "can you make a diagram of our checkout request path for the design review? browser → cloudfront → ALB → checkout-api (3 pods) → redis (~85% hit), on a miss aurora with one reader, plus stripe (~300 ms). make it something people can poke at"
+- "Make a figure for our incident write-up showing how retries turned a slow inventory service into a full outage, and how adding a circuit breaker fixed it." (with the timeout, retries, capacity and slowdown)
+- "We run active-active in two regions behind Route 53 (TTL 60s)… I need a 2D diagram for the runbook that shows what a regional failover looks like."
+- "Show how we roll out a new checkout behind a feature flag: 5% → 25% → 50%, v2 starting to throw errors at 50%, and us hitting the kill switch."
+- "Here's our docker-compose… turn this into one of those animated system figures. I don't have real traffic numbers."
+- "just need a static svg of a simple 3-tier app for a slide"
+- "My team doesn't get why losing ONE Kafka broker is fine but losing TWO stops all writes (RF 3, min ISR 2, acks=all). Can you make something that shows it?"
+
+Each comes with what a good answer contains, for running with the skill-creator.
+</details>
+
 ## A spec
 
 ```js
@@ -82,6 +97,9 @@ kit/topo-story.js        the scenario player; kit/topo-edit.js the drag editor; 
 scripts/serve.mjs        dev server: rebuild per request, SSE reload, ?edit
 examples/                order-events, checkout, retry-storm, failover, kafka-brokers, canary
 tests/                   node --test tests/*.test.mjs
+evals/evals.json         test prompts and what a good answer contains
+agents/openai.yaml       display name and short description for Codex
+.github/workflows/ci.yml tests, --check on every example, rebuild, committed pages unchanged
 ```
 
 ## License
