@@ -70,7 +70,7 @@ export function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -1006,6 +1006,8 @@ export function simSpec(model) {
     scenario: model.scenario,
     flags: model.flags,
     records: model.records,
+    ...(model.traffic ? { traffic: model.traffic } : {}),
+    ...(model.policies ? { policies: model.policies } : {}),
     features: model.features,
   };
 }

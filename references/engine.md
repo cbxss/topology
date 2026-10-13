@@ -67,3 +67,12 @@ the state changes; the new hashes alone do not establish correctness.
 CI runs both Node tests and the generated-page Chrome verifier, checks every
 example, rebuilds both themes and catalogs, and rejects generated-file drift.
 Release tags must point to a commit whose complete CI run passed.
+
+Opt-in routing lives in `sim/routing.mjs` (pure predicates and destination choice)
+and `sim/context.mjs` (immutable request/envelope data). Transport decides when
+to route; logs retain envelopes until all groups dispatch; reporting projects
+bounded decision/rate histories. `routing-validation.mjs` owns the public schema.
+`topo-traffic.js` and `traffic.css` only read the model. Legacy specs allocate no
+context/envelope histories and retain their RNG order. The builder bundles the
+new ESM modules using the same scoped module manifest; do not concatenate exports
+ad hoc or change the frozen release fixtures to accommodate new behavior.

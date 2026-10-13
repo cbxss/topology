@@ -11,6 +11,7 @@ const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: []
 let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
 let routeFilter = null;
+let trafficDisplay = null;
 // A selected saved record: keep its request/replication packets visible.
 let recordFilter = null;
 let paused = false;
@@ -52,6 +53,10 @@ function packetEl(v) {
     g.innerHTML = `<path class="pk-trail"/><path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
   } else {
     g.innerHTML = `<path class="pk-trail"/><circle r="1.9"/>`;
+  }
+  if (DATA.traffic) {
+    const symbol = document.createElementNS(NS, 'path');
+    symbol.setAttribute('class', 'pk-symbol'); g.append(symbol);
   }
   g.style.display = "none";
   v.layer.appendChild(g);
@@ -98,6 +103,9 @@ function drawPackets() {
     if (slot.kind !== packet.kind) {
       slot.g.dataset.kind = packet.kind;
       slot.kind = packet.kind;
+      if (DATA.traffic) slot.g.querySelector('.pk-symbol').setAttribute('d',
+        packet.kind === 'record' ? 'M-2-2H2V2H-2Z' : packet.kind === 'replication' ? 'M0-3L3 0 0 3-3 0Z' :
+        packet.kind === 'retry' ? 'M3 0A3 3 0 1 1-3 0A3 3 0 1 1 3 0ZM1 0A1 1 0 1 0-1 0A1 1 0 1 0 1 0Z' : ['error','drop'].includes(packet.kind) ? 'M-2-2L2 2M2-2L-2 2' : 'M2 0A2 2 0 1 1-2 0A2 2 0 1 1 2 0Z');
     }
     const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
     const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
@@ -114,7 +122,9 @@ function drawPackets() {
     const traced = sim.tracing?.msgId;
     const record = recordFilter && ((packet.msg || packet.call?.job.msg)?.records?.[recordFilter.table]);
     const matchesRecord = recordFilter && (record?.key === recordFilter.key || (packet.entry?.table === recordFilter.table && packet.entry.key === recordFilter.key));
-    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    trafficDisplay?.paint(slot, packet);
+    const classDim = trafficDisplay && !trafficDisplay.matches(packet) ? 0.12 : 1;
+    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }

@@ -20,6 +20,12 @@ if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
   --check [seconds]   run the model headless for that long (default 30) and print what the readout
                       will say, per node, plus warnings: growing lag, drops, idle edges, layout.
                       Writes nothing.
+  --sources           resolve the spec's source refs (sources, refs, notes) and report what's
+                      missing, mismatched or changed since the pinned rev. Writes nothing.
+    --json            the report as JSON
+    --fetch           shallow-fetch remote repos into ~/.cache/topology/repos
+    --source-dir n=p  read source n from the checkout at p (repeatable)
+    --strict          also fail on stale or unresolved refs
 
 A <name>.layout.json next to the spec (written by serve.mjs's editor) overrides node positions.`);
   process.exit(argv.length ? 0 : 1);
@@ -33,6 +39,15 @@ const value = (name, fallback) => {
 const file = resolve(argv[0]);
 const spec = await loadSpec(file);
 const featureLayers = [[value("--features", ""), ...argv.filter((arg) => arg.startsWith("--no-")).map((arg) => "-" + arg.slice(5))].filter(Boolean).join(",")];
+
+if (flag("--sources")) {
+  const { failed, printSources, sourcesReport } = await import("./sources.mjs");
+  const sourceDirs = Object.fromEntries(argv.flatMap((arg, i) => (arg === "--source-dir" && argv[i + 1]?.includes("=") ? [argv[i + 1].split(/=(.*)/s).slice(0, 2)] : [])));
+  const report = sourcesReport(spec, { file, sourceDirs, fetch: flag("--fetch") });
+  if (flag("--json")) console.log(JSON.stringify(report, null, 2));
+  else printSources(report);
+  process.exit(failed(report, flag("--strict")) ? 1 : 0);
+}
 
 if (flag("--trace")) {
   for (const line of traceText(spec, value("--trace", ""), { featureLayers })) console.log(line);

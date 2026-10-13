@@ -104,7 +104,7 @@ Behaviour:
 - feature flags with rollouts and kill switches
 - scenarios with named phases
 
-Common shapes come as patterns you compose: `region()`, `kafkaTopic()`, `cacheAside()`, `replicatedDb()`, `queueWorkers()`, `canary()`. Browse every kind and pattern, drawn in iso and 2D with the spec that makes it, in the [component catalog](examples/catalog/catalog.html) (`node scripts/catalog.mjs`).
+Common shapes come as patterns you compose: `region()`, `kafkaTopic()`, `cacheAside()`, `replicatedDb()`, `queueWorkers()`, `canary()`. Whole figures compose too: `system()` embeds another spec under a prefix, on its own plate, so a new service can be drawn once and linked into any figure ([order-ledger](examples/order-ledger/order-ledger.spec.mjs)). Browse every kind and pattern, drawn in iso and 2D with the spec that makes it, in the [component catalog](examples/catalog/catalog.html) (`node scripts/catalog.mjs`).
 
 Tool features (the morph, trails, labels, hops and the rest) can be toggled per spec, per build or per URL. Every field is in [`references/spec.md`](references/spec.md).
 
@@ -123,9 +123,10 @@ scripts/build.mjs        spec → standalone HTML (and --check, --svg)
 scripts/capture.mjs …    headless Chrome screenshots, scripted sessions, line-end check (browser.mjs)
 kit/topo-story.js        the scenario player; kit/topo-edit.js the drag editor; kit/topo-features.mjs toggles
 scripts/serve.mjs        dev server: rebuild per request, SSE reload, ?edit
-kit/patterns.mjs         reusable fragments: region, kafkaTopic, cacheAside, replicatedDb, queueWorkers, canary
+kit/patterns.mjs         reusable fragments: region, kafkaTopic, cacheAside, replicatedDb, queueWorkers, canary, system
+scripts/sources.mjs      --sources: check a spec's refs into the codebase it draws (kit/provenance.mjs)
 scripts/catalog.mjs      the component catalog page
-examples/                12 runnable system/data stories, plus the component catalog
+examples/                16 runnable system/data stories, plus the component catalog
 docs/media/              README GIF and MP4, recorded from the actual example
 scripts/record-demo.mjs  regenerates the README media (Chrome + ffmpeg)
 tests/                   node --test tests/*.test.mjs
@@ -137,6 +138,8 @@ agents/openai.yaml       display name and short description for Codex
 ## Endpoint and data stories
 
 - [Reusable data stores](examples/data-stores/data-stores.spec.mjs): Redis, ElastiCache and DynamoDB components with saved-field inspection.
+- [Tenant routing](examples/tenant-routing/tenant-routing.spec.mjs): immutable request context selects services and databases; class colors reveal failure isolation.
+- [Event routing](examples/event-routing/event-routing.spec.mjs): mixed Kafka traffic retains context through backlog and consumer routing.
 - [Orders API](examples/orders-api/orders-api.spec.mjs): route mixes, synthetic records and table inspection.
 - [Read your writes](examples/read-your-writes/read-your-writes.spec.mjs): replica lag and stale reads.
 - [Idempotent retries](examples/idempotent-retries/idempotent-retries.spec.mjs): committed writes, timeouts, conflicts and upserts.
@@ -213,3 +216,5 @@ and provenance follow [npm's publishing guidance](https://docs.npmjs.com/generat
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Context-based routing uses declarative predicates and direct/weighted destinations, with explicit fallback. Traffic classes add a labeled six-color palette and Traffic / Activity / None controls. See the [routing contract](references/spec.md#request-context-routing-and-traffic-classes); neither colors nor filtering change simulation behavior.

@@ -26,6 +26,8 @@ Start with `references/spec.md` and the closest example. The minimal endpoint/ta
 | Broker elections and min ISR | `examples/kafka-brokers/` |
 | Flag rollout and rollback | `examples/canary/` |
 | Redis, ElastiCache and DynamoDB components | `examples/data-stores/` |
+| Context-based downstream service/database routing and traffic colors | `examples/tenant-routing/` |
+| Context retained through Kafka and consumer routing | `examples/event-routing/` |
 | Route mixes, rows and WAL inspection | `examples/orders-api/` |
 | Save then read back from a replica | `examples/read-your-writes/` |
 | Committed writes retried after a timeout | `examples/idempotent-retries/` |
@@ -56,7 +58,8 @@ those are part of the requested deliverable.
 ## Interactive workflow
 
 1. **Name the question and collect the numbers.** Write down: the sources and their rates, each hop, what fans out, what is sync (request/response) and what is async (logs, queues), partitions, consumer groups and their throughput, caches and hit ratios, replicas, capacities.
-2. **Write the spec.** A `.spec.mjs` (or `.json`) with a default export; `references/spec.md` has every field and exactly what the simulation does with it. For the common shapes (a region, a Kafka topic with consumer groups, cache-aside, replicas, a job queue, a canary) use the patterns in `kit/patterns.mjs` and join them with `compose()` and `link()`; `examples/catalog/catalog.html` shows every node kind and pattern with the spec that makes it. Start without coordinates and let auto-layout rank it left to right; add `at: [col, row]` when you need control (zones, a particular reading order), or drag nodes on a `serve.mjs` `?edit` page.
+2. **Write the spec.** A `.spec.mjs` (or `.json`) with a default export; `references/spec.md` has every field and exactly what the simulation does with it. For the common shapes (a region, a Kafka topic with consumer groups, cache-aside, replicas, a job queue, a canary) use the patterns in `kit/patterns.mjs` and join them with `compose()` and `link()` (to reuse a whole existing figure, embed its spec with `system()`, see "Composing systems" in `references/spec.md`); `examples/catalog/catalog.html` shows every node kind and pattern with the spec that makes it. Start without coordinates and let auto-layout rank it left to right; add `at: [col, row]` when you need control (zones, a particular reading order), or drag nodes on a `serve.mjs` `?edit` page.
+   **Drawing a real codebase? Cite it.** Declare its repos in `sources` and give every node and edge `refs` to the code or config it comes from (`"infra:k8s/api.yaml#replicas:"`, with `field: "replicas"` when a number comes from there), and `notes` for what the code can't say; mark guesses as `{ text, field, assumed: true }`. Refs and notes never appear in the figure. **Before changing an existing figure, run `node scripts/build.mjs my.spec.mjs --sources` first**: it shows where each component lives (with snippets) and flags refs that are missing, whose numbers no longer match, or whose files changed since the pinned `rev`. Fix what it flags, then update `rev`. See "Sources and notes" in `references/spec.md`.
 3. **Write the story when useful.** For an incident or behavior explanation, add a `scenario` with 3–5 named phases (steady → incident → recovery) and a `say` line for each step: what happened, and what to watch for on screen ("bright cells", "amber retries", "the red port"). Make it loop cleanly: recover what you break, and leave time for lag to drain.
 4. **Check the model.** `node scripts/build.mjs my.spec.mjs --check` runs the simulation headless. For each phase it prints the settled numbers (in/s, p50/p99, lag, failing, dropped traffic, and table metrics such as stale reads) and the readout just before and 3 s after each step, then per-node stats and warnings:
    - lag that keeps growing
@@ -78,6 +81,8 @@ Keep the overview legible: topology, traffic and the story first. Clicking a nod
 
 Use scenario `inspect` and `follow` only when narration calls for the detail, and close them with `false` afterward. Disclose illustrative rates, `sim.per` scaling, synthetic rows, probability-based cache misses, and model limits in the caption. UPSERT is not exactly-once processing; `rmw` detects version races rather than executing SQL. Verify claimed versions in an actual trace; avoid hard-coded version numbers that vary with timing.
 
+For context routing, use the public `workload`, `traffic`, `policies` and `routing` fields in the spec reference. Disclose synthetic metadata, weighted choices, and dispatch-offset semantics. Keep rule explanations and context in the inspector/follow view; use class labels and state shapes alongside color. Verify a down destination does not silently spill into fallback. Authors need the reference and examples, not engine internals.
+
 Reuse the shipped kit. Author a spec and build it; modifying the engine is needed only for a new simulation capability.
 
 ## Choosing iso or flat
@@ -90,7 +95,7 @@ Reuse the shipped kit. Author a spec and build it; modifying the engine is neede
 
 `references/craft.md` has the full vocabulary, layout patterns and anti-patterns.
 
-- **Monochrome machines, colour only for meaning.** Packet colours:
+- **Monochrome machines, colour only for meaning.** Default Activity packet colours (Traffic mode identifies request classes instead):
 
   | Colour | Packet |
   |---|---|
@@ -114,17 +119,19 @@ Reuse the shipped kit. Author a spec and build it; modifying the engine is neede
 
 | File | Use it for |
 |---|---|
-| `scripts/build.mjs` | Spec → standalone HTML page (both views, the sim, the live code inlined). `--check`, `--light`, `--view`, `--out`, `--stdout`, `--svg` (static themed SVGs of each view), `--features`, `--no-<feature>`. |
+| `scripts/build.mjs` | Spec → standalone HTML page (both views, the sim, the live code inlined). `--check`, `--light`, `--view`, `--out`, `--stdout`, `--svg` (static themed SVGs of each view), `--features`, `--no-<feature>`, `--sources` (check the spec's source refs; `--json`, `--fetch`, `--source-dir`, `--strict`). |
 | `scripts/serve.mjs` | The dev server: `node scripts/serve.mjs [dir] [--port 8765] [--host 127.0.0.1]`. Pages rebuild per request (kit edits apply too) and reload over SSE; `?theme=light`, `?view=flat`, `?features=-morph`, `?edit` (drag nodes in 2D, saved to `<name>.layout.json`). |
 | `scripts/page.mjs` | Shared by both: spec loading with the layout sidecar, the page build, `--check` and its story timeline. |
 | `kit/topo.mjs` | Normalising the spec, auto-layout, orthogonal routing with port spreading and channel lanes, the iso and flat renderers for every node kind, label placement, `TOPO_CSS`. Add a node kind here (`references/craft.md`, "Adding a kind"). |
 | `kit/components.mjs` | Reusable Redis, ElastiCache and DynamoDB component registry and drawings; product kinds reuse cache/database simulation behavior. |
 | `kit/topo-sim.mjs` | Stable simulation import path. Its implementation lives in `kit/sim/`; authors use the spec reference and examples. Maintainer boundaries and verification: `references/engine.md`. |
 | `kit/topo-live.js` | The page runtime: steps the sim, draws packets (with trails), blinks LEDs, fills record and queue cells, moves cursors and flag knobs, updates breakers and edge labels, handles hover, click, keys, the sparkline and the view morph. Writes attributes, never re-renders. Exposes `window.__topo` for checks. |
+| `kit/topo-traffic.js`, `kit/traffic.css` | Presentation-only traffic palette, class legend, filters and color-mode controls. |
 | `kit/topo-records.js` | Saved-record details and record-specific write following, backed by actual stores and retained WAL. |
 | `kit/topo-story.js` | The scenario player: timeline, phases, narration, scrubbing (re-simulates from 0), takeover. |
 | `kit/topo-edit.js` | The serve editor: drag nodes in 2D, snap to quarter cells, POST the layout. |
-| `kit/patterns.mjs` | Reusable fragments: `kafkaTopic`, `region`, `cacheAside`, `replicatedDb`, `queueWorkers`, `canary`, plus `compose()` and `link()`. |
+| `kit/patterns.mjs` | Reusable fragments: `kafkaTopic`, `region`, `cacheAside`, `replicatedDb`, `queueWorkers`, `canary`, `system()` (embed another spec), plus `compose()`, `link()` and `importSpec()`. |
+| `kit/provenance.mjs`, `scripts/sources.mjs` | Source refs and notes: their shape, stripping them from pages, and resolving and checking them for `--sources`. |
 | `scripts/catalog.mjs` | Draws every node kind and pattern in iso and 2D with its spec (`examples/catalog/catalog.html`; `/catalog` on the dev server). |
 | `kit/topo-features.mjs` | The tool's feature toggles and their resolution (spec < CLI < URL). |
 | `tests/` | `node --test tests/*.test.mjs`: the model's behaviour and the page build. |

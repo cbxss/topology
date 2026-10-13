@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { posix } from 'node:path';
 import { Script } from 'node:vm';
 
-export const SIM_MODULES = ['sim/common.mjs', 'sim/reporting.mjs', 'sim/tables.mjs', 'sim/logs.mjs', 'sim/scenario.mjs', 'sim/transport.mjs', 'sim/core.mjs', 'topo-sim.mjs'];
+export const SIM_MODULES = ['sim/common.mjs', 'sim/context.mjs', 'sim/routing.mjs', 'sim/reporting.mjs', 'sim/tables.mjs', 'sim/logs.mjs', 'sim/scenario.mjs', 'sim/transport.mjs', 'sim/core.mjs', 'topo-sim.mjs'];
 
 export function bundleModules(sources, entry) {
   const modules = new Map();

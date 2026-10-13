@@ -72,6 +72,23 @@ function attachReporting(sim) {
       })
       .sort((a, b) => b.rate - a.rate);
   };
+  sim.trafficOf = (id) => {
+    const state = sim.trafficState;
+    if (!state) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    const samples = id ? state.arrivals.filter(e => e.node === id) : state.emitted;
+    const keys = new Set([...Object.keys(state.definitions), ...samples.map(e => e.traffic)]);
+    return [...keys].map(key => ({ id: key, label: state.definitions[key]?.label || key || "Unclassified", rate: samples.filter(e => e.traffic === key).length / window }));
+  };
+  sim.routingOf = id => {
+    const rows = new Map();
+    for (const d of sim.trafficState?.decisions || []) if (!id || d.node === id) {
+      const key = JSON.stringify([d.node, d.rule, d.to, d.outcome]);
+      if (!rows.has(key)) rows.set(key, { node: d.node, rule: d.rule, to: d.to, outcome: d.outcome, count: 0 });
+      rows.get(key).count++;
+    }
+    return [...rows.values()];
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -86,6 +103,7 @@ function reportTick(sim, dt) {
     while (old < list.length && (list[old].at ?? list[old]) < now - keep) old++;
     if (old) list.splice(0, old);
   };
+  if (sim.trafficState) for (const name of ["emitted", "arrivals", "paths", "decisions"]) trim(sim.trafficState[name]);
   for (const node of nodes.values()) {
     trim(node.recent);
     trim(node.recentDrops);

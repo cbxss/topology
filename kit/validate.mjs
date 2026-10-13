@@ -1,3 +1,4 @@
+import { validateRouting } from "./routing-validation.mjs";
 // Validate the public authoring contract before layout, browser packaging or simulation.
 const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
 const fail = (path, message) => { throw new Error(`spec ${path}: ${message}`); };
@@ -71,6 +72,7 @@ export function validateSpec(spec, features = {}, kinds) {
     if (edge.p != null) number(edge.p, "edge.p"); // random routing accepts weights > 1
     if (edge.retries != null) number(edge.retries, "edge.retries", 0, Infinity, true);
   }
+  validateRouting(features.endpoints === false ? { ...spec, nodes: spec.nodes.map(n => ({ ...n, endpoints: undefined })) } : spec);
   const parents = new Map();
   for (const edge of edges.filter(e => e.kind === "replication" && ["db", "dynamodb"].includes(nodes.get(e.from).kind) && ["db", "dynamodb"].includes(nodes.get(e.to).kind))) {
     if (parents.has(edge.to)) fail(edge.to, "a table replica must have one primary");
@@ -102,16 +104,26 @@ export function validateSpec(spec, features = {}, kinds) {
     if (!Array.isArray(endpoint.calls)) fail(route + ".calls", "expected an array");
     for (const call of endpoint.calls) {
       object(call, route + ".call");
-      if (!edges.some(e => e.from === node.id && e.to === call.to && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${call.to}`);
+      const actions = call.routing ? [...call.routing.rules.map(r => r.action), call.routing.fallback] : [];
+      const destinations = call.routing ? [...new Set(actions.flatMap(a => a.type === "send" ? [a.to] : a.type === "weighted" ? a.targets.map(t => t.to) : []))] : [call.to];
       if (call.p != null) number(call.p, route + ".p", 0, 1);
-      if (features.tables !== false && (call.op != null || call.table != null)) {
-        if (!OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
-        const target = nodes.get(call.to);
-        const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
-        if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${call.to}`);
-        if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+      const tableCall = features.tables !== false && (call.op != null || call.table != null);
+      if (tableCall && !OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
+      for (const destination of destinations) {
+        if (!edges.some(e => e.from === node.id && e.to === destination && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${destination}`);
+        if (tableCall) {
+          const target = nodes.get(destination);
+          const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
+          if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${destination}`);
+          if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+        }
       }
     }
+  }
+  if (spec.ports != null) {
+    object(spec.ports, "ports");
+    for (const [port, ids] of Object.entries(spec.ports))
+      for (const id of [].concat(ids)) if (!nodes.has(id)) fail("ports." + port, `unknown node ${id}`);
   }
   for (const key of ["speed", "window", "length", "per"]) if (spec.sim?.[key] != null) number(spec.sim[key], "sim." + key, Number.MIN_VALUE);
   if (spec.scenario) {

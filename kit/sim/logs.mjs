@@ -1,3 +1,4 @@
+import { envelopeOf, inheritEnvelope } from "./context.mjs";
 import { isLog, groupOf, hashOf } from "./common.mjs";
 
 // Kafka partitions/brokers and queue consumers. Transport delivers/launches packets;
@@ -28,6 +29,7 @@ function createLogs(sim, { launch, newMsg }) {
       log.election = node.election ?? 2;
       log.parts = Array.from({ length: partitions }, (_, p) => ({ replicas: Array.from({ length: log.rf }, (_, i) => (p + i) % n), leader: p % n, electUntil: 0 }));
     }
+    if (sim.trafficState) log.envelopes = Array.from({ length: partitions }, () => new Map());
     logs.set(node.id, log);
   }
 
@@ -113,7 +115,17 @@ function createLogs(sim, { launch, newMsg }) {
             }
             consumer.tokens -= 1;
             group.committed[best]++;
-            launch(edge, "record", { partition: best, group: group.name, msg: newMsg(log.node.id) });
+            const msg = newMsg(log.node.id);
+            const envelope = log.envelopes?.[best].get(group.committed[best]);
+            if (envelope) inheritEnvelope(msg, envelope);
+            launch(edge, "record", { partition: best, group: group.name, msg, ...(envelope?.parentSpan != null ? { traceParent: envelope.parentSpan } : {}) });
+            if (log.envelopes) {
+              const dispatched = Math.min(...log.groups.map(g => g.committed[best]));
+              for (const offset of log.envelopes[best].keys()) {
+                if (offset > dispatched) break;
+                log.envelopes[best].delete(offset);
+              }
+            }
           }
         }
       }
@@ -134,7 +146,10 @@ function createLogs(sim, { launch, newMsg }) {
     log.appended++;
     return p;
   }
-  return { append, rebalance, pull, lagOf, setBroker, readable, isrOf };
+  function remember(log, partition, msg, parentSpan) {
+    if (log.envelopes && log.groups.length && msg) log.envelopes[partition].set(log.end[partition], envelopeOf(msg, parentSpan));
+  }
+  return { remember, append, rebalance, pull, lagOf, setBroker, readable, isrOf };
 }
 
 export { createLogs };

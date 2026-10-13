@@ -106,3 +106,21 @@ Use three levels: the topology overview, a selected node's inspector, then a fol
 Narrate the detail when opening it (`inspect` or `follow`), and close it with `false` before moving on. Use orders-api for endpoint inspection, read-your-writes for replica freshness, idempotent-retries for retry outcomes, and lost-update for locking. Check stale-read/conflict/lost-update rates and a representative trace before writing causal claims.
 
 Captions must disclose invented rates, packet scaling, synthetic keys and simplifications: probabilistic cache misses are not a cache implementation; upsert preserves row content but still writes versions; row locks and version races are not full SQL transactions. Missing replica rows can be stale too. Packet travel affects ordering, so lag must be tuned against the final layout. Do not promise an exact version in narration unless its trace establishes it.
+
+## Routing and traffic color
+
+Choose a question such as “does a premium outage stay isolated?” Use immutable
+context for the distinction and declared routing rules at each decision point.
+Show only a few classes at once; label them, and use the named six-color palette.
+Keep machines and shared links neutral. The class legend reports observed source
+emissions, not a claim about downstream throughput. Traffic mode uses shape for
+packet activity and red/amber for errors/retries; Activity restores the original
+colors. None provides monochrome state shapes.
+
+Let the inspector reveal recent rule counts and Follow reveal context, compared
+values and destinations. Avoid putting full predicates on diagram edges. Explain
+that fallback is for unmatched conditions, never implicit outage failover. For
+Kafka/queue stories disclose that offsets advance on dispatch, and show the
+consumer deciding from inherited context after a backlog drains. Check both
+themes, views, phone width and reduced motion; class buttons remain usable when
+animated packets are suppressed.

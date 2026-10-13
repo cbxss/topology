@@ -523,7 +523,42 @@ return { createTables };
 })();
 const module2 = (() => {
 'use strict';
+
+// Immutable routing inputs are independent of mutable per-request execution state.
+function freezeData(value) {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) freezeData(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+function attachContext(msg, context, traffic, origin = msg.source, rootId = msg.id) {
+  msg.context = freezeData(structuredClone(context));
+  msg.traffic = traffic ?? null;
+  msg.origin = origin;
+  msg.rootId = rootId;
+  return msg;
+}
+function envelopeOf(msg, parentSpan) {
+  return freezeData(structuredClone({ context: msg.context, traffic: msg.traffic, origin: msg.origin, rootId: msg.rootId, parentId: msg.id, endpoint: msg.endpoint, records: msg.records, draws: msg.draws, parentSpan }));
+}
+function inheritEnvelope(msg, envelope) {
+  attachContext(msg, envelope.context, envelope.traffic, envelope.origin, envelope.rootId);
+  msg.parentId = envelope.parentId;
+  msg.endpoint = envelope.endpoint;
+  if (envelope.records) msg.records = structuredClone(envelope.records);
+  if (envelope.draws) msg.draws = structuredClone(envelope.draws);
+  return msg;
+}
+
+
+return { attachContext, envelopeOf, inheritEnvelope };
+})();
+const module3 = (() => {
+'use strict';
+const { envelopeOf, inheritEnvelope } = module2;
 const { isLog, groupOf, hashOf } = module0;
+
 
 
 // Kafka partitions/brokers and queue consumers. Transport delivers/launches packets;
@@ -554,6 +589,7 @@ function createLogs(sim, { launch, newMsg }) {
       log.election = node.election ?? 2;
       log.parts = Array.from({ length: partitions }, (_, p) => ({ replicas: Array.from({ length: log.rf }, (_, i) => (p + i) % n), leader: p % n, electUntil: 0 }));
     }
+    if (sim.trafficState) log.envelopes = Array.from({ length: partitions }, () => new Map());
     logs.set(node.id, log);
   }
 
@@ -639,7 +675,17 @@ function createLogs(sim, { launch, newMsg }) {
             }
             consumer.tokens -= 1;
             group.committed[best]++;
-            launch(edge, "record", { partition: best, group: group.name, msg: newMsg(log.node.id) });
+            const msg = newMsg(log.node.id);
+            const envelope = log.envelopes?.[best].get(group.committed[best]);
+            if (envelope) inheritEnvelope(msg, envelope);
+            launch(edge, "record", { partition: best, group: group.name, msg, ...(envelope?.parentSpan != null ? { traceParent: envelope.parentSpan } : {}) });
+            if (log.envelopes) {
+              const dispatched = Math.min(...log.groups.map(g => g.committed[best]));
+              for (const offset of log.envelopes[best].keys()) {
+                if (offset > dispatched) break;
+                log.envelopes[best].delete(offset);
+              }
+            }
           }
         }
       }
@@ -660,14 +706,17 @@ function createLogs(sim, { launch, newMsg }) {
     log.appended++;
     return p;
   }
-  return { append, rebalance, pull, lagOf, setBroker, readable, isrOf };
+  function remember(log, partition, msg, parentSpan) {
+    if (log.envelopes && log.groups.length && msg) log.envelopes[partition].set(log.end[partition], envelopeOf(msg, parentSpan));
+  }
+  return { remember, append, rebalance, pull, lagOf, setBroker, readable, isrOf };
 }
 
 
 
 return { createLogs };
 })();
-const module3 = (() => {
+const module4 = (() => {
 'use strict';
 const { hashOf } = module0;
 
@@ -778,10 +827,67 @@ function createScenario(sim, definitions, { resetNode, setEdge, setBroker, rebal
 
 return { targetOf, normalizeScenario, createScenario };
 })();
-const module4 = (() => {
+const module5 = (() => {
 'use strict';
+
+// Pure conditions and destination selection. Transport owns all delivery semantics.
+function fieldOf(msg, field) {
+  const path = Array.isArray(field) ? field : field.split(".");
+  let value = path[0] === "context" ? msg.context : { endpoint: msg.endpoint, source: msg.origin ?? msg.source, traffic: msg.traffic };
+  for (const key of path.slice(1)) {
+    if (value == null || typeof value !== "object" || !Object.hasOwn(value, key)) return { exists: false };
+    value = value[key];
+  }
+  return { exists: value !== undefined, value };
+}
+function matches(condition, msg, policies = {}, observations = []) {
+  if (condition.policy) return matches(policies[condition.policy], msg, policies, observations);
+  if (condition.all) return condition.all.every(c => matches(c, msg, policies, observations));
+  if (condition.any) return condition.any.some(c => matches(c, msg, policies, observations));
+  if (condition.not) return !matches(condition.not, msg, policies, observations);
+  const { exists, value } = fieldOf(msg, condition.field);
+  const op = Object.keys(condition).find(k => k !== "field");
+  const expected = condition[op];
+  let result = false;
+  if (op === "exists") result = exists === expected;
+  else if (exists) {
+    if (op === "eq") result = value === expected;
+    else if (op === "in") result = expected.includes(value);
+    else if (Number.isFinite(value)) {
+      if (op === "gt") result = value > expected;
+      if (op === "gte") result = value >= expected;
+      if (op === "lt") result = value < expected;
+      if (op === "lte") result = value <= expected;
+    }
+  }
+  observations.push({ field: condition.field, op, expected, exists, value, result });
+  return result;
+}
+function selectRoute(routing, msg, policies, rand) {
+  const observations = [];
+  const rule = routing.rules.find(rule => matches(rule.when, msg, policies, observations));
+  const action = rule ? rule.action : routing.fallback;
+  const decision = { rule: rule?.id ?? "fallback", observations, to: null, outcome: "rejected" };
+  if (action.type === "send") decision.to = action.to;
+  if (action.type === "weighted") {
+    let pick = rand() * action.targets.reduce((sum, target) => sum + target.weight, 0);
+    decision.to = (action.targets.find(target => (pick -= target.weight) < 0) || action.targets.at(-1)).to;
+  }
+  if (decision.to) decision.outcome = "selected";
+  return decision;
+}
+
+
+return { matches, selectRoute };
+})();
+const module6 = (() => {
+'use strict';
+const { attachContext } = module2;
+const { matches, selectRoute } = module5;
 const { DETECT, isLog, routeOf, split } = module0;
-const { targetOf } = module3;
+const { targetOf } = module4;
+
+
 
 
 
@@ -812,7 +918,21 @@ function createTransport(sim, { tables, logModel, decide }) {
   edges.forEach((edge) => allowanceOf(edge));
 
   let ids = 0;
-  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  const newMsg = (source, endpoint) => {
+    const msg = { id: ++ids, source, born: sim.time, draws: null, endpoint };
+    return sim.trafficState ? attachContext(msg, {}, null) : msg;
+  };
+  function decisionFor(job, routing) {
+    const decision = selectRoute(routing, job.msg, sim.trafficState.policies, rand);
+    const edge = decision.to && job.node.data.find(e => e.to === decision.to);
+    if (edge && ((edge.flag && !decide(job.msg, edge.flag)) || (edge.unless && decide(job.msg, edge.unless)))) decision.outcome = "flag-blocked";
+    if (edge && decision.outcome === "selected" && !nodes.get(edge.to).up) decision.outcome = "target-down";
+    const event = { ...decision, node: job.node.id, at: sim.time, traffic: job.msg.traffic, msgId: job.msg.id };
+    sim.trafficState.decisions.push(event);
+    if (job.span) (job.span.decisions ??= []).push(event);
+    if (!edge || decision.outcome === "flag-blocked") { job.failed = true; return null; }
+    return edge;
+  }
   // Per-route history at a node: rates, service times, end-to-end latency and errors.
   const routeStats = (node, name) => {
     if (!name) return null;
@@ -829,42 +949,56 @@ function createTransport(sim, { tables, logModel, decide }) {
       edge.sent++;
       edge.recent.push(sim.time);
     }
+    if (sim.trafficState) {
+      const msg = extra.msg || extra.call?.job.msg;
+      if (msg && packet.dir > 0) sim.trafficState.paths.push({ at: sim.time, edge: edge.index, traffic: msg.traffic });
+    }
     sim.packets.push(packet);
     return packet;
   }
 
-  const burst = (edge, at = 1) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1 });
+  const burst = (edge, at = 1, msg) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1, ...(sim.trafficState && msg ? { msg, ep: msg.endpoint } : {}) });
 
   // --- jobs -----------------------------------------------------------------------------------
 
   function startJob(node, msg, call, extra = {}) {
     const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
     const t = sim.tracing;
-    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint)) {
+    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint) && (!t.classes || t.classes.includes(msg.traffic))) {
       t.msgId = msg.id;
       t.endpoint = msg.endpoint;
       t.started = sim.time;
     }
-    if (t && t.msgId === msg.id) {
+    const traceId = msg.rootId ?? msg.id;
+    if (t && t.msgId === traceId && !t.truncated) {
+      if (sim.trafficState && t.spans.length >= 256) t.truncated = true;
+    }
+    if (t && t.msgId === traceId && !t.truncated) {
       // Where this span starts in model time: the parent's own time plus any stages it had
       // finished, plus the network on the way.
       const parent = call ? call.job : extra.parentJob;
-      job.span = { id: t.spans.length, parent: parent?.span?.id ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      job.span = { id: t.spans.length, parent: parent?.span?.id ?? extra.traceParent ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      if (sim.trafficState) {
+        Object.assign(job.span, { msgId: msg.id, traffic: msg.traffic, context: msg.context });
+        if (extra.traceParent != null && !parent?.span) job.span.start = Math.max(0, (sim.time - t.started) * 1000);
+      }
       t.spans.push(job.span);
     }
+    if (sim.trafficState) sim.trafficState.arrivals.push({ at: sim.time, node: node.id, traffic: msg.traffic });
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
     if (!extra.entry) routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
-    if (!node.capacity) return begin(job);
+    if (!node.capacity) { begin(job); return job; }
     if (node.bucket >= 1) {
       node.bucket -= 1;
-      return begin(job);
+      begin(job); return job;
     }
-    if (node.waiting.length < node.queueMax) return node.waiting.push(job);
+    if (node.waiting.length < node.queueMax) { node.waiting.push(job); return job; }
     reject(job);
+    return job;
   }
 
   function begin(job) {
@@ -878,16 +1012,16 @@ function createTransport(sim, { tables, logModel, decide }) {
   }
 
   // A request that never got in: counted at the node and on the edge, drawn as a red burst.
-  function dropAt(edge, node) {
+  function dropAt(edge, node, msg) {
     node.recentDrops.push(sim.time);
     if (!edge) return;
     edge.dropped++;
-    burst(edge);
+    burst(edge, 1, msg);
   }
 
   // Over capacity with a full buffer: answer 503 at once.
   function reject(job) {
-    dropAt(job.call ? job.call.edge : job.via, job.node);
+    dropAt(job.call ? job.call.edge : job.via, job.node, job.msg);
     respond(job, false);
   }
 
@@ -944,6 +1078,14 @@ function createTransport(sim, { tables, logModel, decide }) {
       }
       job.stage = 0;
       issue(job, job.stages[0] || []);
+      return;
+    }
+    if (node.routing) {
+      const edge = decisionFor(job, node.routing);
+      if (edge) {
+        if (edge.sync) { job.waiting++; callOut(job, edge, 0); }
+        else launch(edge, "request", { msg: job.msg, parentJob: job });
+      }
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
@@ -1057,8 +1199,16 @@ function createTransport(sim, { tables, logModel, decide }) {
   function issue(job, calls) {
     const node = job.node;
     for (const call of calls) {
-      const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-      if (!edge || rand() >= (call.p ?? 1)) continue;
+      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) continue;
+      let edge;
+      if (call.routing) {
+        if (rand() >= (call.p ?? 1)) continue;
+        edge = decisionFor(job, call.routing);
+      } else {
+        edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+      }
+      if (!edge) continue;
       if (call.table) recordOf(job.msg, call.table);
       if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
       else if (edge.sync) {
@@ -1093,7 +1243,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
-      dropAt(edge, node);
+      dropAt(edge, node, packet.msg || packet.call?.job.msg);
       // Connection refused: the caller hears about it straight away.
       if (packet.call) {
         const call = packet.call;
@@ -1105,13 +1255,15 @@ function createTransport(sim, { tables, logModel, decide }) {
       const log = logs.get(node.id);
       const p = logModel.append(log, edge, packet);
       if (p == null) {
-        dropAt(edge, node);
+        dropAt(edge, node, packet.msg || packet.call?.job.msg);
         if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
         return;
       }
-      return startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
+      const job = startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
+      logModel.remember(log, p, packet.msg || packet.call?.job.msg, job?.span?.id);
+      return job;
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob, ...(packet.traceParent != null ? { traceParent: packet.traceParent } : {}) });
   }
 
   // --- sources --------------------------------------------------------------------------------
@@ -1144,7 +1296,11 @@ function createTransport(sim, { tables, logModel, decide }) {
     return entries[entries.length - 1][0];
   };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
+  const emitOne = (node) => {
+    const msg = newMsg(node.id, pickEndpoint(node, sim.time));
+    if (sim.trafficState) sim.trafficState.emitted.push({ at: sim.time, traffic: null });
+    return startJob(node, msg, null, { root: true });
+  };
 
   function resetNode(node) {
     // In-flight work is lost; callers waiting on it get a reset.
@@ -1179,7 +1335,22 @@ function createTransport(sim, { tables, logModel, decide }) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (isSchedule(node.emit)) {
+      if (node.workload) {
+        node.workClocks ??= node.workload.map(() => 0);
+        node.workload.forEach((work, index) => {
+          const rate = rateOf(work.rate, now);
+          if (!rate) return;
+          node.workClocks[index] -= dt;
+          while (node.workClocks[index] <= 0) {
+            node.workClocks[index] += (0.6 + rand() * 0.8) / rate;
+            const msg = newMsg(node.id, work.endpoint);
+            const definition = sim.trafficState.definitions[work.traffic];
+            attachContext(msg, { ...definition?.context, ...work.context }, work.traffic);
+            sim.trafficState.emitted.push({ at: now, traffic: msg.traffic });
+            startJob(node, msg, null, { root: true });
+          }
+        });
+      } else if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;
@@ -1247,7 +1418,7 @@ function createTransport(sim, { tables, logModel, decide }) {
 
 return { breakerOf, createTransport };
 })();
-const module5 = (() => {
+const module7 = (() => {
 'use strict';
 
 const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
@@ -1324,6 +1495,23 @@ function attachReporting(sim) {
       })
       .sort((a, b) => b.rate - a.rate);
   };
+  sim.trafficOf = (id) => {
+    const state = sim.trafficState;
+    if (!state) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    const samples = id ? state.arrivals.filter(e => e.node === id) : state.emitted;
+    const keys = new Set([...Object.keys(state.definitions), ...samples.map(e => e.traffic)]);
+    return [...keys].map(key => ({ id: key, label: state.definitions[key]?.label || key || "Unclassified", rate: samples.filter(e => e.traffic === key).length / window }));
+  };
+  sim.routingOf = id => {
+    const rows = new Map();
+    for (const d of sim.trafficState?.decisions || []) if (!id || d.node === id) {
+      const key = JSON.stringify([d.node, d.rule, d.to, d.outcome]);
+      if (!rows.has(key)) rows.set(key, { node: d.node, rule: d.rule, to: d.to, outcome: d.outcome, count: 0 });
+      rows.get(key).count++;
+    }
+    return [...rows.values()];
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -1338,6 +1526,7 @@ function reportTick(sim, dt) {
     while (old < list.length && (list[old].at ?? list[old]) < now - keep) old++;
     if (old) list.splice(0, old);
   };
+  if (sim.trafficState) for (const name of ["emitted", "arrivals", "paths", "decisions"]) trim(sim.trafficState[name]);
   for (const node of nodes.values()) {
     trim(node.recent);
     trim(node.recentDrops);
@@ -1462,14 +1651,14 @@ function summaryOf(sim) {
 
 return { attachReporting, reportTick, formatRate, formatCount, formatMs, statsOf, summaryOf };
 })();
-const module6 = (() => {
+const module8 = (() => {
 'use strict';
 const { SIM_DEFAULTS, SERVICE_MS, rngOf, split } = module0;
 const { createTables } = module1;
-const { createLogs } = module2;
-const { createScenario, normalizeScenario } = module3;
-const { createTransport, breakerOf } = module4;
-const { attachReporting, reportTick } = module5;
+const { createLogs } = module3;
+const { createScenario, normalizeScenario } = module4;
+const { createTransport, breakerOf } = module6;
+const { attachReporting, reportTick } = module7;
 
 
 
@@ -1561,6 +1750,8 @@ function createSim(spec) {
   const logs = new Map();
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  const contextual = !!(spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
+  if (contextual) sim.trafficState = { definitions: spec.traffic || {}, policies: spec.policies || {}, emitted: [], arrivals: [], paths: [], decisions: [] };
   // Factories only initialize state. Callbacks run after transport has been wired.
   let transport;
   const tables = createTables(sim, spec.records || {}, {
@@ -1606,21 +1797,36 @@ function createSim(spec) {
     logModel.pull(dt);
     transport.tickPackets(dt);
     reportTick(sim, dt);
+    if (sim.trafficState && sim.tracing?.msgId && now - sim.tracing.started >= 60 && sim.tracePending()) sim.tracing.truncated = true;
     if (sim.events.length > 512) sim.events.splice(0, sim.events.length - 512);
   }
 
-  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
+  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + ((node.emit || node.workload) && node.up ? node.flow : 0), 0);
 
   sim.step = (dt) => {
+    if (dt <= 0) return;
     // Sub-step so a long frame doesn't teleport packets past their arrival.
     const n = Math.max(1, Math.ceil(dt / (1 / 60)));
     for (let i = 0; i < n; i++) step(dt / n);
   };
   // Follow one request: the next one started on `endpoint` (any, if omitted). Its spans fill
   // sim.tracing.spans as it moves; sim.tracing.done once its root answers.
-  sim.follow = (endpoint) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null });
+  sim.follow = (endpoint, classes) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null, ...(classes?.length ? { classes: [...classes] } : {}) });
+  sim.tracePending = () => {
+    const id = sim.tracing?.msgId;
+    if (!id) return false;
+    const related = msg => (msg?.rootId ?? msg?.id) === id;
+    if (sim.packets.some(p => related(p.msg || p.call?.job.msg))) return true;
+    if ([...nodes.values()].some(n => [...n.jobs].some(j => !j.done && related(j.msg)))) return true;
+    if ([...sim.calls].some(c => related(c.job.msg))) return true;
+    for (const log of logs.values()) for (const partition of log.envelopes || [])
+      if ([...partition.values()].some(e => e.rootId === id)) return true;
+    for (const n of nodes.values()) for (const pending of n.wal?.pending?.values() || [])
+      if ([...pending.values()].some(item => related(item.msg))) return true;
+    return false;
+  };
   sim.unfollow = () => (sim.tracing = null);
-  sim.tracedId = (packet) => (packet.msg || packet.call?.job.msg)?.id;
+  sim.tracedId = (packet) => { const msg = packet.msg || packet.call?.job.msg; return msg?.rootId ?? msg?.id; };
   sim.setUp = setUp;
   sim.setBroker = setBroker;
   sim.readable = readable;
@@ -1636,12 +1842,12 @@ function createSim(spec) {
 
 return { createSim };
 })();
-const module7 = (() => {
+const module9 = (() => {
 'use strict';
-const { createSim } = module6;
+const { createSim } = module8;
 const { SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashOf } = module0;
-const { targetOf, normalizeScenario } = module3;
-const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module5;
+const { targetOf, normalizeScenario } = module4;
+const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module7;
 // Stable public entry point. Figure authors use specs; engine maintainers use sim/.
 
 
@@ -1652,7 +1858,7 @@ const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module5;
 
 return { createSim, SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashOf, targetOf, normalizeScenario, formatRate, formatCount, formatMs, statsOf, summaryOf };
 })();
-return module7;
+return module9;
 })();
 
 const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"grid":[150,80],"positions":{"app":[0,0.5],"api":[1,0.5],"pg":[2.2,0],"replica":[2.2,1.05]},"spec":{"nodes":[{"id":"app","kind":"client","emit":{"PUT /profile":6},"partitions":0,"replicas":1,"label":"app"},{"id":"api","kind":"service","replicas":2,"label":"profile-api","endpoints":{"PUT /profile":{"ms":4,"calls":[{"to":"pg","op":"upsert","table":"profiles"},{"to":"replica","op":"select","table":"profiles","then":true}]},"PUT /profile (fixed)":{"ms":4,"calls":[{"to":"pg","op":"upsert","table":"profiles"},{"to":"pg","op":"select","table":"profiles","then":true}]}},"partitions":0},{"id":"pg","kind":"db","role":"primary","label":"pg-primary","tables":{"profiles":{"key":"userId","show":6}},"partitions":0,"replicas":1},{"id":"replica","kind":"db","role":"replica","label":"pg-replica","partitions":0,"replicas":1,"hasTables":true}],"edges":[{"from":"app","to":"api","kind":"sync","sync":true,"len":103},{"from":"api","to":"pg","kind":"sync","sync":true,"len":156.55149520792617},{"from":"api","to":"replica","kind":"sync","sync":true,"len":160.55149520792614},{"from":"pg","to":"replica","kind":"replication","sync":false,"len":42}],"sim":{"seed":21},"scenario":{"length":40,"phases":[{"name":"replica keeps up","at":0},{"name":"replica behind","at":9},{"name":"fixed","at":24}],"steps":[{"at":1,"say":"Each PUT /profile writes to the primary, then reads the profile back from the replica to return it. The replica applies the WAL almost at once, though concurrent writes can still race reads."},{"phase":"replica behind","set":{"replica":{"lag":4}},"inspect":"replica","say":"The replica starts applying the WAL 4 s late (amber: rows behind the primary). The read-back often gets the previous version."},{"phase":"replica behind","after":5,"follow":"PUT /profile","say":"Follow one request: the upsert writes a new version to the primary; the read-back from the replica returns an older version or a missing row, marked stale."},{"phase":"fixed","follow":false,"inspect":false,"set":{"app":{"emit":{"PUT /profile (fixed)":6}}},"say":"The fix: read your own write from the primary. The replica is still behind, but nobody reads it straight after writing."},{"phase":"fixed","after":8,"set":{"replica":{"lag":0}},"say":"The replica catches up."}]},"records":{"profiles":{"key":"userId","keys":30,"fields":{"plan":["free","pro","team"]}}},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,103],[0,54.5,57.04,59.17,61.15,63.28,65.82,81.74,84.27,86.4,88.38,90.52,93.05,156.55],[0,63.5,66.04,68.17,70.15,72.28,74.82,94.74,97.27,99.4,101.38,103.52,106.05,160.55],[0,42]],"views":{"iso":{"edges":[[[95.8,86.3],[239.2,137.5]],[[323.9,157],[399.8,184.1],[403.5,185.1],[407.1,185.5],[410.3,185.2],[413.3,184.1],[416.1,182.4],[431,170.7],[433.8,168.9],[436.8,167.9],[440.1,167.6],[443.6,167.9],[447.4,169],[535.8,200.6]],[[304.9,171.8],[393.4,203.4],[396.6,204.9],[398.6,206.5],[399.2,208.2],[398.5,210.1],[396.5,212.1],[377.8,226.8],[375.9,228.8],[375.2,230.7],[375.8,232.4],[377.8,234],[381,235.4],[456.9,262.6]],[[545.3,226.5],[505.9,257.5]]],"step":[9.747487793469134,3.4840938547161784],"flagStep":[0,0],"packet":{"top":"M5.1 -5.5L1 -2.3L-5.1 -4.5L-1 -7.7Z","sides":"M5.1 -5.5L1 -2.3L1 2.7L5.1 -0.5ZM1 -2.3L-5.1 -4.5L-5.1 0.5L1 2.7Z","outline":"M-5.1 -4.5L-1 -7.7L5.1 -5.5L5.1 -0.5L1 2.7L-5.1 0.5Z"}},"flat":{"edges":[[[88.6,121.4],[249.6,121.4]],[[334.1,105.7],[419.3,105.7],[423.2,105.2],[426.3,103.9],[428.5,101.7],[429.8,98.7],[430.3,94.7],[430.3,69.8],[430.7,65.9],[432,62.8],[434.2,60.6],[437.3,59.3],[441.2,58.9],[540.5,58.9]],[[334.1,137.2],[433.4,137.2],[437.3,137.6],[440.4,138.9],[442.6,141.1],[443.9,144.2],[444.3,148.1],[444.3,179.3],[444.8,183.2],[446.1,186.3],[448.3,188.5],[451.3,189.8],[455.3,190.2],[540.5,190.2]],[[573.3,91.7],[573.3,157.4]]],"step":[10.946808510638306,0],"flagStep":[0,0],"packet":null,"k":1.5638297872340425}},"raw":{"title":"Read your writes","fig":"Fig 9","caption":"Illustrative workload: 6 requests/s over 30 keys. PUT /profile upserts the profile into the primary, then reads it back to return it. Even at low lag, concurrent writes can race replica reads. When it falls behind (it applies the WAL 4 s late), the read-back returns the old version: a stale read, the user's change seems lost. The fix reads your own write from the primary.","sim":{"seed":21},"grid":[150,80],"records":{"profiles":{"key":"userId","keys":30,"fields":{"plan":["free","pro","team"]}}},"nodes":[{"id":"app","kind":"client","at":[0,0.5],"emit":{"PUT /profile":6}},{"id":"api","kind":"service","replicas":2,"label":"profile-api","at":[1,0.5],"endpoints":{"PUT /profile":{"ms":4,"calls":[{"to":"pg","op":"upsert","table":"profiles"},{"to":"replica","op":"select","table":"profiles","then":true}]},"PUT /profile (fixed)":{"ms":4,"calls":[{"to":"pg","op":"upsert","table":"profiles"},{"to":"pg","op":"select","table":"profiles","then":true}]}}},{"id":"pg","kind":"db","role":"primary","label":"pg-primary","at":[2.2,0],"tables":{"profiles":{"key":"userId","show":6}}},{"id":"replica","kind":"db","role":"replica","label":"pg-replica","at":[2.2,1.05]}],"edges":[["app","api"],["api","pg"],["api","replica"],{"from":"pg","to":"replica","kind":"replication"}],"scenario":{"length":40,"phases":[{"name":"replica keeps up","at":0},{"name":"replica behind","at":9},{"name":"fixed","at":24}],"steps":[{"at":1,"say":"Each PUT /profile writes to the primary, then reads the profile back from the replica to return it. The replica applies the WAL almost at once, though concurrent writes can still race reads."},{"phase":"replica behind","set":{"replica":{"lag":4}},"inspect":"replica","say":"The replica starts applying the WAL 4 s late (amber: rows behind the primary). The read-back often gets the previous version."},{"phase":"replica behind","after":5,"follow":"PUT /profile","say":"Follow one request: the upsert writes a new version to the primary; the read-back from the replica returns an older version or a missing row, marked stale."},{"phase":"fixed","follow":false,"inspect":false,"set":{"app":{"emit":{"PUT /profile (fixed)":6}}},"say":"The fix: read your own write from the primary. The replica is still behind, but nobody reads it straight after writing."},{"phase":"fixed","after":8,"set":{"replica":{"lag":0}},"say":"The replica catches up."}]}}};
@@ -2107,7 +2313,128 @@ function flatComponent(node, f, k) {
 
 return { COMPONENTS, baseKind, isoComponent, flatComponent };
 })();
+const ROUTING_VALIDATION = (() => {
+
+// Public schema checks for opt-in request context and routing.
+function validateRouting(spec) {
+  const fail = (path, text) => { throw new Error(`spec ${path}: ${text}`); };
+  const object = (x, path) => { if (!x || typeof x !== "object" || Array.isArray(x)) fail(path, "expected an object"); };
+  const exact = (x, keys, path) => { object(x, path); for (const key of Object.keys(x)) if (!keys.includes(key)) fail(path, `unknown field ${key}`); };
+  const text = (x, path) => { if (typeof x !== "string" || !x.length) fail(path, "expected a nonempty string"); };
+  const scalar = x => x === null || typeof x === "string" || typeof x === "boolean" || Number.isFinite(x);
+  function json(x, path, seen = new Set()) {
+    if (scalar(x)) return;
+    if (!x || typeof x !== "object" || seen.has(x) || (!Array.isArray(x) && ![Object.prototype, null].includes(Object.getPrototypeOf(x)))) fail(path, "expected acyclic JSON data");
+    seen.add(x); for (const child of Object.values(x)) json(child, path, seen); seen.delete(x);
+  }
+  const palette = ["cyan", "blue", "violet", "magenta", "teal", "lime"];
+  object(spec.traffic || {}, "traffic");
+  for (const [id, def] of Object.entries(spec.traffic || {})) {
+    text(id, "traffic"); exact(def, ["label", "color", "context"], `traffic.${id}`);
+    if (def.label != null) text(def.label, `traffic.${id}.label`);
+    if (def.color != null && !palette.includes(def.color)) fail(`traffic.${id}.color`, `expected ${palette.join(", ")}`);
+    if (def.context != null) { object(def.context, `traffic.${id}.context`); json(def.context, `traffic.${id}.context`); }
+  }
+  if (spec.colorBy != null && !["activity", "traffic", "none"].includes(spec.colorBy)) fail("colorBy", "expected activity, traffic or none");
+  const policies = spec.policies || {};
+  object(policies, "policies");
+  function condition(c, path, stack = []) {
+    object(c, path);
+    if (Object.hasOwn(c, "policy")) {
+      exact(c, ["policy"], path); text(c.policy, path);
+      if (!Object.hasOwn(policies, c.policy)) fail(path, `unknown policy ${c.policy}`);
+      if (stack.includes(c.policy)) fail(path, "cyclic policy reference");
+      return condition(policies[c.policy], path, [...stack, c.policy]);
+    }
+    for (const group of ["all", "any", "not"]) if (Object.hasOwn(c, group)) {
+      exact(c, [group], path);
+      if (group === "not") return condition(c.not, path, stack);
+      if (!Array.isArray(c[group]) || !c[group].length) fail(path, "expected nonempty condition list");
+      return c[group].forEach(child => condition(child, path, stack));
+    }
+    const ops = Object.keys(c).filter(k => k !== "field");
+    if (ops.length !== 1 || !["eq", "in", "exists", "gt", "gte", "lt", "lte"].includes(ops[0])) fail(path, "expected one supported comparison");
+    const parts = Array.isArray(c.field) ? c.field : typeof c.field === "string" ? c.field.split(".") : [];
+    if (parts.length < 2 || parts.some(p => typeof p !== "string" || !p.length || ["__proto__", "prototype", "constructor"].includes(p)) || !["context", "request"].includes(parts[0])) fail(path, "invalid field path");
+    if (parts[0] === "request" && (parts.length !== 2 || !["endpoint", "source", "traffic"].includes(parts[1]))) fail(path, "unknown request field");
+    const op = ops[0], value = c[op];
+    if (op === "exists" ? typeof value !== "boolean" : op === "in" ? !Array.isArray(value) || !value.length || !value.every(scalar) : op === "eq" ? !scalar(value) : !Number.isFinite(value)) fail(path, `invalid ${op} operand`);
+  }
+  for (const [id, c] of Object.entries(policies)) condition(c, `policies.${id}`, [id]);
+  const edges = (spec.edges || []).map(e => Array.isArray(e) ? {from: e[0], to: e[1]} : e);
+  function routing(r, node, path) {
+    exact(r, ["rules", "fallback"], path);
+    if (!Array.isArray(r.rules)) fail(path, "expected rules array");
+    const ids = new Set();
+    function action(a) {
+      object(a, path);
+      let targets;
+      if (a.type === "reject") { exact(a, ["type"], path); return; }
+      if (a.type === "send") { exact(a, ["type", "to"], path); targets = [a.to]; }
+      else if (a.type === "weighted") {
+        exact(a, ["type", "targets"], path);
+        if (!Array.isArray(a.targets) || !a.targets.length) fail(path, "expected weighted targets");
+        for (const t of a.targets) { exact(t, ["to", "weight"], path); if (!Number.isFinite(t.weight) || t.weight <= 0) fail(path, "weight must be positive and finite"); }
+        if (!Number.isFinite(a.targets.reduce((s, t) => s + t.weight, 0))) fail(path, "weight total must be finite");
+        targets = a.targets.map(t => t.to);
+      } else fail(path, "unknown action type");
+      if (new Set(targets).size !== targets.length) fail(path, "duplicate destination");
+      for (const to of targets) {
+        text(to, path);
+        const links = edges.filter(e => e.from === node.id && e.to === to && !["config", "replication"].includes(e.kind));
+        if (links.length !== 1) fail(path, `expected one data edge ${node.id} → ${to}`);
+      }
+    }
+    for (const rule of r.rules) {
+      exact(rule, ["id", "when", "action"], path); text(rule.id, path);
+      if (rule.id === "fallback" || ids.has(rule.id)) fail(path, "rule id must be unique and not fallback");
+      ids.add(rule.id); condition(rule.when, path); action(rule.action);
+    }
+    action(r.fallback);
+  }
+  for (const node of spec.nodes || []) {
+    if (node.workload != null) {
+      if (node.emit != null) fail(node.id, "workload and emit are mutually exclusive");
+      if (!Array.isArray(node.workload) || !node.workload.length) fail(node.id, "expected nonempty workload");
+      for (const w of node.workload) {
+        exact(w, ["traffic", "endpoint", "rate", "context"], node.id + ".workload");
+        if (w.traffic != null && !Object.hasOwn(spec.traffic || {}, w.traffic)) fail(node.id, `unknown traffic class ${w.traffic}`);
+        if (w.endpoint != null) text(w.endpoint, node.id);
+        if (w.context != null) { object(w.context, node.id); json(w.context, node.id); }
+        if (!Array.isArray(w.rate) && (!Number.isFinite(w.rate) || w.rate < 0)) fail(node.id, "invalid workload rate");
+        if (Array.isArray(w.rate)) {
+          let last = -1;
+          if (!w.rate.length) fail(node.id, "empty rate curve");
+          for (const pair of w.rate) {
+            if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(Number.isFinite) || pair[0] <= last || pair[0] < 0 || pair[1] < 0) fail(node.id, "invalid workload curve");
+            last = pair[0];
+          }
+        }
+      }
+    }
+    if (Object.hasOwn(node, "routing")) {
+      if (["kafka", "queue"].includes(node.kind)) fail(node.id, "consumer assignment controls log routing; put rules on the consumer");
+      routing(node.routing, node, node.id + ".routing");
+    }
+    for (const [name, endpoint] of Object.entries(node.endpoints || {})) {
+      object(endpoint, name);
+      if (endpoint.calls != null && !Array.isArray(endpoint.calls)) fail(name, "calls must be an array");
+      for (const call of endpoint.calls || []) {
+      object(call, name + ".call");
+      if (Object.hasOwn(call, "when")) condition(call.when, name + ".when");
+      if (Object.hasOwn(call, "routing")) {
+        if (call.to != null) fail(name, "call cannot contain both to and routing");
+        routing(call.routing, node, name + ".routing");
+      }
+      }
+    }
+  }
+}
+
+return { validateRouting };
+})();
 const VALIDATION = (() => {
+const { validateRouting } = ROUTING_VALIDATION;
 
 // Validate the public authoring contract before layout, browser packaging or simulation.
 const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
@@ -2182,6 +2509,7 @@ function validateSpec(spec, features = {}, kinds) {
     if (edge.p != null) number(edge.p, "edge.p"); // random routing accepts weights > 1
     if (edge.retries != null) number(edge.retries, "edge.retries", 0, Infinity, true);
   }
+  validateRouting(features.endpoints === false ? { ...spec, nodes: spec.nodes.map(n => ({ ...n, endpoints: undefined })) } : spec);
   const parents = new Map();
   for (const edge of edges.filter(e => e.kind === "replication" && ["db", "dynamodb"].includes(nodes.get(e.from).kind) && ["db", "dynamodb"].includes(nodes.get(e.to).kind))) {
     if (parents.has(edge.to)) fail(edge.to, "a table replica must have one primary");
@@ -2213,16 +2541,26 @@ function validateSpec(spec, features = {}, kinds) {
     if (!Array.isArray(endpoint.calls)) fail(route + ".calls", "expected an array");
     for (const call of endpoint.calls) {
       object(call, route + ".call");
-      if (!edges.some(e => e.from === node.id && e.to === call.to && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${call.to}`);
+      const actions = call.routing ? [...call.routing.rules.map(r => r.action), call.routing.fallback] : [];
+      const destinations = call.routing ? [...new Set(actions.flatMap(a => a.type === "send" ? [a.to] : a.type === "weighted" ? a.targets.map(t => t.to) : []))] : [call.to];
       if (call.p != null) number(call.p, route + ".p", 0, 1);
-      if (features.tables !== false && (call.op != null || call.table != null)) {
-        if (!OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
-        const target = nodes.get(call.to);
-        const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
-        if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${call.to}`);
-        if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+      const tableCall = features.tables !== false && (call.op != null || call.table != null);
+      if (tableCall && !OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
+      for (const destination of destinations) {
+        if (!edges.some(e => e.from === node.id && e.to === destination && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${destination}`);
+        if (tableCall) {
+          const target = nodes.get(destination);
+          const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
+          if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${destination}`);
+          if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+        }
       }
     }
+  }
+  if (spec.ports != null) {
+    object(spec.ports, "ports");
+    for (const [port, ids] of Object.entries(spec.ports))
+      for (const id of [].concat(ids)) if (!nodes.has(id)) fail("ports." + port, `unknown node ${id}`);
   }
   for (const key of ["speed", "window", "length", "per"]) if (spec.sim?.[key] != null) number(spec.sim[key], "sim." + key, Number.MIN_VALUE);
   if (spec.scenario) {
@@ -2329,7 +2667,7 @@ function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -3265,6 +3603,8 @@ function simSpec(model) {
     scenario: model.scenario,
     flags: model.flags,
     records: model.records,
+    ...(model.traffic ? { traffic: model.traffic } : {}),
+    ...(model.policies ? { policies: model.policies } : {}),
     features: model.features,
   };
 }
@@ -3471,6 +3811,7 @@ const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: []
 let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
 let routeFilter = null;
+let trafficDisplay = null;
 // A selected saved record: keep its request/replication packets visible.
 let recordFilter = null;
 let paused = false;
@@ -3512,6 +3853,10 @@ function packetEl(v) {
     g.innerHTML = `<path class="pk-trail"/><path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
   } else {
     g.innerHTML = `<path class="pk-trail"/><circle r="1.9"/>`;
+  }
+  if (DATA.traffic) {
+    const symbol = document.createElementNS(NS, 'path');
+    symbol.setAttribute('class', 'pk-symbol'); g.append(symbol);
   }
   g.style.display = "none";
   v.layer.appendChild(g);
@@ -3558,6 +3903,9 @@ function drawPackets() {
     if (slot.kind !== packet.kind) {
       slot.g.dataset.kind = packet.kind;
       slot.kind = packet.kind;
+      if (DATA.traffic) slot.g.querySelector('.pk-symbol').setAttribute('d',
+        packet.kind === 'record' ? 'M-2-2H2V2H-2Z' : packet.kind === 'replication' ? 'M0-3L3 0 0 3-3 0Z' :
+        packet.kind === 'retry' ? 'M3 0A3 3 0 1 1-3 0A3 3 0 1 1 3 0ZM1 0A1 1 0 1 0-1 0A1 1 0 1 0 1 0Z' : ['error','drop'].includes(packet.kind) ? 'M-2-2L2 2M2-2L-2 2' : 'M2 0A2 2 0 1 1-2 0A2 2 0 1 1 2 0Z');
     }
     const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
     const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
@@ -3574,7 +3922,9 @@ function drawPackets() {
     const traced = sim.tracing?.msgId;
     const record = recordFilter && ((packet.msg || packet.call?.job.msg)?.records?.[recordFilter.table]);
     const matchesRecord = recordFilter && (record?.key === recordFilter.key || (packet.entry?.table === recordFilter.table && packet.entry.key === recordFilter.key));
-    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    trafficDisplay?.paint(slot, packet);
+    const classDim = trafficDisplay && !trafficDisplay.matches(packet) ? 0.12 : 1;
+    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
@@ -4008,10 +4358,16 @@ const inspector = (() => {
       const byName = new Map(list.map((r) => [r.name, r]));
       const rows = names.map((name) => {
         const r = byName.get(name) || { rate: 0, p50: 0, p99: 0, errors: 0, count: 0 };
-        const calls = (declared[name]?.calls || []).map((c) => `${specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
+        const calls = (declared[name]?.calls || []).map((c) => `${c.routing ? "routing rules" : specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
         return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
       });
       return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+    function routing(id) {
+      if (!sim.trafficState) return "";
+      const classes = sim.trafficOf(id).filter(c => c.rate > 0).map(c => `${esc(DATA.traffic?.[c.id]?.label || c.label)} ${rate(c.rate)} arrivals`).join(" · ");
+      const decisions = sim.routingOf(id).map(d => `<div class="tp-decision">${esc(d.rule)} → ${esc(d.to || "reject")} · ${d.count} ${esc(d.outcome)}</div>`).join("");
+      return `<p class="tp-ins-note">${classes}${decisions ? ` · decisions over the last ${sim.cfg.window}s` : ""}</p>${decisions}`;
     },
     function tables(id) {
       const list = sim.tablesOf(id);
@@ -4052,7 +4408,7 @@ const inspector = (() => {
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
     // Following needs requests through this node: offered once it has seen some.
-    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit));
+    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit || node.workload));
     write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
     panel.toggleAttribute("data-down", !node.up);
   }
@@ -4195,7 +4551,7 @@ const tracer = (() => {
   function follow(route) {
     inspector.close();
     endpoint = route || null;
-    sim.follow(endpoint);
+    sim.follow(endpoint, trafficDisplay?.selected);
     active = true;
     lingering = 0;
     timeScale = 0.25;
@@ -4223,11 +4579,12 @@ const tracer = (() => {
     const root = spans[0];
     panel.querySelector(".tp-tr-name").textContent = t.endpoint || endpoint || "a request";
     panel.querySelector(".tp-tr-stat").textContent = !root ? "waiting for the next one…" : t.done ? `${ms(root.total)}${root.ok === false ? " · failed" : ""}` : "in flight…";
+    if (sim.trafficState && root) panel.querySelector(".tp-tr-stat").textContent += t.truncated ? " · truncated (256 spans / 60s limit)" : sim.tracePending() ? (t.done ? " · async pending" : "") : " · journey complete";
     // Light the path: every node with a span, and the edges between parent and child spans.
     const nodes = new Set(spans.map((s) => s.node));
     const edges = new Set();
     for (const s of spans) if (s.parent != null) {
-      const from = spans[s.parent].node;
+      const from = spans[s.parent]?.node;
       const index = DATA.spec.edges.findIndex((e) => e.from === from && e.to === s.node);
       if (index >= 0) edges.add(index);
     }
@@ -4241,11 +4598,11 @@ const tracer = (() => {
     const depth = new Map();
     const walk = (parent, d) => spans.filter((s) => s.parent === parent).forEach((s) => (order.push(s), depth.set(s.id, d), walk(s.id, d + 1)));
     walk(null, 0);
-    panel.querySelector(".tp-tr-body").innerHTML = order
+    panel.querySelector(".tp-tr-body").innerHTML = (root.context ? `<div class="tp-tr-context">${esc(DATA.traffic?.[root.traffic]?.label || root.traffic || "Unclassified")} · ${esc(JSON.stringify(root.context))}</div>` : "") + order
       .map((s) => {
         const left = ((s.start || 0) / total) * 100;
         const width = s.done ? Math.max(0.8, ((s.total || 0) / total) * 100) : 0.8;
-        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>`;
+        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>${(s.decisions || []).map(d => `<div class="tp-decision">${esc(d.rule)} → ${esc(d.to || "reject")} · ${esc(d.outcome)}${d.observations.map(o => `<br>${esc(o.field)}: ${o.exists ? esc(JSON.stringify(o.value)) : "missing"} · ${esc(o.op)} ${esc(JSON.stringify(o.expected))} → ${o.result}`).join("")}</div>`).join("")}`;
       })
       .join("");
   }
@@ -4260,7 +4617,7 @@ const tracer = (() => {
     // Once the request has answered and its async steps have landed, return to normal speed
     // but keep the timeline up until the reader closes it.
     const t = sim.tracing;
-    if (t?.done && t.spans.every((s) => s.done)) {
+    if (t?.truncated || (t?.done && t.spans.every((s) => s.done) && (!sim.trafficState || !sim.tracePending()))) {
       lingering += 0.12;
       if (lingering > 0.6) {
         timeScale = 1;

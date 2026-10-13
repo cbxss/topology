@@ -89,6 +89,8 @@ function createSim(spec) {
   const logs = new Map();
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  const contextual = !!(spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
+  if (contextual) sim.trafficState = { definitions: spec.traffic || {}, policies: spec.policies || {}, emitted: [], arrivals: [], paths: [], decisions: [] };
   // Factories only initialize state. Callbacks run after transport has been wired.
   let transport;
   const tables = createTables(sim, spec.records || {}, {
@@ -134,21 +136,36 @@ function createSim(spec) {
     logModel.pull(dt);
     transport.tickPackets(dt);
     reportTick(sim, dt);
+    if (sim.trafficState && sim.tracing?.msgId && now - sim.tracing.started >= 60 && sim.tracePending()) sim.tracing.truncated = true;
     if (sim.events.length > 512) sim.events.splice(0, sim.events.length - 512);
   }
 
-  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
+  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + ((node.emit || node.workload) && node.up ? node.flow : 0), 0);
 
   sim.step = (dt) => {
+    if (dt <= 0) return;
     // Sub-step so a long frame doesn't teleport packets past their arrival.
     const n = Math.max(1, Math.ceil(dt / (1 / 60)));
     for (let i = 0; i < n; i++) step(dt / n);
   };
   // Follow one request: the next one started on `endpoint` (any, if omitted). Its spans fill
   // sim.tracing.spans as it moves; sim.tracing.done once its root answers.
-  sim.follow = (endpoint) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null });
+  sim.follow = (endpoint, classes) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null, ...(classes?.length ? { classes: [...classes] } : {}) });
+  sim.tracePending = () => {
+    const id = sim.tracing?.msgId;
+    if (!id) return false;
+    const related = msg => (msg?.rootId ?? msg?.id) === id;
+    if (sim.packets.some(p => related(p.msg || p.call?.job.msg))) return true;
+    if ([...nodes.values()].some(n => [...n.jobs].some(j => !j.done && related(j.msg)))) return true;
+    if ([...sim.calls].some(c => related(c.job.msg))) return true;
+    for (const log of logs.values()) for (const partition of log.envelopes || [])
+      if ([...partition.values()].some(e => e.rootId === id)) return true;
+    for (const n of nodes.values()) for (const pending of n.wal?.pending?.values() || [])
+      if ([...pending.values()].some(item => related(item.msg))) return true;
+    return false;
+  };
   sim.unfollow = () => (sim.tracing = null);
-  sim.tracedId = (packet) => (packet.msg || packet.call?.job.msg)?.id;
+  sim.tracedId = (packet) => { const msg = packet.msg || packet.call?.job.msg; return msg?.rootId ?? msg?.id; };
   sim.setUp = setUp;
   sim.setBroker = setBroker;
   sim.readable = readable;

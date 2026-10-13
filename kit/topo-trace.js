@@ -19,7 +19,7 @@ const tracer = (() => {
   function follow(route) {
     inspector.close();
     endpoint = route || null;
-    sim.follow(endpoint);
+    sim.follow(endpoint, trafficDisplay?.selected);
     active = true;
     lingering = 0;
     timeScale = 0.25;
@@ -47,11 +47,12 @@ const tracer = (() => {
     const root = spans[0];
     panel.querySelector(".tp-tr-name").textContent = t.endpoint || endpoint || "a request";
     panel.querySelector(".tp-tr-stat").textContent = !root ? "waiting for the next one…" : t.done ? `${ms(root.total)}${root.ok === false ? " · failed" : ""}` : "in flight…";
+    if (sim.trafficState && root) panel.querySelector(".tp-tr-stat").textContent += t.truncated ? " · truncated (256 spans / 60s limit)" : sim.tracePending() ? (t.done ? " · async pending" : "") : " · journey complete";
     // Light the path: every node with a span, and the edges between parent and child spans.
     const nodes = new Set(spans.map((s) => s.node));
     const edges = new Set();
     for (const s of spans) if (s.parent != null) {
-      const from = spans[s.parent].node;
+      const from = spans[s.parent]?.node;
       const index = DATA.spec.edges.findIndex((e) => e.from === from && e.to === s.node);
       if (index >= 0) edges.add(index);
     }
@@ -65,11 +66,11 @@ const tracer = (() => {
     const depth = new Map();
     const walk = (parent, d) => spans.filter((s) => s.parent === parent).forEach((s) => (order.push(s), depth.set(s.id, d), walk(s.id, d + 1)));
     walk(null, 0);
-    panel.querySelector(".tp-tr-body").innerHTML = order
+    panel.querySelector(".tp-tr-body").innerHTML = (root.context ? `<div class="tp-tr-context">${esc(DATA.traffic?.[root.traffic]?.label || root.traffic || "Unclassified")} · ${esc(JSON.stringify(root.context))}</div>` : "") + order
       .map((s) => {
         const left = ((s.start || 0) / total) * 100;
         const width = s.done ? Math.max(0.8, ((s.total || 0) / total) * 100) : 0.8;
-        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>`;
+        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>${(s.decisions || []).map(d => `<div class="tp-decision">${esc(d.rule)} → ${esc(d.to || "reject")} · ${esc(d.outcome)}${d.observations.map(o => `<br>${esc(o.field)}: ${o.exists ? esc(JSON.stringify(o.value)) : "missing"} · ${esc(o.op)} ${esc(JSON.stringify(o.expected))} → ${o.result}`).join("")}</div>`).join("")}`;
       })
       .join("");
   }
@@ -84,7 +85,7 @@ const tracer = (() => {
     // Once the request has answered and its async steps have landed, return to normal speed
     // but keep the timeline up until the reader closes it.
     const t = sim.tracing;
-    if (t?.done && t.spans.every((s) => s.done)) {
+    if (t?.truncated || (t?.done && t.spans.every((s) => s.done) && (!sim.trafficState || !sim.tracePending()))) {
       lingering += 0.12;
       if (lingering > 0.6) {
         timeScale = 1;

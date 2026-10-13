@@ -78,6 +78,18 @@
       "prompt": "Make a small profile API diagram where I can inspect all saved fields of one user: notification preferences, quota, enabled, and nickname. Show the write reaching a replica. Use synthetic values; I do not need a SQL editor.",
       "expected_output": "Use documented records and tables with matching userId keys, endpoint upsert and a replication edge. Declare all requested fields in the spec, including false, zero and null values where relevant. Reuse the existing record inspector and Follow writes without modifying the engine or hardcoding fields in HTML. Verify saved fields at the primary and replica. Explain that the SELECT display is a read-only view of simulated storage and that field values are independently sampled. Run --check, inspect a browser screenshot and verify both view line ends.",
       "files": []
+    },
+    {
+      "id": 14,
+      "prompt": "Show two tenant tiers sharing a gateway, routing to separate services and databases based on request metadata. Make a premium database outage stay isolated, and distinguish traffic with color.",
+      "expected_output": "Use workload, traffic, reusable policies and routing from the spec reference without engine edits. Route at two points from immutable context; include explicit fallback and real outgoing edges. Verify premium failure never falls back to standard storage. Use labeled named colors with Traffic/Activity/None controls and follow explanations. Run model checks, trace, browser screenshots in both views/themes and line ends.",
+      "files": []
+    },
+    {
+      "id": 15,
+      "prompt": "Show purchase and audit events sharing Kafka, a consumer outage and recovery, then each event reaching the appropriate downstream service.",
+      "expected_output": "Use mixed traffic workload and context; consumer routing chooses sinks after Kafka delivery. Context and class persist through backlog with parent/root trace continuity. Explain dispatch offsets rather than durable ACKs or exactly-once. Verify backlog drains, correct sinks receive each class, and follow includes async descendants. Inspect colors, reduced motion and phone layout; check browser console and line ends.",
+      "files": []
     }
   ]
 }

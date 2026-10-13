@@ -62,6 +62,7 @@ export function stripFeatures(spec, set) {
   if (!set.endpoints) {
     for (const node of objects(out.nodes)) {
       delete node.endpoints;
+      if (node.workload) node.workload = node.workload.map(({ endpoint, ...work }) => work);
       // An endpoint mix becomes one total rate (curves keep only their first rate).
       if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit) && !("every" in node.emit))
         node.emit = Object.values(node.emit).reduce((sum, e) => sum + (typeof e === "number" ? e : Array.isArray(e) ? e[0][1] : 0), 0);

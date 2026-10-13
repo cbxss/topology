@@ -10,6 +10,9 @@
 // Positions: pass `at: [col, row]` to a pattern to place it (its nodes sit at fixed offsets
 // from there); leave it out everywhere to let auto-layout place everything.
 
+import { fileURLToPath } from "node:url";
+import { modelOf } from "./topo.mjs";
+
 const place = (at, dc, dr) => (at ? { at: [at[0] + dc, at[1] + dr] } : {});
 const spread = (count, gap = 0.8) => Array.from({ length: count }, (_, i) => (i - (count - 1) / 2) * gap);
 
@@ -120,16 +123,137 @@ export function canary(id, { router, flag = id, rollout = 0, v1 = {}, v2 = {}, f
   return { nodes, edges, flags: { [flag]: { rollout } }, in: router, out: [a.id, b.id] };
 }
 
+// A whole spec as a fragment: another figure's system, embedded in this one. Every node, edge,
+// group and flag id becomes `<prefix>.<id>`; endpoint routes and table names stay as they are.
+// The child's client sources (kind `client` with `emit`) are dropped so the parent drives it
+// (`keepSources: true` keeps them), its scenario is dropped (the parent's story can still
+// `fail: "<prefix>.<id>"`), and its sim and grid give way to the parent's. With `at`, the
+// child keeps its own drawing (its `at`s, else its auto-layout) moved so its corner is there;
+// without, everything is left to auto-layout. The system stands on a plate labelled with its
+// title. `ports` in the child (`{ in: "api", events: "topic" }`) name what the parent may link
+// to; the fragment's `in` is ports.in (default: what the dropped sources called), `out` is
+// ports.out, and `id("x")` turns any child id into its embedded one.
+//
+//   import ledger from "../ledger/ledger.spec.mjs";   // or: await importSpec(new URL(…, import.meta.url))
+//   const books = system("books", ledger, { at: [5, 0] });
+//   compose(meta, books, link("orders", books.in), link(books.id("shard-3"), "audit"));
+export function system(prefix, spec, { at, label = spec.title ?? prefix, keepSources = false, shared = [], plate = true, region = false } = {}) {
+  if (!prefix || /[.>:]/.test(prefix)) throw new Error(`system: the prefix must be nonempty, without ".", ">" or ":" (got "${prefix}")`);
+  if (!spec || !Array.isArray(spec.nodes)) throw new Error(`system ${prefix}: expected a spec with nodes`);
+  const id = (local) => `${prefix}.${local}`;
+  const edges = (spec.edges || []).map((edge) => (Array.isArray(edge) ? { from: edge[0], to: edge[1] } : edge));
+  const dropped = new Set(keepSources ? [] : spec.nodes.filter((node) => node.kind === "client" && (node.emit != null || node.workload != null)).map((node) => node.id));
+  const kept = spec.nodes.filter((node) => !dropped.has(node.id));
+  if (!kept.length) throw new Error(`system ${prefix}: nothing is left once its sources are dropped`);
+
+  // Freeze the child's own drawing: its placed nodes, and auto-layout for the rest.
+  let spot = new Map();
+  if (at) {
+    for (const node of modelOf(spec).nodes) spot.set(node.id, node.at || node.auto);
+    const keptSpots = kept.map((node) => spot.get(node.id));
+    const [c0, r0] = [Math.min(...keptSpots.map((s) => s[0])), Math.min(...keptSpots.map((s) => s[1]))];
+    spot = new Map(kept.map((node) => [node.id, [round(at[0] + spot.get(node.id)[0] - c0), round(at[1] + spot.get(node.id)[1] - r0)]]));
+  }
+
+  const flagOf = (name) => (name == null || shared.includes(name) ? name : id(name));
+  const action = (a) => (a.type === "send" ? { ...a, to: id(a.to) } : a.type === "weighted" ? { ...a, targets: a.targets.map((t) => ({ ...t, to: id(t.to) })) } : a);
+  const routing = (r) => ({ ...r, rules: r.rules.map((rule) => ({ ...rule, action: action(rule.action) })), fallback: action(r.fallback) });
+  const nodes = kept.map(({ at: _, ...node }) => {
+    const out = { ...node, id: id(node.id), label: node.label ?? node.id, ...(at ? { at: spot.get(node.id) } : {}) };
+    if (node.routing) out.routing = routing(node.routing);
+    if (node.endpoints)
+      out.endpoints = Object.fromEntries(Object.entries(node.endpoints).map(([route, endpoint]) =>
+        [route, endpoint.calls ? { ...endpoint, calls: endpoint.calls.map((call) => ({ ...call, ...(call.to != null ? { to: id(call.to) } : {}), ...(call.routing ? { routing: routing(call.routing) } : {}) })) } : endpoint]));
+    return out;
+  });
+  const keptEdges = edges.filter((edge) => !dropped.has(edge.from) && !dropped.has(edge.to)).map(({ via: _, ...edge }) => {
+    const out = { ...edge, from: id(edge.from), to: id(edge.to) };
+    for (const key of ["flag", "unless"]) if (edge[key] != null) out[key] = flagOf(edge[key]);
+    return out;
+  });
+
+  const groups = (spec.groups || []).filter((group) => group.nodes.some((member) => !dropped.has(member)))
+    .map((group) => ({ ...group, id: id(group.id), label: group.label ?? group.id, nodes: group.nodes.filter((member) => !dropped.has(member)).map(id) }));
+  if (plate) {
+    const inner = new Set((spec.groups || []).flatMap((group) => group.nodes).map(id));
+    const top = [...nodes, ...groups].map((member) => member.id).filter((member) => !inner.has(member));
+    groups.push({ id: prefix, label, ...(region ? { region: true } : {}), nodes: top, ...(spec.refs ? { refs: spec.refs } : {}), ...(spec.notes ? { notes: spec.notes } : {}) });
+  }
+
+  // Source refs (kit/provenance.mjs) follow their sources into the namespace. `self` stays the
+  // parent's repo unless the child names its own (importSpec does).
+  const ownSources = new Set(Object.keys(spec.sources || {}));
+  const moveRef = (ref) => {
+    const text = typeof ref === "string" ? ref : ref.ref;
+    const source = text.slice(0, text.indexOf(":"));
+    if (!ownSources.has(source)) return ref;
+    const moved = `${prefix}.${text}`;
+    return typeof ref === "string" ? moved : { ...ref, ref: moved };
+  };
+  for (const item of [...nodes, ...keptEdges, ...groups]) if (item.refs) item.refs = item.refs.map(moveRef);
+
+  const ports = {};
+  for (const [name, local] of Object.entries(spec.ports || {})) {
+    for (const target of [].concat(local)) if (dropped.has(target) || !spec.nodes.some((node) => node.id === target)) throw new Error(`system ${prefix}: port ${name} names ${target}, which isn't a kept node`);
+    ports[name] = Array.isArray(local) ? local.map(id) : id(local);
+  }
+  const called = [...new Set(edges.filter((edge) => dropped.has(edge.from) && !dropped.has(edge.to)).map((edge) => id(edge.to)))];
+  const entry = ports.in ?? (called.length === 1 ? called[0] : called.length ? called : undefined);
+
+  return {
+    nodes,
+    edges: keptEdges,
+    groups,
+    flags: Object.fromEntries(Object.entries(spec.flags || {}).map(([name, flag]) => [flagOf(name), flag])),
+    records: spec.records,
+    sources: spec.sources && Object.fromEntries(Object.entries(spec.sources).map(([name, source]) => [`${prefix}.${name}`, source])),
+    traffic: spec.traffic,
+    policies: spec.policies,
+    per: spec.sim?.per ?? 1,
+    in: entry,
+    out: ports.out,
+    ports,
+    id,
+  };
+}
+
+const round = (n) => Math.round(n * 1000) / 1000;
+
+// Load a spec file for system(), with the positions its serve editor saved (<name>.layout.json),
+// the way build.mjs does. A plain `import` works too; it just skips the layout file.
+// Relative `sources` repos are made absolute, and `self` is pinned to the child's own repo, so
+// its source refs still resolve from the figure that embeds it.
+export async function importSpec(file) {
+  const path = file instanceof URL ? fileURLToPath(file) : file;
+  const [{ loadSpec }, { selfRoot }, { dirname, resolve }] = await Promise.all([import("../scripts/page.mjs"), import("../scripts/sources.mjs"), import("node:path")]);
+  const spec = await loadSpec(path);
+  const base = dirname(resolve(path));
+  const relative = (repo) => typeof repo === "string" && /^\.{1,2}(\/|$)/.test(repo);
+  const sources = Object.fromEntries(Object.entries(spec.sources || {}).map(([name, source]) => [name, relative(source.repo) ? { ...source, repo: resolve(base, source.repo) } : source]));
+  sources.self ??= { repo: selfRoot(base) };
+  return { ...spec, sources };
+}
+
 // Join fragments (and plain { nodes, edges } objects) into a spec. `meta` carries the rest
-// of the spec: title, caption, sim, scenario… Node ids must be unique across fragments.
+// of the spec: title, caption, sim, scenario… Node ids must be unique across fragments, and
+// records, traffic classes, policies and sources with one name must agree.
 export function compose(meta = {}, ...fragments) {
   const spec = { ...meta, nodes: [...(meta.nodes || [])], edges: [...(meta.edges || [])], groups: [...(meta.groups || [])], flags: { ...(meta.flags || {}) } };
+  const MERGED = ["records", "traffic", "policies", "sources"];
+  for (const key of MERGED) spec[key] = { ...(meta[key] || {}) };
+  const per = meta.sim?.per ?? 1;
   for (const fragment of fragments.flat(Infinity)) {
     if (!fragment) continue;
     spec.nodes.push(...(fragment.nodes || []));
     spec.edges.push(...(fragment.edges || []));
     spec.groups.push(...(fragment.groups || []));
     Object.assign(spec.flags, fragment.flags || {});
+    for (const key of MERGED) for (const [name, value] of Object.entries(fragment[key] || {})) {
+      if (spec[key][name] && JSON.stringify(spec[key][name]) !== JSON.stringify(value)) throw new Error(`compose: two different ${key} entries are called "${name}"`);
+      spec[key][name] = value;
+    }
+    if (fragment.per != null && fragment.per !== per)
+      console.warn(`compose: an embedded system was drawn at sim.per ${fragment.per}, this spec runs at ${per}; its rates and capacities now count ${per} requests per packet`);
   }
   const seen = new Set();
   for (const node of spec.nodes) {
@@ -138,5 +262,6 @@ export function compose(meta = {}, ...fragments) {
   }
   if (!spec.groups.length) delete spec.groups;
   if (!Object.keys(spec.flags).length) delete spec.flags;
+  for (const key of MERGED) if (!Object.keys(spec[key]).length) delete spec[key];
   return spec;
 }

@@ -147,6 +147,30 @@ try {
   ]);
   assert.equal(await browser.eval('document.querySelector(".tp-record dd b")'), null);
 
+  for (const name of ['tenant-routing', 'event-routing']) {
+    await load(name);
+    const input = await browser.eval('window.__topo.data.spec');
+    const reference = createSim(input);
+    reference.events.length = 0; reference.quiet = true; reference.follow();
+    for (let i = 0; i < 1500; i++) reference.step(1/60);
+    const browserState = await browser.eval(`(() => { const s=window.__topo.sim; s.events.length=0; s.quiet=true; s.follow(); for(let i=0;i<1500;i++) s.step(1/60); return window.__simVerification.observeSim(s); })()`);
+    assert.deepEqual(browserState, JSON.parse(JSON.stringify(observeSim(reference))), `${name}: new routing browser/Node parity`);
+    const before = await browser.eval('JSON.stringify(window.__simVerification.observeSim(window.__topo.sim))');
+    await browser.eval(`for (const mode of ['activity','none','traffic']) window.__topo.traffic.setMode(mode); document.querySelector('.tp-traffic-legend button').click();`);
+    assert.equal(await browser.eval('JSON.stringify(window.__simVerification.observeSim(window.__topo.sim))'), before, 'display controls do not mutate simulation');
+    await until('document.querySelector(".tp-stage").hasAttribute("data-traffic-filter")');
+    await browser.eval('window.__topo.tracer.follow(); for(let i=0;i<240;i++) window.__topo.sim.step(1/60);');
+    await until('document.querySelector(".tp-tr-context") !== null');
+    assert.ok(await browser.eval('document.querySelector(".tp-decision") !== null'));
+    if (name === 'event-routing') assert.ok(await browser.eval('window.__topo.sim.tracing.spans.some(s => s.node === "consumer")'));
+    await browser.eval('window.__topo.tracer.stop(); window.__topo.setView("flat")');
+    await until('window.__topo.view === "flat" && !window.__topo.morphing');
+    await browser.eval('window.__topo.setView("iso")');
+    await until('window.__topo.view === "iso" && !window.__topo.morphing');
+    assert.deepEqual(errors, []);
+  }
+  console.log('routing browser parity, class controls, asynchronous tracing and both views passed');
+
   await load('orders-api', '-tables,-trace,-morph');
   assert.equal(await browser.eval('!!window.__topo.records || !!window.__topo.tracer'), false);
   assert.deepEqual(errors, []);

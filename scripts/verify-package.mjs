@@ -21,7 +21,7 @@ try {
   const manifest = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
   const skill = readFileSync(join(cwd, "SKILL.md"), "utf8");
   assert.equal(/^  version: "([^"]+)"$/m.exec(skill)?.[1], manifest.version, "package and skill versions differ");
-  for (const example of ["orders-api", "data-stores"]) {
+  for (const example of ["orders-api", "data-stores", "tenant-routing", "event-routing", "order-ledger"]) {
     const spec = `examples/${example}/${example}.spec.mjs`;
     execFileSync(process.execPath, ["scripts/build.mjs", spec, "--check"], { cwd, stdio: "pipe" });
     execFileSync(process.execPath, ["scripts/build.mjs", spec, "--out", join(temp, `${example}.html`)], { cwd, stdio: "pipe" });

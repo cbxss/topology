@@ -1,3 +1,5 @@
+import { attachContext } from "./context.mjs";
+import { matches, selectRoute } from "./routing.mjs";
 import { DETECT, isLog, routeOf, split } from "./common.mjs";
 import { targetOf } from "./scenario.mjs";
 
@@ -28,7 +30,21 @@ function createTransport(sim, { tables, logModel, decide }) {
   edges.forEach((edge) => allowanceOf(edge));
 
   let ids = 0;
-  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  const newMsg = (source, endpoint) => {
+    const msg = { id: ++ids, source, born: sim.time, draws: null, endpoint };
+    return sim.trafficState ? attachContext(msg, {}, null) : msg;
+  };
+  function decisionFor(job, routing) {
+    const decision = selectRoute(routing, job.msg, sim.trafficState.policies, rand);
+    const edge = decision.to && job.node.data.find(e => e.to === decision.to);
+    if (edge && ((edge.flag && !decide(job.msg, edge.flag)) || (edge.unless && decide(job.msg, edge.unless)))) decision.outcome = "flag-blocked";
+    if (edge && decision.outcome === "selected" && !nodes.get(edge.to).up) decision.outcome = "target-down";
+    const event = { ...decision, node: job.node.id, at: sim.time, traffic: job.msg.traffic, msgId: job.msg.id };
+    sim.trafficState.decisions.push(event);
+    if (job.span) (job.span.decisions ??= []).push(event);
+    if (!edge || decision.outcome === "flag-blocked") { job.failed = true; return null; }
+    return edge;
+  }
   // Per-route history at a node: rates, service times, end-to-end latency and errors.
   const routeStats = (node, name) => {
     if (!name) return null;
@@ -45,42 +61,56 @@ function createTransport(sim, { tables, logModel, decide }) {
       edge.sent++;
       edge.recent.push(sim.time);
     }
+    if (sim.trafficState) {
+      const msg = extra.msg || extra.call?.job.msg;
+      if (msg && packet.dir > 0) sim.trafficState.paths.push({ at: sim.time, edge: edge.index, traffic: msg.traffic });
+    }
     sim.packets.push(packet);
     return packet;
   }
 
-  const burst = (edge, at = 1) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1 });
+  const burst = (edge, at = 1, msg) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1, ...(sim.trafficState && msg ? { msg, ep: msg.endpoint } : {}) });
 
   // --- jobs -----------------------------------------------------------------------------------
 
   function startJob(node, msg, call, extra = {}) {
     const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
     const t = sim.tracing;
-    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint)) {
+    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint) && (!t.classes || t.classes.includes(msg.traffic))) {
       t.msgId = msg.id;
       t.endpoint = msg.endpoint;
       t.started = sim.time;
     }
-    if (t && t.msgId === msg.id) {
+    const traceId = msg.rootId ?? msg.id;
+    if (t && t.msgId === traceId && !t.truncated) {
+      if (sim.trafficState && t.spans.length >= 256) t.truncated = true;
+    }
+    if (t && t.msgId === traceId && !t.truncated) {
       // Where this span starts in model time: the parent's own time plus any stages it had
       // finished, plus the network on the way.
       const parent = call ? call.job : extra.parentJob;
-      job.span = { id: t.spans.length, parent: parent?.span?.id ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      job.span = { id: t.spans.length, parent: parent?.span?.id ?? extra.traceParent ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      if (sim.trafficState) {
+        Object.assign(job.span, { msgId: msg.id, traffic: msg.traffic, context: msg.context });
+        if (extra.traceParent != null && !parent?.span) job.span.start = Math.max(0, (sim.time - t.started) * 1000);
+      }
       t.spans.push(job.span);
     }
+    if (sim.trafficState) sim.trafficState.arrivals.push({ at: sim.time, node: node.id, traffic: msg.traffic });
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
     if (!extra.entry) routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
-    if (!node.capacity) return begin(job);
+    if (!node.capacity) { begin(job); return job; }
     if (node.bucket >= 1) {
       node.bucket -= 1;
-      return begin(job);
+      begin(job); return job;
     }
-    if (node.waiting.length < node.queueMax) return node.waiting.push(job);
+    if (node.waiting.length < node.queueMax) { node.waiting.push(job); return job; }
     reject(job);
+    return job;
   }
 
   function begin(job) {
@@ -94,16 +124,16 @@ function createTransport(sim, { tables, logModel, decide }) {
   }
 
   // A request that never got in: counted at the node and on the edge, drawn as a red burst.
-  function dropAt(edge, node) {
+  function dropAt(edge, node, msg) {
     node.recentDrops.push(sim.time);
     if (!edge) return;
     edge.dropped++;
-    burst(edge);
+    burst(edge, 1, msg);
   }
 
   // Over capacity with a full buffer: answer 503 at once.
   function reject(job) {
-    dropAt(job.call ? job.call.edge : job.via, job.node);
+    dropAt(job.call ? job.call.edge : job.via, job.node, job.msg);
     respond(job, false);
   }
 
@@ -160,6 +190,14 @@ function createTransport(sim, { tables, logModel, decide }) {
       }
       job.stage = 0;
       issue(job, job.stages[0] || []);
+      return;
+    }
+    if (node.routing) {
+      const edge = decisionFor(job, node.routing);
+      if (edge) {
+        if (edge.sync) { job.waiting++; callOut(job, edge, 0); }
+        else launch(edge, "request", { msg: job.msg, parentJob: job });
+      }
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
@@ -273,8 +311,16 @@ function createTransport(sim, { tables, logModel, decide }) {
   function issue(job, calls) {
     const node = job.node;
     for (const call of calls) {
-      const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-      if (!edge || rand() >= (call.p ?? 1)) continue;
+      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) continue;
+      let edge;
+      if (call.routing) {
+        if (rand() >= (call.p ?? 1)) continue;
+        edge = decisionFor(job, call.routing);
+      } else {
+        edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+      }
+      if (!edge) continue;
       if (call.table) recordOf(job.msg, call.table);
       if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
       else if (edge.sync) {
@@ -309,7 +355,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
-      dropAt(edge, node);
+      dropAt(edge, node, packet.msg || packet.call?.job.msg);
       // Connection refused: the caller hears about it straight away.
       if (packet.call) {
         const call = packet.call;
@@ -321,13 +367,15 @@ function createTransport(sim, { tables, logModel, decide }) {
       const log = logs.get(node.id);
       const p = logModel.append(log, edge, packet);
       if (p == null) {
-        dropAt(edge, node);
+        dropAt(edge, node, packet.msg || packet.call?.job.msg);
         if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
         return;
       }
-      return startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
+      const job = startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
+      logModel.remember(log, p, packet.msg || packet.call?.job.msg, job?.span?.id);
+      return job;
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob, ...(packet.traceParent != null ? { traceParent: packet.traceParent } : {}) });
   }
 
   // --- sources --------------------------------------------------------------------------------
@@ -360,7 +408,11 @@ function createTransport(sim, { tables, logModel, decide }) {
     return entries[entries.length - 1][0];
   };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
+  const emitOne = (node) => {
+    const msg = newMsg(node.id, pickEndpoint(node, sim.time));
+    if (sim.trafficState) sim.trafficState.emitted.push({ at: sim.time, traffic: null });
+    return startJob(node, msg, null, { root: true });
+  };
 
   function resetNode(node) {
     // In-flight work is lost; callers waiting on it get a reset.
@@ -395,7 +447,22 @@ function createTransport(sim, { tables, logModel, decide }) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (isSchedule(node.emit)) {
+      if (node.workload) {
+        node.workClocks ??= node.workload.map(() => 0);
+        node.workload.forEach((work, index) => {
+          const rate = rateOf(work.rate, now);
+          if (!rate) return;
+          node.workClocks[index] -= dt;
+          while (node.workClocks[index] <= 0) {
+            node.workClocks[index] += (0.6 + rand() * 0.8) / rate;
+            const msg = newMsg(node.id, work.endpoint);
+            const definition = sim.trafficState.definitions[work.traffic];
+            attachContext(msg, { ...definition?.context, ...work.context }, work.traffic);
+            sim.trafficState.emitted.push({ at: now, traffic: msg.traffic });
+            startJob(node, msg, null, { root: true });
+          }
+        });
+      } else if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;

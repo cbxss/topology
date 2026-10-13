@@ -8,6 +8,7 @@ import { hiddenBy, labelTries, modelOf, projectionOf, renderView, simSpec, SLOTS
 import { createSim, formatCount, formatMs, formatRate, isLog, normalizeScenario, targetOf } from "../kit/topo-sim.mjs";
 import { bundleSim } from "./sim-bundle.mjs";
 import { describeFeatures } from "../kit/topo-features.mjs";
+import { stripProvenance, validateProvenance } from "../kit/provenance.mjs";
 
 export { modelOf };
 
@@ -28,13 +29,18 @@ export async function loadSpec(file) {
   return spec;
 }
 
+// Sources, refs and notes are for agents (build.mjs --sources); no page or model sees them.
+const figureOf = (spec) => stripProvenance(validateProvenance(spec));
+
 export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit = false } = {}) {
+  spec = figureOf(spec);
   const model = modelOf(spec, featureLayers);
   const features = model.features;
   view ||= spec.view || "iso";
   const rendered = { iso: renderView(model, "iso"), flat: renderView(model, "flat") };
   const data = {
     view,
+    ...(spec.traffic ? { traffic: spec.traffic, colorBy: spec.colorBy || "traffic" } : {}),
     slots: SLOTS,
     features,
     edit: edit && features.edit,
@@ -53,7 +59,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
 
   const keys = spec.keys || legendOf(model);
   const shown = (v) => rendered[v].svg.replace("<svg", `<svg${view === v ? "" : " hidden"}`);
-  const stageHtml = `<style>${TOPO_CSS}</style><div class="tp-views" role="group" aria-label="View">${["iso", "flat"].map((v) => `<button type="button" data-view="${v}" aria-pressed="${v === view}">${v === "iso" ? "ISO" : "2D"}</button>`).join("")}</div><div class="tp-stage" tabindex="0" role="application" aria-label="${k.escape(model.title)}: hover or arrow keys pick a node, Enter inspects it, F fails or restores it, V switches between isometric and 2D">${shown("iso")}${shown("flat")}</div>`;
+  const stageHtml = `<style>${TOPO_CSS}${spec.traffic ? readFileSync(join(KIT, "traffic.css"), "utf8") : ""}</style><div class="tp-views" role="group" aria-label="View">${["iso", "flat"].map((v) => `<button type="button" data-view="${v}" aria-pressed="${v === view}">${v === "iso" ? "ISO" : "2D"}</button>`).join("")}</div><div class="tp-stage" tabindex="0" role="application" aria-label="${k.escape(model.title)}: hover or arrow keys pick a node, Enter inspects it, F fails or restores it, V switches between isometric and 2D">${shown("iso")}${shown("flat")}</div>`;
   const body = k.plateHtml({
     fig: model.fig,
     title: model.title,
@@ -67,8 +73,9 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   let script = bundleSim() + `\nconst DATA = ${JSON.stringify(data)};\n`;
   // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
   // each wrapped in its own scope so none of their names meet the live code's.
-  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("validate.mjs", "VALIDATION") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION;");
+  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("routing-validation.mjs", "ROUTING_VALIDATION") + scoped("validate.mjs", "VALIDATION", "const { validateRouting } = ROUTING_VALIDATION;") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION;");
   script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
+  if (spec.traffic) script += "\n" + readFileSync(join(KIT, "topo-traffic.js"), "utf8");
   if (features.tables) script += "\n" + readFileSync(join(KIT, "topo-records.js"), "utf8");
   if (features.trace) script += "\n" + readFileSync(join(KIT, "topo-trace.js"), "utf8");
   if (model.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
@@ -107,6 +114,7 @@ function legendOf(model) {
 // phase by phase (each phase's settled numbers, the readout just before and 3 s after each
 // step), all from one run.
 export function check(spec, { seconds = 30, featureLayers = [], log = console.log } = {}) {
+  spec = figureOf(spec);
   const model = modelOf(spec, featureLayers);
   const sim = createSim(simSpec(model));
   sim.quiet = true;
@@ -164,9 +172,13 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
     log(`  ${sim.statsOf(node.id)}`);
     for (const route of sim.routesOf(node.id)) if (route.rate > 0) log(`      ${route.name}  ${formatRate(route.rate, per)} · p50 ${formatMs(route.p50)} · p99 ${formatMs(route.p99)}${route.errors ? ` · ${formatRate(route.errors, per)} errors` : ""}`);
   }
+  for (const c of sim.trafficOf()) log(`  traffic ${c.label}: ${c.rate.toFixed(1)}/s source emissions`);
+  for (const d of sim.routingOf()) log(`  routing ${d.node} / ${d.rule} → ${d.to || "reject"}: ${d.count} ${d.outcome} (last ${sim.cfg.window}s)`);
+  const colors = Object.values(spec.traffic || {}).map((c, i) => c.color || ["cyan", "blue", "violet", "magenta", "teal", "lime"][i % 6]);
+  if (colors.length > 6 || new Set(colors).size < colors.length) warnings.push("traffic classes reuse colors; use labels and class filters to distinguish them");
   // An endpoint's calls ride edges: each must have one.
   for (const node of model.nodes) for (const [name, endpoint] of Object.entries(node.endpoints || {})) for (const call of endpoint.calls || [])
-    if (!model.edges.some((edge) => edge.from === node.id && edge.to === call.to)) warnings.push(`endpoint ${name} on ${node.id} calls ${call.to}, but there is no edge ${node.id} → ${call.to}`);
+    if (!call.routing && !model.edges.some((edge) => edge.from === node.id && edge.to === call.to)) warnings.push(`endpoint ${name} on ${node.id} calls ${call.to}, but there is no edge ${node.id} → ${call.to}`);
   [...sim.logs.keys()].forEach((id, index) => {
     const mid = lagAt[Math.floor(lagAt.length / 2)]?.[index] ?? 0;
     const end = lagAt[lagAt.length - 1]?.[index] ?? 0;
@@ -186,7 +198,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
       warnings.push(`edge ${edge.from} → ${edge.to}: ${edge.dropped} of ${edge.sent} dropped${target.capacity ? ` (${edge.to} admits ${target.capacity}/s; expected if you meant to show shedding)` : ""}`);
     }
   }
-  if (!model.nodes.some((node) => node.emit)) warnings.push("no node has `emit`: nothing will move");
+  if (!model.nodes.some((node) => node.emit || node.workload)) warnings.push("no node has `emit` or `workload`: nothing will move");
   warnings.push(...layoutWarnings(model));
   if (warnings.length) {
     log("warnings:");
@@ -198,6 +210,7 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
 // One request on `endpoint` followed end to end, as text: each span indented under the call
 // that made it, with its model-time duration and a bar drawn to scale.
 export function traceText(spec, endpoint, { featureLayers = [], warmup = 5 } = {}) {
+  spec = figureOf(spec);
   const model = modelOf(spec, featureLayers);
   const sim = createSim(simSpec(model));
   sim.quiet = true;
@@ -206,7 +219,7 @@ export function traceText(spec, endpoint, { featureLayers = [], warmup = 5 } = {
   let after = 0;
   for (let i = 0; i < 60 * 60 && after < 90; i++) {
     sim.step(1 / 60);
-    if (sim.tracing.done) after++;
+    if (sim.tracing.truncated || (sim.tracing.done && (!sim.trafficState || !sim.tracePending()))) after++;
   }
   const { spans } = sim.tracing;
   if (!spans.length) return [`no request on ${endpoint || "any route"} started within a minute`];
@@ -218,12 +231,14 @@ export function traceText(spec, endpoint, { featureLayers = [], warmup = 5 } = {
   const walk = (parent) => spans.filter((s) => s.parent === parent).forEach((s) => (order.push(s), walk(s.id)));
   walk(null);
   const lines = [`${spans[0].label || endpoint || "request"}: ${formatMs(spans[0].total ?? 0)}${spans[0].ok === false ? " (failed)" : ""}`];
+  if (sim.trafficState) lines.push(`  traffic: ${spans[0].traffic || "unclassified"} · context: ${JSON.stringify(spans[0].context)}${sim.tracing.truncated ? " · truncated" : sim.tracePending() ? " · pending" : ""}`);
   for (const s of order) {
     const from = Math.round(((s.start || 0) / total) * width);
     const len = Math.max(1, Math.round(((s.total || 0) / total) * width));
     const bar = " ".repeat(from) + "█".repeat(len);
     const name = `${"  ".repeat(depth(s))}${label(s.node)}${s.label && s.parent != null ? `  ${s.label}` : ""}${s.async ? "  (async)" : ""}`;
     lines.push(`  ${name.padEnd(46)} ${(s.done ? formatMs(s.total) : "…").padStart(7)}  ${bar}`);
+    for (const d of s.decisions || []) lines.push(`    ${d.rule} → ${d.to || "reject"}: ${d.outcome} · ${JSON.stringify(d.observations)}`);
   }
   return lines;
 }

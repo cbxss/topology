@@ -1,0 +1,26 @@
+.tp{--traffic-cyan:#6ddced;--traffic-blue:#83adff;--traffic-violet:#ba9cff;--traffic-magenta:#ee93d1;--traffic-teal:#66d8b5;--traffic-lime:#bddd6e}
+.tp[data-theme="light"]{--traffic-cyan:#007d91;--traffic-blue:#315cc5;--traffic-violet:#7542b9;--traffic-magenta:#aa377c;--traffic-teal:#007d62;--traffic-lime:#59791a}
+.tp-traffic{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0;font:12px var(--tp-mono)}
+.tp-traffic button{background:transparent;color:var(--tp-mid);border:1px solid var(--tp-faint);border-radius:4px;padding:6px 9px;cursor:pointer;font:inherit}
+.tp-traffic button[aria-pressed="true"]{color:var(--tp-hi);border-color:var(--tp-mid);background:var(--tp-raised)}
+.tp-traffic button:focus-visible{outline:2px solid var(--tp-hi);outline-offset:2px}
+.tp-traffic-legend{display:flex;flex-wrap:wrap;gap:5px}
+.tp-traffic-legend button{display:flex;align-items:center;gap:6px}
+.tp-traffic-legend button[hidden]{display:none}
+.tp-traffic-legend i{display:inline-block;width:8px;height:8px;border-radius:50%}
+.tp-traffic .tp-ins-note{flex-basis:100%;margin:0;line-height:1.6}
+.tp-pk .pk-symbol{display:none;stroke-width:1;stroke-linejoin:round}
+.tp-stage[data-color-by="traffic"] .tp-pk{--pk:var(--traffic)}
+.tp-stage[data-color-by="none"] .tp-pk{--pk:var(--tp-hi)}
+.tp-stage:is([data-color-by="traffic"],[data-color-by="none"]) .tp-pk :is(.pk-top,.pk-side,.pk-edge,circle){display:none}
+.tp-stage:is([data-color-by="traffic"],[data-color-by="none"]) .tp-pk .pk-symbol{display:block;fill:var(--pk);stroke:var(--pk)}
+.tp-stage:is([data-color-by="traffic"],[data-color-by="none"]) .tp-pk:is([data-kind="response"],[data-kind="late"]) .pk-symbol{fill:var(--tp-card)}
+.tp-stage[data-color-by="traffic"] .tp-pk[data-kind="retry"] .pk-symbol{stroke:var(--tp-amber);stroke-width:1.4}
+.tp-stage[data-color-by="traffic"] .tp-pk:is([data-kind="error"],[data-kind="drop"]){--pk:var(--tp-red)}
+.tp-stage:is([data-color-by="traffic"],[data-color-by="none"]) .tp-pk[data-kind="late"] .pk-symbol{opacity:.4}
+.tp-stage[data-traffic-filter]:not([data-tracing]):not([data-focus]) .tp-edge:not([data-traffic-path]) .k-line{stroke:var(--tp-faint)}
+.tp-stage[data-traffic-filter]:not([data-tracing]):not([data-focus]) .tp-edge[data-traffic-path] .k-line{stroke:var(--tp-hi)}
+.tp-decision{font:11px var(--tp-mono);padding:4px 12px;color:var(--tp-mid);overflow-wrap:anywhere}
+.tp-tr-context{font:11px var(--tp-mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:140px;overflow:auto}
+
+.k-keys[hidden]{display:none}

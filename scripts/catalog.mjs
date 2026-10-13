@@ -79,6 +79,8 @@ const PATTERNS = [
 
 // Reuse the example sources so the catalog cannot drift from the runnable stories.
 for (const [name, note] of [
+  ["tenant-routing", "Immutable context selects service and database; traffic colors reveal tenant isolation."],
+  ["event-routing", "Kafka retains mixed event context through backlog and downstream consumer routing."],
   ["orders-api", "Endpoint mixes: inspect per-route latency, synthetic rows and WAL."],
   ["read-your-writes", "Sequential write/read calls expose stale replica reads, then primary read-back."],
   ["idempotent-retries", "Retries keep a record key: INSERT conflicts, UPSERT preserves row content."],

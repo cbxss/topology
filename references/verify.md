@@ -131,3 +131,18 @@ Open the delivered SVG directly, or use a local HTML wrapper containing
 the intended display size. The generated HTML can also run the line-end check.
 For a structural diagram with no emit, idle-edge and no-traffic warnings are
 expected; layout warnings still need attention.
+
+### Context routing
+
+Run both routing examples through `--check` and `--trace`. Verify class-specific
+destinations, rejection, weighted retry affinity, a failed destination without
+fallback, and Kafka/queue context after a paused consumer resumes. Follow must
+include consumer spans after the source responds and label pending/truncated
+journeys. Compare saved fields/version at a primary and replica.
+
+Switch Traffic / Activity / None and select several classes using keyboard and
+pointer. Confirm route intersection, trace/record visibility priority, and
+unchanged model state. Inspect dark/light, ISO/2D, 390px and reduced-motion
+captures, including error crosses and retry outlines. Run line ends in both
+views. `verify-sim-browser.mjs` checks new routing browser/Node parity and display
+controls alongside the unchanged 66 legacy cases / 462 frozen checkpoints.

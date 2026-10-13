@@ -523,7 +523,42 @@ return { createTables };
 })();
 const module2 = (() => {
 'use strict';
+
+// Immutable routing inputs are independent of mutable per-request execution state.
+function freezeData(value) {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) freezeData(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+function attachContext(msg, context, traffic, origin = msg.source, rootId = msg.id) {
+  msg.context = freezeData(structuredClone(context));
+  msg.traffic = traffic ?? null;
+  msg.origin = origin;
+  msg.rootId = rootId;
+  return msg;
+}
+function envelopeOf(msg, parentSpan) {
+  return freezeData(structuredClone({ context: msg.context, traffic: msg.traffic, origin: msg.origin, rootId: msg.rootId, parentId: msg.id, endpoint: msg.endpoint, records: msg.records, draws: msg.draws, parentSpan }));
+}
+function inheritEnvelope(msg, envelope) {
+  attachContext(msg, envelope.context, envelope.traffic, envelope.origin, envelope.rootId);
+  msg.parentId = envelope.parentId;
+  msg.endpoint = envelope.endpoint;
+  if (envelope.records) msg.records = structuredClone(envelope.records);
+  if (envelope.draws) msg.draws = structuredClone(envelope.draws);
+  return msg;
+}
+
+
+return { attachContext, envelopeOf, inheritEnvelope };
+})();
+const module3 = (() => {
+'use strict';
+const { envelopeOf, inheritEnvelope } = module2;
 const { isLog, groupOf, hashOf } = module0;
+
 
 
 // Kafka partitions/brokers and queue consumers. Transport delivers/launches packets;
@@ -554,6 +589,7 @@ function createLogs(sim, { launch, newMsg }) {
       log.election = node.election ?? 2;
       log.parts = Array.from({ length: partitions }, (_, p) => ({ replicas: Array.from({ length: log.rf }, (_, i) => (p + i) % n), leader: p % n, electUntil: 0 }));
     }
+    if (sim.trafficState) log.envelopes = Array.from({ length: partitions }, () => new Map());
     logs.set(node.id, log);
   }
 
@@ -639,7 +675,17 @@ function createLogs(sim, { launch, newMsg }) {
             }
             consumer.tokens -= 1;
             group.committed[best]++;
-            launch(edge, "record", { partition: best, group: group.name, msg: newMsg(log.node.id) });
+            const msg = newMsg(log.node.id);
+            const envelope = log.envelopes?.[best].get(group.committed[best]);
+            if (envelope) inheritEnvelope(msg, envelope);
+            launch(edge, "record", { partition: best, group: group.name, msg, ...(envelope?.parentSpan != null ? { traceParent: envelope.parentSpan } : {}) });
+            if (log.envelopes) {
+              const dispatched = Math.min(...log.groups.map(g => g.committed[best]));
+              for (const offset of log.envelopes[best].keys()) {
+                if (offset > dispatched) break;
+                log.envelopes[best].delete(offset);
+              }
+            }
           }
         }
       }
@@ -660,14 +706,17 @@ function createLogs(sim, { launch, newMsg }) {
     log.appended++;
     return p;
   }
-  return { append, rebalance, pull, lagOf, setBroker, readable, isrOf };
+  function remember(log, partition, msg, parentSpan) {
+    if (log.envelopes && log.groups.length && msg) log.envelopes[partition].set(log.end[partition], envelopeOf(msg, parentSpan));
+  }
+  return { remember, append, rebalance, pull, lagOf, setBroker, readable, isrOf };
 }
 
 
 
 return { createLogs };
 })();
-const module3 = (() => {
+const module4 = (() => {
 'use strict';
 const { hashOf } = module0;
 
@@ -778,10 +827,67 @@ function createScenario(sim, definitions, { resetNode, setEdge, setBroker, rebal
 
 return { targetOf, normalizeScenario, createScenario };
 })();
-const module4 = (() => {
+const module5 = (() => {
 'use strict';
+
+// Pure conditions and destination selection. Transport owns all delivery semantics.
+function fieldOf(msg, field) {
+  const path = Array.isArray(field) ? field : field.split(".");
+  let value = path[0] === "context" ? msg.context : { endpoint: msg.endpoint, source: msg.origin ?? msg.source, traffic: msg.traffic };
+  for (const key of path.slice(1)) {
+    if (value == null || typeof value !== "object" || !Object.hasOwn(value, key)) return { exists: false };
+    value = value[key];
+  }
+  return { exists: value !== undefined, value };
+}
+function matches(condition, msg, policies = {}, observations = []) {
+  if (condition.policy) return matches(policies[condition.policy], msg, policies, observations);
+  if (condition.all) return condition.all.every(c => matches(c, msg, policies, observations));
+  if (condition.any) return condition.any.some(c => matches(c, msg, policies, observations));
+  if (condition.not) return !matches(condition.not, msg, policies, observations);
+  const { exists, value } = fieldOf(msg, condition.field);
+  const op = Object.keys(condition).find(k => k !== "field");
+  const expected = condition[op];
+  let result = false;
+  if (op === "exists") result = exists === expected;
+  else if (exists) {
+    if (op === "eq") result = value === expected;
+    else if (op === "in") result = expected.includes(value);
+    else if (Number.isFinite(value)) {
+      if (op === "gt") result = value > expected;
+      if (op === "gte") result = value >= expected;
+      if (op === "lt") result = value < expected;
+      if (op === "lte") result = value <= expected;
+    }
+  }
+  observations.push({ field: condition.field, op, expected, exists, value, result });
+  return result;
+}
+function selectRoute(routing, msg, policies, rand) {
+  const observations = [];
+  const rule = routing.rules.find(rule => matches(rule.when, msg, policies, observations));
+  const action = rule ? rule.action : routing.fallback;
+  const decision = { rule: rule?.id ?? "fallback", observations, to: null, outcome: "rejected" };
+  if (action.type === "send") decision.to = action.to;
+  if (action.type === "weighted") {
+    let pick = rand() * action.targets.reduce((sum, target) => sum + target.weight, 0);
+    decision.to = (action.targets.find(target => (pick -= target.weight) < 0) || action.targets.at(-1)).to;
+  }
+  if (decision.to) decision.outcome = "selected";
+  return decision;
+}
+
+
+return { matches, selectRoute };
+})();
+const module6 = (() => {
+'use strict';
+const { attachContext } = module2;
+const { matches, selectRoute } = module5;
 const { DETECT, isLog, routeOf, split } = module0;
-const { targetOf } = module3;
+const { targetOf } = module4;
+
+
 
 
 
@@ -812,7 +918,21 @@ function createTransport(sim, { tables, logModel, decide }) {
   edges.forEach((edge) => allowanceOf(edge));
 
   let ids = 0;
-  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  const newMsg = (source, endpoint) => {
+    const msg = { id: ++ids, source, born: sim.time, draws: null, endpoint };
+    return sim.trafficState ? attachContext(msg, {}, null) : msg;
+  };
+  function decisionFor(job, routing) {
+    const decision = selectRoute(routing, job.msg, sim.trafficState.policies, rand);
+    const edge = decision.to && job.node.data.find(e => e.to === decision.to);
+    if (edge && ((edge.flag && !decide(job.msg, edge.flag)) || (edge.unless && decide(job.msg, edge.unless)))) decision.outcome = "flag-blocked";
+    if (edge && decision.outcome === "selected" && !nodes.get(edge.to).up) decision.outcome = "target-down";
+    const event = { ...decision, node: job.node.id, at: sim.time, traffic: job.msg.traffic, msgId: job.msg.id };
+    sim.trafficState.decisions.push(event);
+    if (job.span) (job.span.decisions ??= []).push(event);
+    if (!edge || decision.outcome === "flag-blocked") { job.failed = true; return null; }
+    return edge;
+  }
   // Per-route history at a node: rates, service times, end-to-end latency and errors.
   const routeStats = (node, name) => {
     if (!name) return null;
@@ -829,42 +949,56 @@ function createTransport(sim, { tables, logModel, decide }) {
       edge.sent++;
       edge.recent.push(sim.time);
     }
+    if (sim.trafficState) {
+      const msg = extra.msg || extra.call?.job.msg;
+      if (msg && packet.dir > 0) sim.trafficState.paths.push({ at: sim.time, edge: edge.index, traffic: msg.traffic });
+    }
     sim.packets.push(packet);
     return packet;
   }
 
-  const burst = (edge, at = 1) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1 });
+  const burst = (edge, at = 1, msg) => sim.packets.push({ edge: edge.index, t: at, dir: 1, kind: "drop", age: 0, duration: 1, ...(sim.trafficState && msg ? { msg, ep: msg.endpoint } : {}) });
 
   // --- jobs -----------------------------------------------------------------------------------
 
   function startJob(node, msg, call, extra = {}) {
     const job = { node, msg, call, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, ...extra };
     const t = sim.tracing;
-    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint)) {
+    if (t && !t.msgId && job.root && (!t.endpoint || msg.endpoint === t.endpoint) && (!t.classes || t.classes.includes(msg.traffic))) {
       t.msgId = msg.id;
       t.endpoint = msg.endpoint;
       t.started = sim.time;
     }
-    if (t && t.msgId === msg.id) {
+    const traceId = msg.rootId ?? msg.id;
+    if (t && t.msgId === traceId && !t.truncated) {
+      if (sim.trafficState && t.spans.length >= 256) t.truncated = true;
+    }
+    if (t && t.msgId === traceId && !t.truncated) {
       // Where this span starts in model time: the parent's own time plus any stages it had
       // finished, plus the network on the way.
       const parent = call ? call.job : extra.parentJob;
-      job.span = { id: t.spans.length, parent: parent?.span?.id ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      job.span = { id: t.spans.length, parent: parent?.span?.id ?? extra.traceParent ?? null, node: node.id, async: !call && !job.root, start: parent?.span ? parent.span.start + (parent.readyAt != null ? (parent.readyAt - parent.arrived) * 1000 : 0) + (parent.spent || 0) + (call ? (call.edge.ms ?? cfg.net) : 0) : 0, label: job.root ? msg.endpoint || "" : extra.entry ? `apply ${extra.entry.table}/${extra.entry.key} v${extra.entry.version}` : isLog(node) ? `append${extra.partition != null ? ` p${extra.partition}` : ""}` : "", done: false };
+      if (sim.trafficState) {
+        Object.assign(job.span, { msgId: msg.id, traffic: msg.traffic, context: msg.context });
+        if (extra.traceParent != null && !parent?.span) job.span.start = Math.max(0, (sim.time - t.started) * 1000);
+      }
       t.spans.push(job.span);
     }
+    if (sim.trafficState) sim.trafficState.arrivals.push({ at: sim.time, node: node.id, traffic: msg.traffic });
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
     if (!extra.entry) routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
-    if (!node.capacity) return begin(job);
+    if (!node.capacity) { begin(job); return job; }
     if (node.bucket >= 1) {
       node.bucket -= 1;
-      return begin(job);
+      begin(job); return job;
     }
-    if (node.waiting.length < node.queueMax) return node.waiting.push(job);
+    if (node.waiting.length < node.queueMax) { node.waiting.push(job); return job; }
     reject(job);
+    return job;
   }
 
   function begin(job) {
@@ -878,16 +1012,16 @@ function createTransport(sim, { tables, logModel, decide }) {
   }
 
   // A request that never got in: counted at the node and on the edge, drawn as a red burst.
-  function dropAt(edge, node) {
+  function dropAt(edge, node, msg) {
     node.recentDrops.push(sim.time);
     if (!edge) return;
     edge.dropped++;
-    burst(edge);
+    burst(edge, 1, msg);
   }
 
   // Over capacity with a full buffer: answer 503 at once.
   function reject(job) {
-    dropAt(job.call ? job.call.edge : job.via, job.node);
+    dropAt(job.call ? job.call.edge : job.via, job.node, job.msg);
     respond(job, false);
   }
 
@@ -944,6 +1078,14 @@ function createTransport(sim, { tables, logModel, decide }) {
       }
       job.stage = 0;
       issue(job, job.stages[0] || []);
+      return;
+    }
+    if (node.routing) {
+      const edge = decisionFor(job, node.routing);
+      if (edge) {
+        if (edge.sync) { job.waiting++; callOut(job, edge, 0); }
+        else launch(edge, "request", { msg: job.msg, parentJob: job });
+      }
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
@@ -1057,8 +1199,16 @@ function createTransport(sim, { tables, logModel, decide }) {
   function issue(job, calls) {
     const node = job.node;
     for (const call of calls) {
-      const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-      if (!edge || rand() >= (call.p ?? 1)) continue;
+      if (call.when && !matches(call.when, job.msg, sim.trafficState.policies)) continue;
+      let edge;
+      if (call.routing) {
+        if (rand() >= (call.p ?? 1)) continue;
+        edge = decisionFor(job, call.routing);
+      } else {
+        edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+      }
+      if (!edge) continue;
       if (call.table) recordOf(job.msg, call.table);
       if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
       else if (edge.sync) {
@@ -1093,7 +1243,7 @@ function createTransport(sim, { tables, logModel, decide }) {
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
-      dropAt(edge, node);
+      dropAt(edge, node, packet.msg || packet.call?.job.msg);
       // Connection refused: the caller hears about it straight away.
       if (packet.call) {
         const call = packet.call;
@@ -1105,13 +1255,15 @@ function createTransport(sim, { tables, logModel, decide }) {
       const log = logs.get(node.id);
       const p = logModel.append(log, edge, packet);
       if (p == null) {
-        dropAt(edge, node);
+        dropAt(edge, node, packet.msg || packet.call?.job.msg);
         if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
         return;
       }
-      return startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
+      const job = startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, parentJob: packet.parentJob, partition: p });
+      logModel.remember(log, p, packet.msg || packet.call?.job.msg, job?.span?.id);
+      return job;
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry, parentJob: packet.parentJob, ...(packet.traceParent != null ? { traceParent: packet.traceParent } : {}) });
   }
 
   // --- sources --------------------------------------------------------------------------------
@@ -1144,7 +1296,11 @@ function createTransport(sim, { tables, logModel, decide }) {
     return entries[entries.length - 1][0];
   };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
+  const emitOne = (node) => {
+    const msg = newMsg(node.id, pickEndpoint(node, sim.time));
+    if (sim.trafficState) sim.trafficState.emitted.push({ at: sim.time, traffic: null });
+    return startJob(node, msg, null, { root: true });
+  };
 
   function resetNode(node) {
     // In-flight work is lost; callers waiting on it get a reset.
@@ -1179,7 +1335,22 @@ function createTransport(sim, { tables, logModel, decide }) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (isSchedule(node.emit)) {
+      if (node.workload) {
+        node.workClocks ??= node.workload.map(() => 0);
+        node.workload.forEach((work, index) => {
+          const rate = rateOf(work.rate, now);
+          if (!rate) return;
+          node.workClocks[index] -= dt;
+          while (node.workClocks[index] <= 0) {
+            node.workClocks[index] += (0.6 + rand() * 0.8) / rate;
+            const msg = newMsg(node.id, work.endpoint);
+            const definition = sim.trafficState.definitions[work.traffic];
+            attachContext(msg, { ...definition?.context, ...work.context }, work.traffic);
+            sim.trafficState.emitted.push({ at: now, traffic: msg.traffic });
+            startJob(node, msg, null, { root: true });
+          }
+        });
+      } else if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;
@@ -1247,7 +1418,7 @@ function createTransport(sim, { tables, logModel, decide }) {
 
 return { breakerOf, createTransport };
 })();
-const module5 = (() => {
+const module7 = (() => {
 'use strict';
 
 const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
@@ -1324,6 +1495,23 @@ function attachReporting(sim) {
       })
       .sort((a, b) => b.rate - a.rate);
   };
+  sim.trafficOf = (id) => {
+    const state = sim.trafficState;
+    if (!state) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    const samples = id ? state.arrivals.filter(e => e.node === id) : state.emitted;
+    const keys = new Set([...Object.keys(state.definitions), ...samples.map(e => e.traffic)]);
+    return [...keys].map(key => ({ id: key, label: state.definitions[key]?.label || key || "Unclassified", rate: samples.filter(e => e.traffic === key).length / window }));
+  };
+  sim.routingOf = id => {
+    const rows = new Map();
+    for (const d of sim.trafficState?.decisions || []) if (!id || d.node === id) {
+      const key = JSON.stringify([d.node, d.rule, d.to, d.outcome]);
+      if (!rows.has(key)) rows.set(key, { node: d.node, rule: d.rule, to: d.to, outcome: d.outcome, count: 0 });
+      rows.get(key).count++;
+    }
+    return [...rows.values()];
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -1338,6 +1526,7 @@ function reportTick(sim, dt) {
     while (old < list.length && (list[old].at ?? list[old]) < now - keep) old++;
     if (old) list.splice(0, old);
   };
+  if (sim.trafficState) for (const name of ["emitted", "arrivals", "paths", "decisions"]) trim(sim.trafficState[name]);
   for (const node of nodes.values()) {
     trim(node.recent);
     trim(node.recentDrops);
@@ -1462,14 +1651,14 @@ function summaryOf(sim) {
 
 return { attachReporting, reportTick, formatRate, formatCount, formatMs, statsOf, summaryOf };
 })();
-const module6 = (() => {
+const module8 = (() => {
 'use strict';
 const { SIM_DEFAULTS, SERVICE_MS, rngOf, split } = module0;
 const { createTables } = module1;
-const { createLogs } = module2;
-const { createScenario, normalizeScenario } = module3;
-const { createTransport, breakerOf } = module4;
-const { attachReporting, reportTick } = module5;
+const { createLogs } = module3;
+const { createScenario, normalizeScenario } = module4;
+const { createTransport, breakerOf } = module6;
+const { attachReporting, reportTick } = module7;
 
 
 
@@ -1561,6 +1750,8 @@ function createSim(spec) {
   const logs = new Map();
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  const contextual = !!(spec.traffic || spec.policies || spec.nodes.some(n => n.workload || n.routing || Object.values(n.endpoints || {}).some(e => e.calls?.some(c => c.routing || c.when))));
+  if (contextual) sim.trafficState = { definitions: spec.traffic || {}, policies: spec.policies || {}, emitted: [], arrivals: [], paths: [], decisions: [] };
   // Factories only initialize state. Callbacks run after transport has been wired.
   let transport;
   const tables = createTables(sim, spec.records || {}, {
@@ -1606,21 +1797,36 @@ function createSim(spec) {
     logModel.pull(dt);
     transport.tickPackets(dt);
     reportTick(sim, dt);
+    if (sim.trafficState && sim.tracing?.msgId && now - sim.tracing.started >= 60 && sim.tracePending()) sim.tracing.truncated = true;
     if (sim.events.length > 512) sim.events.splice(0, sim.events.length - 512);
   }
 
-  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
+  const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + ((node.emit || node.workload) && node.up ? node.flow : 0), 0);
 
   sim.step = (dt) => {
+    if (dt <= 0) return;
     // Sub-step so a long frame doesn't teleport packets past their arrival.
     const n = Math.max(1, Math.ceil(dt / (1 / 60)));
     for (let i = 0; i < n; i++) step(dt / n);
   };
   // Follow one request: the next one started on `endpoint` (any, if omitted). Its spans fill
   // sim.tracing.spans as it moves; sim.tracing.done once its root answers.
-  sim.follow = (endpoint) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null });
+  sim.follow = (endpoint, classes) => (sim.tracing = { endpoint: endpoint || null, msgId: null, spans: [], done: false, started: null, ...(classes?.length ? { classes: [...classes] } : {}) });
+  sim.tracePending = () => {
+    const id = sim.tracing?.msgId;
+    if (!id) return false;
+    const related = msg => (msg?.rootId ?? msg?.id) === id;
+    if (sim.packets.some(p => related(p.msg || p.call?.job.msg))) return true;
+    if ([...nodes.values()].some(n => [...n.jobs].some(j => !j.done && related(j.msg)))) return true;
+    if ([...sim.calls].some(c => related(c.job.msg))) return true;
+    for (const log of logs.values()) for (const partition of log.envelopes || [])
+      if ([...partition.values()].some(e => e.rootId === id)) return true;
+    for (const n of nodes.values()) for (const pending of n.wal?.pending?.values() || [])
+      if ([...pending.values()].some(item => related(item.msg))) return true;
+    return false;
+  };
   sim.unfollow = () => (sim.tracing = null);
-  sim.tracedId = (packet) => (packet.msg || packet.call?.job.msg)?.id;
+  sim.tracedId = (packet) => { const msg = packet.msg || packet.call?.job.msg; return msg?.rootId ?? msg?.id; };
   sim.setUp = setUp;
   sim.setBroker = setBroker;
   sim.readable = readable;
@@ -1636,12 +1842,12 @@ function createSim(spec) {
 
 return { createSim };
 })();
-const module7 = (() => {
+const module9 = (() => {
 'use strict';
-const { createSim } = module6;
+const { createSim } = module8;
 const { SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashOf } = module0;
-const { targetOf, normalizeScenario } = module3;
-const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module5;
+const { targetOf, normalizeScenario } = module4;
+const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module7;
 // Stable public entry point. Figure authors use specs; engine maintainers use sim/.
 
 
@@ -1652,7 +1858,7 @@ const { formatRate, formatCount, formatMs, statsOf, summaryOf } = module5;
 
 return { createSim, SIM_DEFAULTS, SERVICE_MS, DETECT, rngOf, isLog, groupOf, routeOf, hashOf, targetOf, normalizeScenario, formatRate, formatCount, formatMs, statsOf, summaryOf };
 })();
-return module7;
+return module9;
 })();
 
 const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"labels":"rate","grid":[124,70],"positions":{"users":[0,0.6],"cdn":[1,0.6],"us-lb":[2,0.6],"us-api":[3,0.6],"us-db":[4.1,1.15],"us-cache":[4.1,0.04999999999999993],"us-replica":[4.1,2.2],"orders":[5.1,0.6],"orders-billing-1":[6.25,-0.20000000000000007],"orders-billing-2":[6.25,0.6],"orders-search":[6.25,1.4],"jobs":[5.1,3.4],"jobs-worker-1":[6.25,3],"jobs-worker-2":[6.25,3.8]},"spec":{"nodes":[{"id":"users","kind":"client","emit":10,"partitions":0,"replicas":1,"label":"users"},{"id":"cdn","kind":"cdn","hit":0.6,"partitions":0,"replicas":1,"label":"cdn"},{"id":"us-lb","kind":"lb","label":"us-lb","partitions":0,"replicas":1},{"id":"us-api","kind":"service","replicas":2,"label":"us-api","partitions":0},{"id":"us-db","kind":"db","role":"primary","label":"us-db","partitions":0,"replicas":1},{"id":"us-cache","kind":"cache","label":"us-cache","partitions":0,"replicas":1},{"id":"us-replica","kind":"db","role":"replica","label":"us-replica","partitions":0,"replicas":1},{"id":"orders","kind":"kafka","label":"orders","partitions":3,"replicas":1},{"id":"orders-billing-1","kind":"worker","rate":3.4,"label":"billing-1","partitions":0,"replicas":1},{"id":"orders-billing-2","kind":"worker","rate":3.4,"label":"billing-2","partitions":0,"replicas":1},{"id":"orders-search","kind":"worker","rate":16,"label":"search","partitions":0,"replicas":1},{"id":"jobs","kind":"queue","label":"jobs","partitions":1,"replicas":1},{"id":"jobs-worker-1","kind":"worker","rate":5,"label":"worker-1","partitions":0,"replicas":1},{"id":"jobs-worker-2","kind":"worker","rate":5,"label":"worker-2","partitions":0,"replicas":1}],"edges":[{"from":"us-lb","to":"us-api","kind":"sync","sync":true,"len":77.598529817263},{"from":"us-api","to":"us-cache","kind":"sync","sync":true,"len":106.45149520792613},{"from":"us-api","to":"us-db","p":0.15,"kind":"sync","sync":true,"len":118.17149520792611},{"from":"us-db","to":"us-replica","kind":"replication","sync":false,"len":31.5},{"from":"orders","to":"orders-billing-1","group":"billing","kind":"async","sync":false,"len":101.07149520792615},{"from":"orders","to":"orders-billing-2","group":"billing","kind":"async","sync":false,"len":63.60000000000002},{"from":"orders","to":"orders-search","group":"search","kind":"async","sync":false,"len":101.07149520792609},{"from":"jobs","to":"jobs-worker-1","kind":"async","sync":false,"len":78.95149520792614},{"from":"jobs","to":"jobs-worker-2","kind":"async","sync":false,"len":78.95149520792617},{"from":"users","to":"cdn","kind":"sync","sync":true,"len":79},{"from":"cdn","to":"us-lb","kind":"sync","sync":true,"len":79.59852981726297},{"from":"us-api","to":"orders","kind":"async","sync":false,"len":183.4715588499022},{"from":"us-api","to":"jobs","kind":"async","sync":false,"len":366.59597508109323,"hops":1}],"sim":{"per":40,"seed":12},"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"cache down","at":8},{"name":"consumer lost","at":18},{"name":"recovered","at":30}],"steps":[{"at":1,"say":"The CDN answers 60% of requests; the rest reach the API, which reads through Redis (85% hit) and publishes every order to Kafka and a job to the queue."},{"phase":"cache down","fail":"us-cache","say":"Redis dies. Its calls are refused, so those requests fail; reads that missed still reach Postgres."},{"phase":"consumer lost","recover":"us-cache","fail":"orders-billing-1","say":"Redis is back. Now a billing consumer dies: the group rebalances and billing lag climbs."},{"phase":"recovered","recover":"orders-billing-1","say":"Both consumers are back and the backlog drains."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,77.6],[0,31.45,33.99,36.12,38.1,40.23,42.77,57.19,59.72,61.85,63.83,65.97,68.5,106.45],[0,40.45,42.99,45.12,47.1,49.23,51.77,72.91,75.44,77.57,79.55,81.69,84.22,118.17],[0,31.5],[0,11.3,13.84,15.97,17.95,20.08,22.62,51.46,53.99,56.12,58.1,60.24,62.77,101.07],[0,63.6],[0,20.3,22.84,24.97,26.95,29.08,31.62,60.46,62.99,65.12,67.1,69.24,71.77,101.07],[0,29.3,31.84,33.97,35.95,38.08,40.62,47.34,49.87,52,53.98,56.12,58.65,78.95],[0,38.3,40.84,42.97,44.95,47.08,49.62,56.34,58.87,61,62.98,65.12,67.65,78.95],[0,79],[0,79.6],[0,84.52,85.13,85.64,86.12,86.63,87.24,87.24,87.84,88.36,88.83,89.34,89.95,183.47],[0,43.25,45.42,47.6,49.77,51.95,54.12,56.29,92.84,95.38,97.51,99.49,101.62,104.16,276.08,278.62,280.75,282.73,284.86,287.4,366.6]],"views":{"iso":{"edges":[[[225.5,113.4],[277,131.9]],[[317.4,141.1],[338.3,148.6],[340.1,149.1],[341.8,149.3],[343.3,149.1],[344.8,148.6],[346.1,147.8],[352.6,142.7],[353.9,141.9],[355.3,141.4],[356.9,141.2],[358.5,141.4],[360.3,141.9],[385.5,150.9]],[[311.4,145.9],[338.3,155.5],[339.8,156.2],[340.7,156.9],[341,157.7],[340.7,158.6],[339.8,159.6],[330.3,167],[329.4,168],[329,168.9],[329.4,169.7],[330.3,170.5],[331.8,171.2],[354.4,179.2]],[[358.9,191.6],[344.8,202.7]],[[508.4,207.8],[515.9,210.5],[517.7,211],[519.3,211.2],[520.9,211],[522.3,210.5],[523.7,209.7],[536.6,199.5],[537.9,198.7],[539.3,198.2],[540.9,198.1],[542.6,198.2],[544.4,198.7],[569.8,207.8]],[[502.5,212.4],[544.7,227.5]],[[496.6,217.1],[510.1,221.9],[511.6,222.6],[512.5,223.3],[512.8,224.2],[512.5,225.1],[511.6,226],[498.6,236.2],[497.7,237.1],[497.4,238],[497.7,238.8],[498.6,239.6],[500.2,240.3],[519.6,247.2]],[[417.9,278.9],[437.4,285.8],[439.2,286.3],[440.9,286.5],[442.4,286.3],[443.9,285.8],[445.2,285],[448.2,282.6],[449.5,281.8],[450.9,281.3],[452.5,281.2],[454.2,281.3],[456,281.8],[469.4,286.7]],[[411.4,284],[436.8,293.1],[438.4,293.8],[439.3,294.5],[439.6,295.4],[439.3,296.2],[438.3,297.2],[435.3,299.6],[434.4,300.5],[434.1,301.4],[434.4,302.2],[435.3,303],[436.9,303.7],[444.4,306.4]],[[61.2,54.7],[113.7,73.5]],[[146.9,85.3],[199.7,104.2]],[[314.4,143.5],[370.6,163.6],[370.9,163.7],[371.1,163.9],[371.2,164.1],[371.1,164.3],[370.9,164.6],[370.9,164.6],[370.7,164.8],[370.6,165],[370.7,165.2],[370.9,165.4],[371.3,165.5],[433.4,187.7]],[[308.4,148.2],[337.1,158.5],[338.4,157.9],[340.1,157.7],[341.8,158],[342.9,158.7],[343.3,159.6],[342.7,160.5],[367,169.2],[368.5,169.9],[369.4,170.6],[369.8,171.4],[369.4,172.3],[368.5,173.3],[291.5,233.8],[290.5,234.8],[290.2,235.6],[290.5,236.5],[291.4,237.2],[293,237.9],[345.6,256.7]]],"step":[4.6492511586546925,1.6618053527344685],"flagStep":[0,0],"packet":{"top":"M2.4 -2.6L0.5 -1.1L-2.4 -2.1L-0.5 -3.7Z","sides":"M2.4 -2.6L0.5 -1.1L0.5 1.3L2.4 -0.3ZM0.5 -1.1L-2.4 -2.1L-2.4 0.3L0.5 1.3Z","outline":"M-2.4 -2.1L-0.5 -3.7L2.4 -2.6L2.4 -0.3L0.5 1.3L-2.4 0.3Z"}},"flat":{"edges":[[[231.6,78.9],[287.1,78.9]],[[325.7,71.7],[348.2,71.7],[350,71.5],[351.4,70.9],[352.4,69.9],[353,68.5],[353.2,66.7],[353.2,56.4],[353.4,54.6],[354,53.2],[355,52.2],[356.4,51.6],[358.2,51.4],[385.4,51.4]],[[325.7,81.3],[354.6,81.3],[356.5,81.5],[357.9,82.1],[358.9,83.1],[359.5,84.5],[359.7,86.3],[359.7,101.4],[359.9,103.3],[360.5,104.7],[361.5,105.7],[362.9,106.3],[364.7,106.5],[388.9,106.5]],[[404,121.5],[404,144]],[[529.8,69.5],[537.9,69.5],[539.7,69.3],[541.1,68.7],[542.1,67.7],[542.7,66.3],[542.9,64.5],[542.9,43.9],[543.1,42.1],[543.7,40.7],[544.7,39.7],[546.1,39.1],[547.9,38.9],[575.3,38.9]],[[529.8,78.9],[575.3,78.9]],[[529.8,88.3],[544.3,88.3],[546.1,88.5],[547.5,89.1],[548.5,90.1],[549.1,91.5],[549.3,93.3],[549.3,114],[549.5,115.8],[550.2,117.2],[551.2,118.2],[552.6,118.8],[554.4,119],[575.3,119]],[[529.8,213.9],[550.8,213.9],[552.6,213.7],[554,213.1],[555,212.1],[555.6,210.7],[555.8,208.9],[555.8,204.1],[556,202.3],[556.6,200.9],[557.6,199.9],[559,199.3],[560.8,199.1],[575.3,199.1]],[[529.8,224.3],[557.2,224.3],[559,224.5],[560.4,225.1],[561.4,226.1],[562,227.5],[562.2,229.3],[562.2,234.1],[562.4,235.9],[563,237.3],[564,238.3],[565.4,238.9],[567.2,239.1],[575.3,239.1]],[[54.7,78.9],[111.2,78.9]],[[146.9,78.9],[203.9,78.9]],[[325.7,76.5],[386.2,76.5],[386.6,76.6],[386.9,76.7],[387.2,77],[387.3,77.3],[387.4,77.7],[387.4,77.7],[387.4,78.2],[387.6,78.5],[387.8,78.7],[388.1,78.9],[388.6,78.9],[455.4,78.9]],[[325.7,86.1],[356.7,86.1],[357.1,84.6],[358.2,83.5],[359.7,83.1],[361.2,83.5],[362.3,84.6],[362.7,86.1],[388.8,86.1],[390.6,86.3],[392,86.9],[393,87.9],[393.6,89.3],[393.8,91.1],[393.8,214.1],[394,215.9],[394.6,217.3],[395.6,218.3],[397,218.9],[398.8,219.1],[455.4,219.1]]],"step":[5.006060606060608,0],"flagStep":[0,0],"packet":null,"k":0.7151515151515152}},"raw":{"title":"Platform","fig":"Fig 7","caption":"Built from patterns: region() gives the load balancer, API, cache-aside reads (85% hit) and a primary with a replica on a region plate; kafkaTopic() the topic and its two consumer groups; queueWorkers() the job queue. Fail the cache and every read goes to Postgres; fail a billing consumer and the group rebalances while lag climbs.","sim":{"per":40,"seed":12},"grid":[124,70],"labels":"rate","nodes":[{"id":"users","kind":"client","emit":10,"at":[0,0.6]},{"id":"cdn","kind":"cdn","hit":0.6,"at":[1,0.6]},{"id":"us-lb","kind":"lb","label":"us-lb","at":[2,0.6]},{"id":"us-api","kind":"service","replicas":2,"label":"us-api","at":[3,0.6]},{"id":"us-db","kind":"db","role":"primary","label":"us-db","at":[4.1,1.15]},{"id":"us-cache","kind":"cache","label":"us-cache","at":[4.1,0.04999999999999993]},{"id":"us-replica","kind":"db","role":"replica","label":"us-replica","at":[4.1,2.2]},{"id":"orders","kind":"kafka","label":"orders","partitions":3,"at":[5.1,0.6]},{"id":"orders-billing-1","kind":"worker","rate":3.4,"label":"billing-1","at":[6.25,-0.20000000000000007]},{"id":"orders-billing-2","kind":"worker","rate":3.4,"label":"billing-2","at":[6.25,0.6]},{"id":"orders-search","kind":"worker","rate":16,"label":"search","at":[6.25,1.4]},{"id":"jobs","kind":"queue","label":"jobs","at":[5.1,3.4]},{"id":"jobs-worker-1","kind":"worker","rate":5,"label":"worker-1","at":[6.25,3]},{"id":"jobs-worker-2","kind":"worker","rate":5,"label":"worker-2","at":[6.25,3.8]}],"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"cache down","at":8},{"name":"consumer lost","at":18},{"name":"recovered","at":30}],"steps":[{"at":1,"say":"The CDN answers 60% of requests; the rest reach the API, which reads through Redis (85% hit) and publishes every order to Kafka and a job to the queue."},{"phase":"cache down","fail":"us-cache","say":"Redis dies. Its calls are refused, so those requests fail; reads that missed still reach Postgres."},{"phase":"consumer lost","recover":"us-cache","fail":"orders-billing-1","say":"Redis is back. Now a billing consumer dies: the group rebalances and billing lag climbs."},{"phase":"recovered","recover":"orders-billing-1","say":"Both consumers are back and the backlog drains."}]},"edges":[{"from":"us-lb","to":"us-api"},{"from":"us-api","to":"us-cache"},{"from":"us-api","to":"us-db","p":0.15},{"from":"us-db","to":"us-replica","kind":"replication"},{"from":"orders","to":"orders-billing-1","group":"billing"},{"from":"orders","to":"orders-billing-2","group":"billing"},{"from":"orders","to":"orders-search","group":"search"},{"from":"jobs","to":"jobs-worker-1"},{"from":"jobs","to":"jobs-worker-2"},{"from":"users","to":"cdn"},{"from":"cdn","to":"us-lb"},{"from":"us-api","to":"orders"},{"from":"us-api","to":"jobs"}],"groups":[{"id":"us","label":"us-east-1","region":true,"nodes":["us-lb","us-api","us-db","us-cache","us-replica"]}]}};
@@ -2107,7 +2313,128 @@ function flatComponent(node, f, k) {
 
 return { COMPONENTS, baseKind, isoComponent, flatComponent };
 })();
+const ROUTING_VALIDATION = (() => {
+
+// Public schema checks for opt-in request context and routing.
+function validateRouting(spec) {
+  const fail = (path, text) => { throw new Error(`spec ${path}: ${text}`); };
+  const object = (x, path) => { if (!x || typeof x !== "object" || Array.isArray(x)) fail(path, "expected an object"); };
+  const exact = (x, keys, path) => { object(x, path); for (const key of Object.keys(x)) if (!keys.includes(key)) fail(path, `unknown field ${key}`); };
+  const text = (x, path) => { if (typeof x !== "string" || !x.length) fail(path, "expected a nonempty string"); };
+  const scalar = x => x === null || typeof x === "string" || typeof x === "boolean" || Number.isFinite(x);
+  function json(x, path, seen = new Set()) {
+    if (scalar(x)) return;
+    if (!x || typeof x !== "object" || seen.has(x) || (!Array.isArray(x) && ![Object.prototype, null].includes(Object.getPrototypeOf(x)))) fail(path, "expected acyclic JSON data");
+    seen.add(x); for (const child of Object.values(x)) json(child, path, seen); seen.delete(x);
+  }
+  const palette = ["cyan", "blue", "violet", "magenta", "teal", "lime"];
+  object(spec.traffic || {}, "traffic");
+  for (const [id, def] of Object.entries(spec.traffic || {})) {
+    text(id, "traffic"); exact(def, ["label", "color", "context"], `traffic.${id}`);
+    if (def.label != null) text(def.label, `traffic.${id}.label`);
+    if (def.color != null && !palette.includes(def.color)) fail(`traffic.${id}.color`, `expected ${palette.join(", ")}`);
+    if (def.context != null) { object(def.context, `traffic.${id}.context`); json(def.context, `traffic.${id}.context`); }
+  }
+  if (spec.colorBy != null && !["activity", "traffic", "none"].includes(spec.colorBy)) fail("colorBy", "expected activity, traffic or none");
+  const policies = spec.policies || {};
+  object(policies, "policies");
+  function condition(c, path, stack = []) {
+    object(c, path);
+    if (Object.hasOwn(c, "policy")) {
+      exact(c, ["policy"], path); text(c.policy, path);
+      if (!Object.hasOwn(policies, c.policy)) fail(path, `unknown policy ${c.policy}`);
+      if (stack.includes(c.policy)) fail(path, "cyclic policy reference");
+      return condition(policies[c.policy], path, [...stack, c.policy]);
+    }
+    for (const group of ["all", "any", "not"]) if (Object.hasOwn(c, group)) {
+      exact(c, [group], path);
+      if (group === "not") return condition(c.not, path, stack);
+      if (!Array.isArray(c[group]) || !c[group].length) fail(path, "expected nonempty condition list");
+      return c[group].forEach(child => condition(child, path, stack));
+    }
+    const ops = Object.keys(c).filter(k => k !== "field");
+    if (ops.length !== 1 || !["eq", "in", "exists", "gt", "gte", "lt", "lte"].includes(ops[0])) fail(path, "expected one supported comparison");
+    const parts = Array.isArray(c.field) ? c.field : typeof c.field === "string" ? c.field.split(".") : [];
+    if (parts.length < 2 || parts.some(p => typeof p !== "string" || !p.length || ["__proto__", "prototype", "constructor"].includes(p)) || !["context", "request"].includes(parts[0])) fail(path, "invalid field path");
+    if (parts[0] === "request" && (parts.length !== 2 || !["endpoint", "source", "traffic"].includes(parts[1]))) fail(path, "unknown request field");
+    const op = ops[0], value = c[op];
+    if (op === "exists" ? typeof value !== "boolean" : op === "in" ? !Array.isArray(value) || !value.length || !value.every(scalar) : op === "eq" ? !scalar(value) : !Number.isFinite(value)) fail(path, `invalid ${op} operand`);
+  }
+  for (const [id, c] of Object.entries(policies)) condition(c, `policies.${id}`, [id]);
+  const edges = (spec.edges || []).map(e => Array.isArray(e) ? {from: e[0], to: e[1]} : e);
+  function routing(r, node, path) {
+    exact(r, ["rules", "fallback"], path);
+    if (!Array.isArray(r.rules)) fail(path, "expected rules array");
+    const ids = new Set();
+    function action(a) {
+      object(a, path);
+      let targets;
+      if (a.type === "reject") { exact(a, ["type"], path); return; }
+      if (a.type === "send") { exact(a, ["type", "to"], path); targets = [a.to]; }
+      else if (a.type === "weighted") {
+        exact(a, ["type", "targets"], path);
+        if (!Array.isArray(a.targets) || !a.targets.length) fail(path, "expected weighted targets");
+        for (const t of a.targets) { exact(t, ["to", "weight"], path); if (!Number.isFinite(t.weight) || t.weight <= 0) fail(path, "weight must be positive and finite"); }
+        if (!Number.isFinite(a.targets.reduce((s, t) => s + t.weight, 0))) fail(path, "weight total must be finite");
+        targets = a.targets.map(t => t.to);
+      } else fail(path, "unknown action type");
+      if (new Set(targets).size !== targets.length) fail(path, "duplicate destination");
+      for (const to of targets) {
+        text(to, path);
+        const links = edges.filter(e => e.from === node.id && e.to === to && !["config", "replication"].includes(e.kind));
+        if (links.length !== 1) fail(path, `expected one data edge ${node.id} → ${to}`);
+      }
+    }
+    for (const rule of r.rules) {
+      exact(rule, ["id", "when", "action"], path); text(rule.id, path);
+      if (rule.id === "fallback" || ids.has(rule.id)) fail(path, "rule id must be unique and not fallback");
+      ids.add(rule.id); condition(rule.when, path); action(rule.action);
+    }
+    action(r.fallback);
+  }
+  for (const node of spec.nodes || []) {
+    if (node.workload != null) {
+      if (node.emit != null) fail(node.id, "workload and emit are mutually exclusive");
+      if (!Array.isArray(node.workload) || !node.workload.length) fail(node.id, "expected nonempty workload");
+      for (const w of node.workload) {
+        exact(w, ["traffic", "endpoint", "rate", "context"], node.id + ".workload");
+        if (w.traffic != null && !Object.hasOwn(spec.traffic || {}, w.traffic)) fail(node.id, `unknown traffic class ${w.traffic}`);
+        if (w.endpoint != null) text(w.endpoint, node.id);
+        if (w.context != null) { object(w.context, node.id); json(w.context, node.id); }
+        if (!Array.isArray(w.rate) && (!Number.isFinite(w.rate) || w.rate < 0)) fail(node.id, "invalid workload rate");
+        if (Array.isArray(w.rate)) {
+          let last = -1;
+          if (!w.rate.length) fail(node.id, "empty rate curve");
+          for (const pair of w.rate) {
+            if (!Array.isArray(pair) || pair.length !== 2 || !pair.every(Number.isFinite) || pair[0] <= last || pair[0] < 0 || pair[1] < 0) fail(node.id, "invalid workload curve");
+            last = pair[0];
+          }
+        }
+      }
+    }
+    if (Object.hasOwn(node, "routing")) {
+      if (["kafka", "queue"].includes(node.kind)) fail(node.id, "consumer assignment controls log routing; put rules on the consumer");
+      routing(node.routing, node, node.id + ".routing");
+    }
+    for (const [name, endpoint] of Object.entries(node.endpoints || {})) {
+      object(endpoint, name);
+      if (endpoint.calls != null && !Array.isArray(endpoint.calls)) fail(name, "calls must be an array");
+      for (const call of endpoint.calls || []) {
+      object(call, name + ".call");
+      if (Object.hasOwn(call, "when")) condition(call.when, name + ".when");
+      if (Object.hasOwn(call, "routing")) {
+        if (call.to != null) fail(name, "call cannot contain both to and routing");
+        routing(call.routing, node, name + ".routing");
+      }
+      }
+    }
+  }
+}
+
+return { validateRouting };
+})();
 const VALIDATION = (() => {
+const { validateRouting } = ROUTING_VALIDATION;
 
 // Validate the public authoring contract before layout, browser packaging or simulation.
 const OPERATIONS = new Set(["select", "insert", "upsert", "update", "delete", "rmw"]);
@@ -2182,6 +2509,7 @@ function validateSpec(spec, features = {}, kinds) {
     if (edge.p != null) number(edge.p, "edge.p"); // random routing accepts weights > 1
     if (edge.retries != null) number(edge.retries, "edge.retries", 0, Infinity, true);
   }
+  validateRouting(features.endpoints === false ? { ...spec, nodes: spec.nodes.map(n => ({ ...n, endpoints: undefined })) } : spec);
   const parents = new Map();
   for (const edge of edges.filter(e => e.kind === "replication" && ["db", "dynamodb"].includes(nodes.get(e.from).kind) && ["db", "dynamodb"].includes(nodes.get(e.to).kind))) {
     if (parents.has(edge.to)) fail(edge.to, "a table replica must have one primary");
@@ -2213,16 +2541,26 @@ function validateSpec(spec, features = {}, kinds) {
     if (!Array.isArray(endpoint.calls)) fail(route + ".calls", "expected an array");
     for (const call of endpoint.calls) {
       object(call, route + ".call");
-      if (!edges.some(e => e.from === node.id && e.to === call.to && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${call.to}`);
+      const actions = call.routing ? [...call.routing.rules.map(r => r.action), call.routing.fallback] : [];
+      const destinations = call.routing ? [...new Set(actions.flatMap(a => a.type === "send" ? [a.to] : a.type === "weighted" ? a.targets.map(t => t.to) : []))] : [call.to];
       if (call.p != null) number(call.p, route + ".p", 0, 1);
-      if (features.tables !== false && (call.op != null || call.table != null)) {
-        if (!OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
-        const target = nodes.get(call.to);
-        const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
-        if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${call.to}`);
-        if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+      const tableCall = features.tables !== false && (call.op != null || call.table != null);
+      if (tableCall && !OPERATIONS.has(call.op)) fail(route + ".op", `unknown operation ${call.op}`);
+      for (const destination of destinations) {
+        if (!edges.some(e => e.from === node.id && e.to === destination && e.kind !== "config")) fail(route, `missing call edge ${node.id} → ${destination}`);
+        if (tableCall) {
+          const target = nodes.get(destination);
+          const tables = target.tables || nodes.get(parents.get(target.id))?.tables;
+          if (!tables || !Object.hasOwn(tables, call.table)) fail(route, `unknown table ${call.table} at ${destination}`);
+          if (parents.has(target.id) && call.op !== "select") fail(route, "write to the primary, not a replica");
+        }
       }
     }
+  }
+  if (spec.ports != null) {
+    object(spec.ports, "ports");
+    for (const [port, ids] of Object.entries(spec.ports))
+      for (const id of [].concat(ids)) if (!nodes.has(id)) fail("ports." + port, `unknown node ${id}`);
   }
   for (const key of ["speed", "window", "length", "per"]) if (spec.sim?.[key] != null) number(spec.sim[key], "sim." + key, Number.MIN_VALUE);
   if (spec.scenario) {
@@ -2329,7 +2667,7 @@ function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, ...(spec.traffic ? { traffic: spec.traffic } : {}), ...(spec.policies ? { policies: spec.policies } : {}), features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -3265,6 +3603,8 @@ function simSpec(model) {
     scenario: model.scenario,
     flags: model.flags,
     records: model.records,
+    ...(model.traffic ? { traffic: model.traffic } : {}),
+    ...(model.policies ? { policies: model.policies } : {}),
     features: model.features,
   };
 }
@@ -3471,6 +3811,7 @@ const hooks = { tick: [], takeover: [], key: [], select: [], focus: [], step: []
 let timeScale = 1;
 // Set by the inspector: packets on other routes dim while one route is picked.
 let routeFilter = null;
+let trafficDisplay = null;
 // A selected saved record: keep its request/replication packets visible.
 let recordFilter = null;
 let paused = false;
@@ -3512,6 +3853,10 @@ function packetEl(v) {
     g.innerHTML = `<path class="pk-trail"/><path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
   } else {
     g.innerHTML = `<path class="pk-trail"/><circle r="1.9"/>`;
+  }
+  if (DATA.traffic) {
+    const symbol = document.createElementNS(NS, 'path');
+    symbol.setAttribute('class', 'pk-symbol'); g.append(symbol);
   }
   g.style.display = "none";
   v.layer.appendChild(g);
@@ -3558,6 +3903,9 @@ function drawPackets() {
     if (slot.kind !== packet.kind) {
       slot.g.dataset.kind = packet.kind;
       slot.kind = packet.kind;
+      if (DATA.traffic) slot.g.querySelector('.pk-symbol').setAttribute('d',
+        packet.kind === 'record' ? 'M-2-2H2V2H-2Z' : packet.kind === 'replication' ? 'M0-3L3 0 0 3-3 0Z' :
+        packet.kind === 'retry' ? 'M3 0A3 3 0 1 1-3 0A3 3 0 1 1 3 0ZM1 0A1 1 0 1 0-1 0A1 1 0 1 0 1 0Z' : ['error','drop'].includes(packet.kind) ? 'M-2-2L2 2M2-2L-2 2' : 'M2 0A2 2 0 1 1-2 0A2 2 0 1 1 2 0Z');
     }
     const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
     const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
@@ -3574,7 +3922,9 @@ function drawPackets() {
     const traced = sim.tracing?.msgId;
     const record = recordFilter && ((packet.msg || packet.call?.job.msg)?.records?.[recordFilter.table]);
     const matchesRecord = recordFilter && (record?.key === recordFilter.key || (packet.entry?.table === recordFilter.table && packet.entry.key === recordFilter.key));
-    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    trafficDisplay?.paint(slot, packet);
+    const classDim = trafficDisplay && !trafficDisplay.matches(packet) ? 0.12 : 1;
+    const dim = recordFilter ? (matchesRecord ? 1 : 0.08) : traced ? (sim.tracedId(packet) === traced ? 1 : 0.1) : Math.min(classDim, routeFilter && packet.ep !== routeFilter ? 0.12 : 1);
     slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
@@ -4008,10 +4358,16 @@ const inspector = (() => {
       const byName = new Map(list.map((r) => [r.name, r]));
       const rows = names.map((name) => {
         const r = byName.get(name) || { rate: 0, p50: 0, p99: 0, errors: 0, count: 0 };
-        const calls = (declared[name]?.calls || []).map((c) => `${specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
+        const calls = (declared[name]?.calls || []).map((c) => `${c.routing ? "routing rules" : specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
         return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
       });
       return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+    function routing(id) {
+      if (!sim.trafficState) return "";
+      const classes = sim.trafficOf(id).filter(c => c.rate > 0).map(c => `${esc(DATA.traffic?.[c.id]?.label || c.label)} ${rate(c.rate)} arrivals`).join(" · ");
+      const decisions = sim.routingOf(id).map(d => `<div class="tp-decision">${esc(d.rule)} → ${esc(d.to || "reject")} · ${d.count} ${esc(d.outcome)}</div>`).join("");
+      return `<p class="tp-ins-note">${classes}${decisions ? ` · decisions over the last ${sim.cfg.window}s` : ""}</p>${decisions}`;
     },
     function tables(id) {
       const list = sim.tablesOf(id);
@@ -4052,7 +4408,7 @@ const inspector = (() => {
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
     // Following needs requests through this node: offered once it has seen some.
-    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit));
+    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit || node.workload));
     write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
     panel.toggleAttribute("data-down", !node.up);
   }
@@ -4195,7 +4551,7 @@ const tracer = (() => {
   function follow(route) {
     inspector.close();
     endpoint = route || null;
-    sim.follow(endpoint);
+    sim.follow(endpoint, trafficDisplay?.selected);
     active = true;
     lingering = 0;
     timeScale = 0.25;
@@ -4223,11 +4579,12 @@ const tracer = (() => {
     const root = spans[0];
     panel.querySelector(".tp-tr-name").textContent = t.endpoint || endpoint || "a request";
     panel.querySelector(".tp-tr-stat").textContent = !root ? "waiting for the next one…" : t.done ? `${ms(root.total)}${root.ok === false ? " · failed" : ""}` : "in flight…";
+    if (sim.trafficState && root) panel.querySelector(".tp-tr-stat").textContent += t.truncated ? " · truncated (256 spans / 60s limit)" : sim.tracePending() ? (t.done ? " · async pending" : "") : " · journey complete";
     // Light the path: every node with a span, and the edges between parent and child spans.
     const nodes = new Set(spans.map((s) => s.node));
     const edges = new Set();
     for (const s of spans) if (s.parent != null) {
-      const from = spans[s.parent].node;
+      const from = spans[s.parent]?.node;
       const index = DATA.spec.edges.findIndex((e) => e.from === from && e.to === s.node);
       if (index >= 0) edges.add(index);
     }
@@ -4241,11 +4598,11 @@ const tracer = (() => {
     const depth = new Map();
     const walk = (parent, d) => spans.filter((s) => s.parent === parent).forEach((s) => (order.push(s), depth.set(s.id, d), walk(s.id, d + 1)));
     walk(null, 0);
-    panel.querySelector(".tp-tr-body").innerHTML = order
+    panel.querySelector(".tp-tr-body").innerHTML = (root.context ? `<div class="tp-tr-context">${esc(DATA.traffic?.[root.traffic]?.label || root.traffic || "Unclassified")} · ${esc(JSON.stringify(root.context))}</div>` : "") + order
       .map((s) => {
         const left = ((s.start || 0) / total) * 100;
         const width = s.done ? Math.max(0.8, ((s.total || 0) / total) * 100) : 0.8;
-        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>`;
+        return `<div class="tp-span"${s.ok === false ? " data-bad" : ""}${s.done ? "" : " data-open"}><span class="tp-span-name" style="padding-left:${depth.get(s.id) * 12}px">${esc(labelOf(s.node))}${s.label && s.parent != null ? ` <small>${esc(s.label)}</small>` : ""}${s.async ? " <small>async</small>" : ""}</span><span class="tp-span-ms">${s.done ? ms(s.total) : "…"}</span><span class="tp-span-bar"><i style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></i></span></div>${(s.decisions || []).map(d => `<div class="tp-decision">${esc(d.rule)} → ${esc(d.to || "reject")} · ${esc(d.outcome)}${d.observations.map(o => `<br>${esc(o.field)}: ${o.exists ? esc(JSON.stringify(o.value)) : "missing"} · ${esc(o.op)} ${esc(JSON.stringify(o.expected))} → ${o.result}`).join("")}</div>`).join("")}`;
       })
       .join("");
   }
@@ -4260,7 +4617,7 @@ const tracer = (() => {
     // Once the request has answered and its async steps have landed, return to normal speed
     // but keep the timeline up until the reader closes it.
     const t = sim.tracing;
-    if (t?.done && t.spans.every((s) => s.done)) {
+    if (t?.truncated || (t?.done && t.spans.every((s) => s.done) && (!sim.trafficState || !sim.tracePending()))) {
       lingering += 0.12;
       if (lingering > 0.6) {
         timeScale = 1;

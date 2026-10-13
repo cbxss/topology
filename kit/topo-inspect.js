@@ -39,10 +39,16 @@ const inspector = (() => {
       const byName = new Map(list.map((r) => [r.name, r]));
       const rows = names.map((name) => {
         const r = byName.get(name) || { rate: 0, p50: 0, p99: 0, errors: 0, count: 0 };
-        const calls = (declared[name]?.calls || []).map((c) => `${specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
+        const calls = (declared[name]?.calls || []).map((c) => `${c.routing ? "routing rules" : specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
         return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
       });
       return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+    function routing(id) {
+      if (!sim.trafficState) return "";
+      const classes = sim.trafficOf(id).filter(c => c.rate > 0).map(c => `${esc(DATA.traffic?.[c.id]?.label || c.label)} ${rate(c.rate)} arrivals`).join(" · ");
+      const decisions = sim.routingOf(id).map(d => `<div class="tp-decision">${esc(d.rule)} → ${esc(d.to || "reject")} · ${d.count} ${esc(d.outcome)}</div>`).join("");
+      return `<p class="tp-ins-note">${classes}${decisions ? ` · decisions over the last ${sim.cfg.window}s` : ""}</p>${decisions}`;
     },
     function tables(id) {
       const list = sim.tablesOf(id);
@@ -83,7 +89,7 @@ const inspector = (() => {
     write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
     write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
     // Following needs requests through this node: offered once it has seen some.
-    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit));
+    $(".tp-ins-follow").hidden = !(DATA.features.trace && typeof tracer !== "undefined" && (node.flow > 0 || node.emit || node.workload));
     write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
     panel.toggleAttribute("data-down", !node.up);
   }

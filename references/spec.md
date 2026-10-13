@@ -177,8 +177,68 @@ Scenario steps can use `inspect: "pg"` or `inspect: false`, and `follow: "POST /
 | `replicatedDb(id, { label, replicas })` | A primary and `replicas` replicas, joined by replication edges. | the primary / `[primary]` |
 | `queueWorkers(id, { workers, rate, worker })` | A queue and its competing workers. | the queue / the workers |
 | `canary(id, { router, flag, rollout, v1, v2, flags })` | `<id>-v1` (`unless` the flag) and `<id>-v2` (`flag`) behind `router`, a `flags` node pushing config to it (`flags: false` to skip), and the flag in `spec.flags`. | the router / `[v1, v2]` |
+| `system(prefix, spec, { at, label, keepSources, shared, plate, region })` | A whole other spec, embedded: see "Composing systems". | `ports.in` (default: what its dropped clients called) / `ports.out` |
 
 Every pattern takes `at: [col, row]` to place its nodes at fixed offsets from there; leave `at` out of every pattern and node to let auto-layout place everything. `examples/platform/` is a figure built entirely from patterns, and `node scripts/catalog.mjs` draws every kind and pattern (`examples/catalog/catalog.html`, or `/catalog` on the dev server).
+
+### Composing systems
+
+A figure can reuse another figure's system. The child stays an ordinary spec that builds on its own; it may declare `ports: { in: "api", events: "topic" }`, naming the node ids other figures may link to (validated). The parent embeds it with `system()`:
+
+```js
+import { compose, importSpec, link, system } from "../../kit/patterns.mjs";
+
+const ledger = system("books", await importSpec(new URL("../ledger/ledger.spec.mjs", import.meta.url)), { at: [3, 4] });
+export default compose({ title: "Orders → ledger", sim: { per: 40 } }, orders, ledger,
+  link("topic", ledger.in, { group: "ledger" }));
+```
+
+- **Ids.** Every node, edge, group and flag becomes `<prefix>.<id>` (`books.shard-3`); `id("shard-3")` on the fragment returns that. Labels keep the short id. Endpoint call targets and `routing` targets move with them; route names, table names and routing conditions do not. `shared: ["flag"]` keeps a flag's name so parent and child switch together. Prefixes cannot contain `.`, `>` or `:`; nesting gives `outer.inner.id`.
+- **Sources.** The child's `client` nodes with `emit` or `workload` are dropped with their edges, so the parent drives the system; `keepSources: true` keeps them. Other sources (schedulers, internal emitters) stay.
+- **Story and model.** The child's scenario is dropped; the parent's steps can target embedded ids (`fail: "books.shard-3"`, `set: { "books.ledger>books.shard-1": { timeout: 0.2 } }`). The parent's `sim` and `grid` apply; `compose` warns when the child was written for a different `sim.per`, because its rates and capacities are per packet. `records`, `traffic` and `policies` merge by name and must agree.
+- **Drawing.** With `at`, the child keeps its own drawing, its `at`s or else its own auto-layout, moved so its top-left lands at `at`. Without `at`, its positions are dropped and the parent's auto-layout places everything; don't mix a placed parent with an unplaced system. Edge `via` waypoints are dropped (they are world units). The system stands on a plate labelled with its `title` (`label` overrides, `region: true` for a heavier plate, `plate: false` for none); its own groups nest inside.
+- **Layout files.** `importSpec(fileOrUrl)` loads the child the way `build.mjs` does, with its `<name>.layout.json`; a plain `import` skips that file. Positions dragged in the parent's editor are saved under the embedded ids in the parent's layout file.
+
+`examples/ledger` is a standalone system with ports; `examples/order-ledger` embeds it and order-events in one figure.
+
+## Sources and notes
+
+For agents, not readers: where a figure's claims come from. None of it is drawn, and the build strips it before anything is embedded in the page.
+
+```js
+export default {
+  sources: {                                                  // name → repo
+    infra:  { repo: "../../infra" },                          // a local checkout, relative to this spec
+    ledger: { repo: "github.com/acme/ledger", rev: "a1b2c3d" },  // a remote, pinned to a commit
+  },                                                          // `self` is always defined: this spec's repo
+  refs:  ["infra:terraform/ledger/main.tf"],                  // the whole system
+  notes: ["Resharding is manual."],
+  nodes: [{ id: "ledger", kind: "service", replicas: 3,
+    refs: [
+      "ledger:cmd/server/main.go#func main",
+      { ref: "infra:k8s/ledger.yaml#replicas:", field: "replicas", note: "prod HPA floor" },
+    ],
+    notes: ["Idempotent by entry id.", { text: "≈400/s from the ledger dashboard", field: "emit", assumed: true }],
+  }],
+  edges: [{ from: "ledger", to: "shard-0", timeout: 0.2, refs: [{ ref: "ledger:config/prod.yaml#db_timeout:", field: "timeout" }] }],
+};
+```
+
+`refs` and `notes` are arrays on the spec, any node, edge (object form) or group. A ref is `"<source>:<path>[#anchor]"` or `{ ref, field, note }`; the anchor is a literal substring (first match) or `/regex/`, never a line number. A note is text or `{ text, field, assumed }`.
+
+`node scripts/build.mjs my.spec.mjs --sources` resolves every ref and prints each one with its status and the matched lines, then the notes, the `assumed` notes and the `unsourced` nodes and edges. `--json` prints the same as `{ sources, items, unsourced, assumed, summary }`.
+
+| Status | Meaning |
+|---|---|
+| `ok` | The file and anchor exist; a `field`'s number matches. |
+| `missing-file`, `missing-anchor` | The file, or the anchor in it, is gone. |
+| `mismatch` | The first number after the anchor (or on the next line) differs from the spec's `field`. Units convert: `200ms` matches `timeout: 0.2`, `85%` matches `hit: 0.85`. |
+| `stale` | With `rev`: the file changed since that commit (the commits are listed, and uncommitted edits). Refs are read at `rev`. |
+| `unresolved` | The repo isn't available: a remote without `--fetch`, a missing directory or an unknown `rev`. |
+
+The command exits 1 on `missing-*` or `mismatch`, and also on `stale` or `unresolved` with `--strict`. Remotes (`github.com/org/repo`, `https://`, `git@`, `file://`) are never fetched unless you pass `--fetch`, which keeps a blobless clone in `~/.cache/topology/repos` using your git credentials. To read a local checkout instead, pass `--source-dir ledger=~/Code/ledger`, or map repos to checkouts in a `.topology-sources.json` next to the spec (`{ "github.com/acme/ledger": "~/Code/ledger" }`, gitignored). The spec is never rewritten: after fixing what the report flags, update `rev` yourself.
+
+With `system()`, the child's sources are namespaced like its ids (`books.ledger`), its refs are rewritten to match, and its spec-level refs and notes move onto its plate. `importSpec` makes the child's relative repos absolute and sets its `self`; a plain `import` leaves them relative to the parent and `self` pointing at the parent's repo.
 
 ## Groups
 
@@ -316,3 +376,115 @@ remains in memory; publishes arriving during downtime are dropped/refused.
 Consumers resume on recovery. Consumption advances offsets when dispatched,
 not after a durable consumer acknowledgement; crash redelivery and durable
 broker storage are outside this model.
+
+## Request context, routing and traffic classes
+
+Use `workload` when requests need metadata. Keep `emit` for existing numeric,
+curve, scheduled-burst or endpoint-mix sources. A node cannot declare both.
+Context is synthetic JSON; no HTTP parser or real header capture is involved.
+
+<!-- tested: routing-recipe -->
+```js
+export default {
+  traffic: {
+    standard: { label: "Standard", color: "cyan", context: { tier: "standard" } },
+    premium: { label: "Premium", color: "violet", context: { tier: "premium" } },
+  },
+  policies: { premium: { field: "context.tier", eq: "premium" } },
+  nodes: [
+    { id: "app", kind: "client", workload: [
+      { traffic: "standard", endpoint: "GET /orders", rate: 8 },
+      { traffic: "premium", endpoint: "GET /orders", rate: 3, context: { region: "eu" } },
+    ] },
+    { id: "gateway", kind: "gateway", routing: {
+      rules: [{ id: "premium-service", when: { policy: "premium" }, action: { type: "send", to: "dedicated" } }],
+      fallback: { type: "send", to: "shared" },
+    } },
+    { id: "dedicated", kind: "service" },
+    { id: "shared", kind: "service" },
+  ],
+  edges: [["app", "gateway"], ["gateway", "dedicated"], ["gateway", "shared"]],
+};
+```
+
+| Field | Contract |
+|---|---|
+| `traffic` | Map of class IDs to optional `label`, named `color`, and default `context` object. |
+| `workload` | Nonempty array of `{rate, traffic?, endpoint?, context?}`. Rate is a nonnegative number or increasing `[[seconds, rate], …]` curve. |
+| `context` | Acyclic JSON object. Class defaults and workload overrides merge **shallowly**; nested objects are replaced. The resolved object is cloned and deeply frozen at emission. |
+| `policies` | Named predicates, reusable through `{policy: "name"}`. References must exist and be acyclic. |
+| `routing` | `{rules: [{id, when, action}, …], fallback: action}`. First matching rule wins; fallback is required. Rule IDs are unique within the routing block; `fallback` is reserved. |
+| `colorBy` | `traffic`, `activity`, or `none`. Specs declaring classes default to traffic; older specs retain their activity display. |
+
+Predicates support one comparison per leaf: `{field, eq: scalar}`,
+`{field, in: [scalars]}`, `{field, exists: boolean}`, or numeric `gt`, `gte`,
+`lt`, `lte`. Scalars are strings, finite numbers, booleans and null. Comparisons
+are strict: missing differs from null, zero and false; numeric strings are not
+numbers. Compose using `{all: [predicates]}`, `{any: [predicates]}` and
+`{not: predicate}`. Lists are nonempty and short-circuit in declaration order.
+
+Fields are dot paths into `context`, or `request.endpoint`, `request.source`
+(the originating source, including after Kafka/queue delivery), and
+`request.traffic`. Use array paths for literal dots in keys, for example
+`{field: ["context", "headers", "x.tenant"], eq: "acme"}`. Context can represent
+headers, tenant, region, operation or any other declared metadata. There are no
+arbitrary expressions, regular expressions, context mutations or hash routing.
+
+Actions are `{type: "send", to: "node"}`, `{type: "reject"}`, or
+`{type: "weighted", targets: [{to: "a", weight: 3}, {to: "b", weight: 1}]}`.
+Weights are positive and finite; the seeded choice happens once per call and
+retries reuse that destination. Every possible target needs exactly one outgoing
+data edge. Config and replication edges are not routing targets. A down target,
+open breaker or false flag gate fails through existing transport behavior;
+**fallback handles unmatched conditions, not failed delivery**. Rule actions
+ignore edge `p`; they do not create a health-aware pool.
+
+Endpoint `calls` take precedence over node routing. A call may add `when` and
+may replace `to` with `routing`. Its `p`, `then`, `op` and `table` still apply:
+conditions are checked before probability, skipped stages advance, and table
+operations run at the chosen destination. All possible table destinations must
+support that table/operation. For example:
+
+```js
+{ when: {field: "context.write", eq: true}, then: true,
+  op: "upsert", table: "orders",
+  routing: {rules: [{id: "premium-db", when: {policy: "premium"},
+    action: {type: "send", to: "premium-db"}}],
+    fallback: {type: "send", to: "shared-db"}} }
+```
+
+Disabling endpoints removes endpoint labels/call behavior while retaining
+workload rates and context. Disabling tables removes table operations while
+retaining routing. Routing is available independently of trace and color UI.
+
+Kafka and queues retain an immutable envelope per pending partition offset.
+Consumers receive the original class, context, endpoint, generated records,
+flag draws and root/parent identity. Each delivery has a new message ID and
+independent mutable execution state. Kafka still assigns partitions to groups;
+queue workers still compete. Put content-routing rules on consumers, not the
+log node. Envelopes are reclaimed after all groups dispatch them. This models
+**dispatch offsets**, not durable ACKs, redelivery or exactly-once processing.
+An undrained backlog retains its envelopes in memory.
+
+Follow a request displays class/context, rule decisions, compared values,
+selected destinations and outcomes. Kafka/queue descendants remain part of the
+journey after the initial response; pending work is shown explicitly. A follow
+captures at most 256 spans or 60 simulated seconds and labels truncation.
+`--trace` includes the same routing explanation. Inspectors and `--check` show
+recent decision counts. Class legends count source emissions/s; node inspectors
+count arrivals/s, which may include retries and async deliveries. These are
+observed rolling rates, not percentages or configured rates.
+
+Traffic colors are `cyan`, `blue`, `violet`, `magenta`, `teal`, `lime`, with
+separate dark/light values. Omitted colors cycle in declaration order; repeated
+colors and more than six classes produce a `--check` warning. Red and amber
+remain status colors. Traffic mode uses class-colored requests, hollow
+responses, square records, diamond replication, amber-outlined retries, red
+error/drop crosses and faded late replies. Activity preserves the older packet
+colors; None uses monochrome state shapes. Class buttons support multiple
+selection; no selection means all. They highlight observed paths and intersect
+route filtering. Record selection and followed traces take visibility priority.
+Display controls consume no random draws and never alter the simulation.
+
+Complete stories: `examples/tenant-routing/` (two routing decisions and tenant
+failure isolation), `examples/event-routing/` (mixed Kafka backlog and context).
