@@ -119,7 +119,10 @@ const server = http.createServer(async (req, res) => {
     if (!result.ok) pages.delete(key);
     console.log(`${req.method} ${req.url} ${result.ok ? "ok" : "FAILED"} ${Date.now() - started}ms`);
     res.writeHead(result.ok ? 200 : 500, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    if (result.ok) return res.end(result.out.replace("</body>", `${RELOAD}</body>`));
+    // Before the last </body>: the page's own script may contain the text "</body>" (the
+    // morph inlines the kit, whose page template has one).
+    const at = result.out.lastIndexOf("</body>");
+    if (result.ok) return res.end(at < 0 ? result.out + RELOAD : result.out.slice(0, at) + RELOAD + result.out.slice(at));
     return res.end(`<!doctype html><meta charset="utf-8"><title>build failed</title><body style="background:#0b0b0b;color:#ff6b6b;font:13px/1.6 ui-monospace,monospace;margin:40px"><h3>build failed: ${escape(page[1])}</h3><pre>${escape(result.err)}</pre>${RELOAD}</body>`);
   }
   const layout = url.pathname.match(/^\/layout\/([^/]+)$/);
