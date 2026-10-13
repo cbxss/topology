@@ -76,3 +76,10 @@ bounded decision/rate histories. `routing-validation.mjs` owns the public schema
 context/envelope histories and retain their RNG order. The builder bundles the
 new ESM modules using the same scoped module manifest; do not concatenate exports
 ad hoc or change the frozen release fixtures to accommodate new behavior.
+
+Text placement lives in `kit/labels.mjs` (pure: measuring monospace text, wrapping, boxes,
+greedy placement by cost). `topo.mjs` `labelPlanOf(model, view, P, width, height)` builds its
+candidates and obstacles and is the single source for both the renderer and `--check`'s text
+warnings, so they cannot disagree. The morph re-renders in the page, so `labels.mjs` is bundled
+as its own scope ahead of `topo.mjs` in `scripts/page.mjs`; morph frames reuse the resting
+view's spots (`model.labelPlans`, `fastLabels`).

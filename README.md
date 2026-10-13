@@ -203,10 +203,9 @@ Maintainers: the **Publish to npm** workflow runs the full CI suite and verifies
 builds from an isolated npm archive before publishing publicly with provenance.
 It reads the repository secret `NPM_PUBLISH` only in the publishing step.
 
-- For the initial `1.0.0` npm release, run **Publish to npm → Run workflow** on
-  `main`. The existing `v1.0.0` Git tag predates the npm manifest.
-- For subsequent releases, update `package.json` and the version in `SKILL.md`,
-  commit, and push a matching `vX.Y.Z` tag. A mismatched tag fails publication.
+- To release, update `package.json` and the version in `SKILL.md`, commit, and
+  push a matching `vX.Y.Z` tag. A mismatched tag fails publication. The first
+  npm release is `1.1.0`; the `v1.0.0` Git tag predates the npm manifest.
 - Manual runs on `main` are also supported. Each npm version can be published
   once; rerunning an already published version will fail instead of replacing it.
 

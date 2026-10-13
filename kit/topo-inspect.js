@@ -31,6 +31,10 @@ const inspector = (() => {
 
   // Sections, in order; each returns markup or "" for this node. Later milestones add more.
   const sections = [
+    function detail(id) {
+      const text = specOf.get(id)?.detail;
+      return text ? `<p class="tp-ins-detail">${esc(text)}</p>` : "";
+    },
     function routes(id) {
       const list = sim.routesOf(id);
       const declared = specOf.get(id)?.endpoints || {};

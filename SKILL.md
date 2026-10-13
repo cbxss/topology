@@ -4,7 +4,7 @@ description: Create or edit distributed-system architecture diagrams, request an
 license: MIT
 metadata:
   opencode/slash: "true"
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Topology
@@ -64,7 +64,8 @@ those are part of the requested deliverable.
 4. **Check the model.** `node scripts/build.mjs my.spec.mjs --check` runs the simulation headless. For each phase it prints the settled numbers (in/s, p50/p99, lag, failing, dropped traffic, and table metrics such as stale reads) and the readout just before and 3 s after each step, then per-node stats and warnings:
    - lag that keeps growing
    - drops (except onto nodes the story fails on purpose)
-   - idle edges, overlapping nodes, edges under nodes, hidden labels
+   - idle edges, overlapping nodes, edges under nodes
+   - text: labels hidden, overlapping a node or another label, or shortened; edge labels with no clear spot
    - a story that ends broken and will jump when it loops
 
    Fix the spec until the only warnings are ones you intend, and the phase numbers say what your narration says.
@@ -110,7 +111,7 @@ Reuse the shipped kit. Author a spec and build it; modifying the engine is neede
   LEDs blink green when a node handles a request and turn red when it is down. Amber cells on a node are its buffer filling. A caller's port ring turns red when its breaker is open and amber when half-open.
 - **Kafka is lanes of cells.** Each partition shows its last 12 offsets. A bright cell is a record the first consumer group hasn't committed yet, so lag is the bright run; the white cursor is that group's committed offset, the blue (and green) cursors other groups'.
 - **Links lie on the floor.** Solid for sync calls (with a small port ring at the caller), dashed for async and replication, a chevron where they arrive. Parallel links get their own lanes.
-- **Labels lie on the floor in iso**, in front of the node or along its side, whichever no nearer node hides; in flat they sit under each glyph. Zone labels are engraved on the plate's front corner.
+- **Labels lie on the floor in iso** and sit beside each glyph in flat, each in the first spot clear of nodes, other labels and lines. Long names wrap to two lines; keep `label` a name and put descriptions in `detail` (the inspector). Zone labels are engraved on the plate's front corner.
 - **Hover dims everything except a node and its neighbours**, and the readout (with a 30 s sparkline) switches to that node's numbers.
 - **Edge labels** show live rates (`labels: "rate"`), flag shares and error rates; crossings hop.
 - **Switching views morphs**: the iso camera swings to top-down, then crossfades into the 2D glyphs.

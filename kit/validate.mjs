@@ -53,6 +53,7 @@ export function validateSpec(spec, features = {}, kinds) {
     for (const key of ["partitions", "brokers", "replicas", "rf", "minIsr"])
       if (node[key] != null) number(node[key], node.id + "." + key, 1, Infinity, true);
     for (const key of ["hit", "errorRate"]) if (node[key] != null) number(node[key], node.id + "." + key, 0, 1);
+    for (const key of ["label", "detail"]) if (node[key] != null && typeof node[key] !== "string") fail(node.id + "." + key, "expected a string");
     if (node.emit != null) emit(node.emit, node.id + ".emit");
     if (node.tables) {
       object(node.tables, node.id + ".tables");
@@ -71,6 +72,7 @@ export function validateSpec(spec, features = {}, kinds) {
     for (const key of ["ms", "timeout", "backoff", "rate"]) if (edge[key] != null) number(edge[key], "edge." + key);
     if (edge.p != null) number(edge.p, "edge.p"); // random routing accepts weights > 1
     if (edge.retries != null) number(edge.retries, "edge.retries", 0, Infinity, true);
+    for (const key of ["label", "detail"]) if (edge[key] != null && typeof edge[key] !== "string") fail("edge." + key, "expected a string");
   }
   validateRouting(features.endpoints === false ? { ...spec, nodes: spec.nodes.map(n => ({ ...n, endpoints: undefined })) } : spec);
   const parents = new Map();

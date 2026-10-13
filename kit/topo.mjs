@@ -7,6 +7,7 @@ import { validateSpec } from "./validate.mjs";
 import { COMPONENTS, baseKind, isoComponent, flatComponent } from "./components.mjs";
 import { groupOf, isLog } from "./topo-sim.mjs";
 import { resolveFeatures, stripFeatures } from "./topo-features.mjs";
+import { CHAR, anchorFor, lineAt, localBox, placeLabels, planBox, wrapLabel } from "./labels.mjs";
 
 // Footprints in world units (x along the flow, y across it).
 export const KINDS = {
@@ -57,6 +58,13 @@ export function prepare(spec) {
     return { ...(Array.isArray(raw) ? {} : raw), from, to, index, kind: raw.kind || (viaLog ? "async" : "sync"), sync: raw.sync ?? (!raw.kind && !viaLog) };
   });
   const grid = layout(nodes, edges, spec);
+  // Long labels wrap to two lines that fit a column; longer still, they are shortened.
+  const maxChars = Math.max(8, Math.min(18, Math.floor((grid[0] - 16) / (CHAR * 8))));
+  for (const node of nodes) {
+    const { lines, shortened } = wrapLabel(node.label, maxChars);
+    node.labelLines = lines;
+    node.labelShortened = shortened;
+  }
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
@@ -361,7 +369,11 @@ function extentOf(model, view) {
   const pts = [];
   for (const node of model.nodes) pts.push(...k.boxCorners(node.plan, 0, view === "iso" ? heightOf(node) : 0));
   for (const group of model.groups) pts.push(...k.boxCorners(group.box, -2, 0));
-  for (const node of model.nodes) pts.push([node.cx - node.label.length * 2.6, node.plan.y + node.plan.d + 14, 0], [node.cx + node.label.length * 2.6, node.plan.y + node.plan.d + 14, 0]);
+  for (const node of model.nodes) {
+    const half = Math.max(...node.labelLines.map((line) => line.length)) * 2.6;
+    const y = node.plan.y + node.plan.d + 14 + (node.labelLines.length - 1) * 9;
+    pts.push([node.cx - half, y, 0], [node.cx + half, y, 0]);
+  }
   return pts;
 }
 
@@ -624,21 +636,104 @@ export function laneOf(node, p) {
   return { x: node.plan.x + node.plan.w - 8 - SLOTS * PITCH, y: top + p * LANE, w: SLOTS * PITCH, d: LANE - 3, r: 1 };
 }
 
-// Where a node's label lies on the floor in iso: in front of it, else along its right side,
-// whichever no nearer node hides. `labelSpots` is shared with `build.mjs --check`.
-export function labelSpots(node) {
-  const half = node.label.length * 2.4;
-  const front = { at: [node.cx, node.plan.y + node.plan.d + 10], along: "x" };
-  front.marks = [[node.cx - half, front.at[1]], front.at, [node.cx + half, front.at[1]]];
-  const side = { at: [node.plan.x + node.plan.w + 9, node.cy], along: "y" };
-  side.marks = [[side.at[0], node.cy - half], side.at, [side.at[0], node.cy + half]];
-  return [front, side];
+// Where every label goes, in one view: node labels first (iso: in front of the node, else
+// along its right side, behind it or along its left; 2D: below, above, right or left), then
+// edge labels (along any leg, either side of the line). Each takes the first spot that no node,
+// earlier label or line is in the way of (kit/labels.mjs); an edge label with no clear spot is
+// `crowded` and only shows while its edge is in focus. Shared with build.mjs --check.
+export const NODE_TEXT = 8;
+export const EDGE_TEXT = 6.2;
+
+export function labelPlanOf(model, view, P, W, H) {
+  const g = view === "iso" ? 1 : 1 / k.cameraOf(P).k; // 2D text is sized in screen units
+  const spot = (lines, size, along, anchor, want, extra) => {
+    const local = localBox(lines, size, anchor);
+    const at = anchorFor(along, local, want);
+    return { at, along, anchor, size, lines, box: planBox(at, along, local), ...extra };
+  };
+  const items = [];
+  for (const node of model.nodes) {
+    const { plan, labelLines: lines } = node;
+    const size = NODE_TEXT * g;
+    let candidates;
+    if (view === "iso") {
+      const front = spot(lines, size, "x", "middle", { x: node.cx, top: plan.y + plan.d + 4 }, { name: "front" });
+      const side = spot(lines, size, "y", "middle", { left: plan.x + plan.w + 3, y: node.cy }, { name: "side" });
+      candidates = node.labelAt === "side" ? [side] : node.labelAt === "front" ? [front]
+        : [front, side, spot(lines, size, "x", "middle", { x: node.cx, bottom: plan.y - 4 }, { name: "back" }), spot(lines, size, "y", "middle", { right: plan.x - 3, y: node.cy }, { name: "left" })];
+    } else candidates = [
+      spot(lines, size, "x", "middle", { x: node.cx, top: plan.y + plan.d + 4 * g }, { name: "below" }),
+      spot(lines, size, "x", "middle", { x: node.cx, bottom: plan.y - 3 * g }, { name: "above" }),
+      spot(lines, size, "x", "start", { left: plan.x + plan.w + 5 * g, y: node.cy }, { name: "right" }),
+      spot(lines, size, "x", "end", { right: plan.x - 5 * g, y: node.cy }, { name: "left" }),
+    ];
+    // 2D labels have a halo (TOPO_CSS), so a line through one costs less than moving it.
+    const near = { x0: plan.x, x1: plan.x + plan.w, y0: plan.y, y1: plan.y + plan.d };
+    items.push({ key: `n:${node.id}`, node, candidates, own: { node: node.id }, near, slack: 6 * g, lineCost: view === "iso" ? undefined : 3 });
+  }
+  const labelled = model.edges.filter((edge) => model.features?.labels !== false && edge.kind !== "config" && (edge.label || model.labels === "rate" || edge.flag || edge.unless));
+  for (const edge of [...labelled.filter((edge) => edge.label), ...labelled.filter((edge) => !edge.label)]) {
+    // Room for the longest text the live page may write here (topo-live.js drawStatus).
+    const flagName = edge.flag || edge.unless;
+    const reserve = [edge.label || (model.labels === "rate" ? "99.9k/s" : ""), flagName ? `${edge.unless ? "¬" : ""}${flagName} 100%` : ""].filter(Boolean).join(" · ") || " ";
+    const size = EDGE_TEXT * g;
+    const legs = edge.corners.slice(1).map((b, i) => [edge.corners[i], b]).map((leg, i) => ({ leg, i, len: Math.hypot(leg[1][0] - leg[0][0], leg[1][1] - leg[0][1]) }))
+      .sort((a, b) => b.len - a.len || a.i - b.i);
+    const candidates = [];
+    for (const { leg: [a, b] } of legs) for (const t of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+      const m = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      const horizontal = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
+      if (view === "iso") candidates.push(...(horizontal
+        ? [spot([reserve], size, "x", "middle", { x: m[0], bottom: m[1] - 4.45 }), spot([reserve], size, "x", "middle", { x: m[0], top: m[1] + 4.45 })]
+        : [spot([reserve], size, "y", "middle", { left: m[0] + 1.35, y: m[1] }), spot([reserve], size, "y", "middle", { right: m[0] - 1.35, y: m[1] })]));
+      else candidates.push(...(horizontal
+        ? [spot([reserve], size, "x", "middle", { x: m[0], bottom: m[1] - 1.95 * g }), spot([reserve], size, "x", "middle", { x: m[0], top: m[1] + 1.95 * g })]
+        : [spot([reserve], size, "x", "start", { left: m[0] + 4 * g, top: m[1] - 2.65 * g }), spot([reserve], size, "x", "end", { right: m[0] - 4 * g, top: m[1] - 2.65 * g })]));
+    }
+    items.push({ key: `e:${edge.index}`, edge, candidates, own: { edge: edge.index }, crowdable: true });
+  }
+  // Group labels are fixed (along the plate's left edge); they are in everyone's way.
+  const labels = model.groups.map((group) => {
+    const size = (view === "iso" ? (group.region ? 7 : 6) : group.region ? 8 : 7) * g;
+    const text = String(group.label).toUpperCase();
+    const at = view === "iso" ? [group.box.x + 6.5, group.box.y + group.box.d - 8] : [group.box.x + 8 * g, group.box.y + group.box.d - 7 * g];
+    return { id: `g:${group.id}`, box: planBox(at, view === "iso" ? "y" : "x", localBox([text], size, "start")) };
+  });
+  const nodes = model.nodes.map((node) => ({ id: node.id, box: { x0: node.plan.x, x1: node.plan.x + node.plan.w, y0: node.plan.y, y1: node.plan.y + node.plan.d } }));
+  const lines = model.edges.flatMap((edge) => edge.points.slice(1).map((b, i) => ({ edge: edge.index, a: edge.points[i], b })));
+  const marks = ({ box, along }) => (along === "y"
+    ? [[(box.x0 + box.x1) / 2, box.y0], [(box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2], [(box.x0 + box.x1) / 2, box.y1]]
+    : [[box.x0, (box.y0 + box.y1) / 2], [(box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2], [box.x1, (box.y0 + box.y1) / 2]]);
+  // Nodes are painted after labels, so in iso a label is hidden where a nearer node stands over
+  // it, or where its own node's body does (a label behind a tall node).
+  const ownHull = new Map(model.nodes.map((node) => [node.id, k.convexHull(k.pointsAt(k.boxCorners(node.plan, 0, heightOf(node)), P))]));
+  const coveredByOwn = (node, candidate) => node && marks(candidate).some((m) => inside(ownHull.get(node.id), k.iso([m[0], m[1], 0], P)));
+  const hidden = view === "iso" ? (candidate, item) => coveredByOwn(item.node, candidate) || hiddenBy(model, item.node || null, { marks: marks(candidate) }, P).length > 0 : () => false;
+  const outside = (box) => [[box.x0, box.y0], [box.x1, box.y0], [box.x0, box.y1], [box.x1, box.y1]]
+    .map((p) => k.iso([p[0], p[1], 0], P)).some(([x, y]) => x < 1 || y < 1 || x > W - 1 || y > H - 1);
+  const placed = placeLabels(items, { nodes, labels, lines, hidden, outside });
+  const plan = { nodes: new Map(), edges: new Map(), items };
+  for (const item of items) {
+    const spot = placed.get(item.key);
+    const result = { ...spot, hiddenBy: view === "iso" ? [...(coveredByOwn(item.node, spot) ? [item.node.id] : []), ...hiddenBy(model, item.node || null, { marks: marks(spot) }, P)] : [] };
+    if (item.node) plan.nodes.set(item.node.id, result);
+    else plan.edges.set(item.edge.index, result);
+  }
+  return plan;
 }
 
-// The spots a label may take: the one `labelAt` forces, else front then side.
-export function labelTries(node) {
-  const [front, side] = labelSpots(node);
-  return node.labelAt === "side" ? [side] : node.labelAt === "front" ? [front] : [front, side];
+function isoLabel(node, P, plan) {
+  const spot = plan.nodes.get(node.id);
+  node.labelSpot = spot;
+  return spot.lines.map((line, i) => k.faceTextSvg(k.topMatrix(lineAt(spot.at, spot.along, spot.size, i), 0, P, spot.along), line, { size: spot.size, tone: "hi", anchor: spot.anchor })).join("");
+}
+
+function flatLabel(node, P, plan) {
+  const spot = plan.nodes.get(node.id);
+  return spot.lines.map((line, i) => {
+    const [x, y] = k.iso([...lineAt(spot.at, "x", spot.size, i), 0], P);
+    return `<text class="tp-ft" x="${r1(x)}" y="${r1(y)}" font-size="${NODE_TEXT}" text-anchor="${spot.anchor}">${escape(line)}</text>`;
+  }).join("");
 }
 
 export function hiddenBy(model, node, spot, P) {
@@ -662,14 +757,6 @@ function inside(hull, [x, y]) {
   return hull.length > 2;
 }
 
-function isoLabel(node, c, model) {
-  // Morph frames reuse the spot chosen for the resting view.
-  if (model.fastLabels && node.labelSpot) return k.faceTextSvg(k.topMatrix(node.labelSpot.at, 0, c.P, node.labelSpot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
-  const tries = labelTries(node);
-  const spot = tries.find((s) => !hiddenBy(model, node, s, c.P).length) || tries[0];
-  node.labelSpot = spot;
-  return k.faceTextSvg(k.topMatrix(spot.at, 0, c.P, spot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
-}
 
 // ---------------------------------------------------------------------------------------------
 // Flat renderers: 2D glyphs that fill each footprint, in screen space.
@@ -840,6 +927,9 @@ export function renderView(model, view, width = 640, camera, options) {
   const out = [];
   const iso = view === "iso" ? isoKit(P) : null;
   const flat = view === "flat" ? flatKit(P) : null;
+  // Morph frames (fastLabels) keep the spots chosen for the resting view.
+  const plan = (model.fastLabels && model.labelPlans?.[view]) || labelPlanOf(model, view, P, W, H);
+  (model.labelPlans ||= {})[view] = plan;
 
   // Zones and regions: floor plates (iso) or dashed regions (flat). A region is heavier.
   for (const group of model.groups) {
@@ -878,13 +968,13 @@ export function renderView(model, view, width = 640, camera, options) {
     const port = edge.breaker
       ? `<circle class="tp-breaker" data-breaker="${edge.index}" cx="${r1(start[0])}" cy="${r1(start[1])}" r="2.4"/>`
       : edge.sync ? `<circle class="tp-port" cx="${r1(start[0])}" cy="${r1(start[1])}" r="1.4"/>` : "";
-    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}"><path class="tp-edge-bed" d="${line}"/>${k.lineSvg(line, { tone, dashed })}${k.lineSvg(k.onTop(head, 0, P), { tone, free: true })}${port}</g>`);
-    if (features.labels !== false && edge.kind !== "config" && (edge.label || model.labels === "rate" || edge.flag || edge.unless)) labels.push(edgeLabel(edge, P, view));
+    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}">${edge.detail ? `<title>${escape(edge.detail)}</title>` : ""}<path class="tp-edge-bed" d="${line}"/>${k.lineSvg(line, { tone, dashed })}${k.lineSvg(k.onTop(head, 0, P), { tone, free: true })}${port}</g>`);
+    const spot = plan.edges.get(edge.index);
+    if (spot) labels.push(edgeLabel(edge, P, view, spot));
   }
-  if (iso) for (const node of model.nodes) out.push(`<g class="tp-label" data-label="${escape(node.id)}">${isoLabel(node, iso, model)}</g>`);
-  else for (const node of model.nodes) {
-    const b = flat.box(node.plan);
-    out.push(`<g class="tp-label" data-label="${escape(node.id)}">${flat.text(b.x + b.w / 2, b.y + b.h + 10, node.label, 8)}</g>`);
+  for (const node of model.nodes) {
+    const title = node.labelShortened ? `<title>${escape(node.label)}</title>` : "";
+    out.push(`<g class="tp-label" data-label="${escape(node.id)}">${title}${iso ? isoLabel(node, P, plan) : flatLabel(node, P, plan)}</g>`);
   }
   out.push(...labels);
   out.push(`<g class="tp-packets" data-packets=""></g>`);
@@ -920,27 +1010,13 @@ export function renderView(model, view, width = 640, camera, options) {
   return { svg, data, P, width: W, height: H };
 }
 
-// A live label on an edge: at the middle of its longest leg, set off to one side.
-function edgeLabel(edge, P, view) {
-  let best = 0;
-  let leg = [edge.corners[0], edge.corners[1]];
-  for (let i = 1; i < edge.corners.length; i++) {
-    const [a, b] = [edge.corners[i - 1], edge.corners[i]];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (len > best) {
-      best = len;
-      leg = [a, b];
-    }
-  }
-  const along = Math.abs(leg[1][0] - leg[0][0]) >= Math.abs(leg[1][1] - leg[0][1]) ? "x" : "y";
-  const mid = [(leg[0][0] + leg[1][0]) / 2, (leg[0][1] + leg[1][1]) / 2];
+// A live label on an edge, at the spot labelPlanOf chose; a crowded one waits for focus.
+function edgeLabel(edge, P, view, spot) {
   const text = edge.label || "";
-  if (view === "iso") {
-    const at = along === "x" ? [mid[0], mid[1] - 6] : [mid[0] + 6, mid[1]];
-    return `<g class="tp-elabel" data-elabel="${edge.index}">${k.faceTextSvg(k.topMatrix(at, 0, P, along), text, { size: 6.2, tone: "mid", anchor: "middle" })}</g>`;
-  }
-  const [x, y] = k.iso([mid[0], mid[1], 0], P);
-  return `<g class="tp-elabel" data-elabel="${edge.index}"><text class="tp-ft tp-elabel-text" x="${r1(along === "x" ? x : x + 4)}" y="${r1(along === "x" ? y - 3.5 : y + 2)}" font-size="6.2" text-anchor="${along === "x" ? "middle" : "start"}">${escape(text)}</text></g>`;
+  const attrs = `class="tp-elabel" data-elabel="${edge.index}"${spot.crowded ? " data-crowded" : ""}`;
+  if (view === "iso") return `<g ${attrs}>${k.faceTextSvg(k.topMatrix(spot.at, 0, P, spot.along), text, { size: EDGE_TEXT, tone: "mid", anchor: spot.anchor })}</g>`;
+  const [x, y] = k.iso([spot.at[0], spot.at[1], 0], P);
+  return `<g ${attrs}><text class="tp-ft tp-elabel-text" x="${r1(x)}" y="${r1(y)}" font-size="${EDGE_TEXT}" text-anchor="${spot.anchor}">${escape(text)}</text></g>`;
 }
 
 // A sidecar proxy: a small box on the service's right-hand side.
@@ -994,7 +1070,7 @@ export function modelOf(spec, featureLayers = []) {
   return model;
 }
 
-const GEOMETRY = new Set(["plan", "cx", "cy", "w", "d", "h", "auto", "at", "labelSpot", "groups", "index", "points", "lens", "corners", "ends", "ports", "channel", "axisOf", "via", "bend", "axis"]);
+const GEOMETRY = new Set(["plan", "cx", "cy", "w", "d", "h", "auto", "at", "labelSpot", "labelLines", "labelShortened", "groups", "index", "points", "lens", "corners", "ends", "ports", "channel", "axisOf", "via", "bend", "axis"]);
 const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key, value]) => !GEOMETRY.has(key) && value !== undefined));
 
 // What the sim needs: everything in the spec except geometry, plus each edge's length.
@@ -1027,7 +1103,7 @@ export const TOPO_CSS = `
 .tp-stage[data-focus] .tp-edge:not([data-near]) .k-line{stroke:var(--tp-faint)}
 .tp-stage[data-focus] .tp-edge[data-near] .k-line{stroke:var(--tp-hi)}
 .tp-stage[data-focus] .tp-label:not([data-near]) text{fill:var(--tp-lo)}
-.tp-label .tp-ft{fill:var(--tp-text)}
+.tp-label .tp-ft{fill:var(--tp-text);paint-order:stroke;stroke:var(--tp-card);stroke-width:2.5px;stroke-linejoin:round}
 .tp-node[data-sel] .k-solid>.k-edge{stroke:var(--tp-lit)}
 .tp-node[data-sel] .tp-f{stroke:var(--tp-lit)}
 .tp-led{fill:var(--tp-lo);stroke:none;transition:fill .5s}
@@ -1077,6 +1153,8 @@ export const TOPO_CSS = `
 .tp-elabel .k-text,.tp-elabel-text{fill:var(--tp-muted);font-variant-numeric:tabular-nums}
 .tp-elabel-text{paint-order:stroke;stroke:var(--tp-card);stroke-width:2.5px;stroke-linejoin:round}
 .tp-elabel[data-bad] .k-text,.tp-elabel[data-bad] .tp-elabel-text{fill:var(--tp-red)}
+.tp-elabel[data-crowded]{display:none}
+.tp-stage[data-focus] .tp-elabel[data-crowded][data-near]{display:inline}
 .tp-lane{transition:opacity .3s}
 .tp-lane[data-paused]{opacity:.3}
 .tp-broker{cursor:pointer}
@@ -1089,6 +1167,7 @@ export const TOPO_CSS = `
 .tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
 .tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
 .tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-detail{margin:6px 0 0;color:var(--tp-text);white-space:pre-wrap;overflow-wrap:anywhere}
 .tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
 .tp-inspect header button{all:unset;cursor:pointer}
 button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}

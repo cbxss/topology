@@ -82,9 +82,10 @@ node scripts/build.mjs profile.spec.mjs --trace "PUT /profile"
 |---|---|
 | `id` | Required, unique. Used by edges, groups, scenario steps and `data-node`. |
 | `kind` | `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `db`, `storage`, `kafka`, `queue`, `cdn`, `dns`, `external`, `scheduler`, `flags`, or `box` (anything else). Sets the drawing, the default service time and some routing defaults. |
-| `label` | Text on the floor (iso) or under the glyph (flat). Default: `id`. Keep it under ~14 characters. |
+| `label` | The name on the floor (iso) or beside the glyph (flat). Default: `id`. Up to ~18 characters fits on one line (fewer on a tight `grid`). Longer names wrap to two lines after a `-`, `_`, `.`, `/`, `:` or space, choosing the most even break; past two lines they are shortened with `…` and `--check` says so. Keep it a name: put descriptions in `detail`. |
+| `detail` | Longer text about the node: shown in the inspector, never on the canvas. |
 | `at` | `[col, row]` in grid units, fractions allowed. If any node lacks `at`, the unplaced ones are auto-ranked. |
-| `labelAt` | `front` or `side`: force the iso label spot (default: front, else side if front is hidden). |
+| `labelAt` | `front` or `side`: force the iso label spot. By default each label takes the first clear spot (iso: front, side, behind, left; 2D: below, above, right, left), clear of nodes, other labels and lines, and not so close to another node that it reads as that node's. |
 | `w`, `d` | Override the footprint in world units. |
 | `replicas` | `service`/`worker`: 1–4 stacked units, each with its own LED; requests rotate across them. |
 | `role` | `db`: a tag on the top (`primary`, `replica`, `standby`). |
@@ -124,7 +125,8 @@ node scripts/build.mjs profile.spec.mjs --trace "PUT /profile"
 | `group` | On an edge out of a `kafka` node: the consumer group of the target (default `"default"`). |
 | `key` | On an edge into a `kafka` node: a fixed partition key (hashed). |
 | `rate` | A per-consumer pull rate that overrides the target's `rate`. |
-| `label` | A fixed label on the edge. |
+| `label` | A fixed label on the edge. Edge labels take the first clear spot along any leg, either side of the line; one with no clear spot is hidden until its edge is in focus (hovered or selected), and `--check` says so. |
+| `detail` | Longer text about the edge: the line's hover tooltip, never on the canvas. |
 | `bend`, `via`, `axis` | Routing: where the elbow sits (0–1), explicit world-unit waypoints, or which faces to use (`x`/`y`). |
 | `back` | `true` to ignore this edge for auto-ranking. |
 
@@ -322,7 +324,7 @@ A disabled feature removes its UI and owned behavior; shared inlined code can re
 
 - **Auto-layout** ranks nodes by longest path from the sources (ignoring `replication` and `back` edges), one column per rank, ordered by the average row of their inputs. A replication target goes right after its primary.
 - **Routes** are orthogonal, leaving the face that looks at the target. Ports spread along shared faces, and edges whose elbows share a channel get separate lanes. A crossing at right angles hops on whichever edge has room.
-- **`--check`** warns about overlapping nodes, edges passing under a node, and iso labels hidden behind a nearer node.
+- **`--check`** warns about overlapping nodes and edges passing under a node, and runs the same text placement the figure draws, in both views: a label hidden behind a node, overlapping a node or another label, or running off the card; an edge label with no clear spot (shown only on focus); and a label shortened past two lines. Fix these by spacing `grid`, moving a node with `at`, or shortening the label (moving the rest to `detail`).
 
 With `endpoints` disabled, route mixes become total rates and endpoint declarations are ignored. With `tables` disabled, stores and table operations are removed. With `trace` disabled, the following panel is omitted. Feature removal strips owned behavior; shared simulation code can remain in the bundle.
 

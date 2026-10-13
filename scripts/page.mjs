@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as k from "../kit/iso.mjs";
-import { hiddenBy, labelTries, modelOf, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
+import { labelPlanOf, modelOf, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
 import { createSim, formatCount, formatMs, formatRate, isLog, normalizeScenario, targetOf } from "../kit/topo-sim.mjs";
 import { bundleSim } from "./sim-bundle.mjs";
 import { describeFeatures } from "../kit/topo-features.mjs";
@@ -73,7 +73,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   let script = bundleSim() + `\nconst DATA = ${JSON.stringify(data)};\n`;
   // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
   // each wrapped in its own scope so none of their names meet the live code's.
-  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("routing-validation.mjs", "ROUTING_VALIDATION") + scoped("validate.mjs", "VALIDATION", "const { validateRouting } = ROUTING_VALIDATION;") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION;");
+  if (features.morph) script += scoped("iso.mjs", "k") + scoped("components.mjs", "PRODUCTS") + scoped("routing-validation.mjs", "ROUTING_VALIDATION") + scoped("validate.mjs", "VALIDATION", "const { validateRouting } = ROUTING_VALIDATION;") + scoped("labels.mjs", "LABELS") + scoped("topo.mjs", "TOPO", "const { COMPONENTS, baseKind, isoComponent, flatComponent } = PRODUCTS; const { validateSpec } = VALIDATION; const { CHAR, anchorFor, lineAt, localBox, placeLabels, planBox, wrapLabel } = LABELS;");
   script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
   if (spec.traffic) script += "\n" + readFileSync(join(KIT, "topo-traffic.js"), "utf8");
   if (features.tables) script += "\n" + readFileSync(join(KIT, "topo-records.js"), "utf8");
@@ -302,11 +302,27 @@ export function layoutWarnings(model) {
       if (hit) warnings.push(`edge ${edge.from} → ${edge.to} passes under ${node.id}; give it \`bend\`, \`via\` or move a node`);
     }
   }
-  // In iso a label lies on the floor beside its node; a nearer, taller node can hide it.
-  const { P } = projectionOf(model, "iso");
-  for (const node of model.nodes) {
-    const blocked = labelTries(node).map((spot) => hiddenBy(model, node, spot, P));
-    if (blocked.every((list) => list.length)) warnings.push(`label "${node.label}" is hidden behind ${blocked[0].join(", ")} in iso; space the rows (\`grid\`) or move a node`);
+  // Text: the same placement the figure draws (kit/labels.mjs via labelPlanOf), in both views.
+  const nameOf = (id) => model.byId.get(id)?.label ?? id;
+  const edgeName = (index) => `${model.edges[index].from} → ${model.edges[index].to}`;
+  for (const view of ["iso", "flat"]) {
+    const where = view === "iso" ? "in iso" : "in 2D";
+    const { P, width, height } = projectionOf(model, view);
+    const plan = labelPlanOf(model, view, P, width, height);
+    for (const node of model.nodes) {
+      const spot = plan.nodes.get(node.id);
+      if (spot.hiddenBy.length && spot.blockers.some((b) => b.type === "hidden")) warnings.push(`label "${node.label}" is hidden behind ${spot.hiddenBy.join(", ")} ${where}; space the rows (\`grid\`) or move a node`);
+      for (const b of spot.blockers) {
+        if (b.type === "node") warnings.push(`label "${node.label}" overlaps ${b.id} ${where}; space the columns (\`grid\`), move a node or shorten the label`);
+        if (b.type === "label") warnings.push(`label "${node.label}" overlaps ${b.id.startsWith("g:") ? `the ${b.id.slice(2)} plate's label` : `label "${nameOf(b.id.slice(2))}"`} ${where}; space the columns (\`grid\`) or shorten one`);
+        if (b.type === "outside") warnings.push(`label "${node.label}" runs off the card ${where}`);
+      }
+    }
+    for (const [index, spot] of plan.edges) if (spot.crowded) {
+      const text = model.edges[index].label;
+      warnings.push(`${text ? `edge label "${text}"` : "the rate label"} on ${edgeName(index)} has no clear spot ${where}; it shows only while the edge is in focus`);
+    }
   }
+  for (const node of model.nodes) if (node.labelShortened) warnings.push(`label "${node.label}" is shortened to "${node.labelLines.join(" / ")}"; keep \`label\` to a name and put the rest in \`detail\``);
   return warnings;
 }

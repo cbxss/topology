@@ -276,6 +276,7 @@ function setFocus(id) {
     }
     for (const [nid, el] of v.labels) el.toggleAttribute("data-near", near.has(nid));
     v.edges.forEach((el, index) => el.toggleAttribute("data-near", edges.has(index)));
+    for (const [index, { el }] of v.elabels) el.toggleAttribute("data-near", edges.has(index));
   }
   say(true);
 }
