@@ -163,10 +163,30 @@ button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 v
 .tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
 .tp-route [data-bad]{color:var(--tp-red)}
+.tp-table{margin-top:10px}
+.tp-table+.tp-table{margin-top:14px}
+.tp-table-head{color:var(--tp-muted)}
+.tp-table-head b{color:var(--tp-strong);font-weight:600}
+.tp-table-head i,.tp-wal-note i{color:var(--tp-red);font-style:normal}
+.tp-table-head em{color:var(--tp-amber);font-style:normal}
+.tp-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px;margin-top:6px}
+.tp-row{display:flex;gap:8px;padding:2px 6px;background:var(--tp-shade-1);box-shadow:inset 2px 0 0 var(--tp-lo);font-variant-numeric:tabular-nums;transition:background .6s,box-shadow .6s}
+.tp-row b{color:var(--tp-strong);font-weight:500}
+.tp-row span{color:var(--tp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-row[data-fresh]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-green);transition:none}
+.tp-row[data-behind]{box-shadow:inset 2px 0 0 var(--tp-amber)}
+.tp-row[data-behind] span:first-of-type{color:var(--tp-amber)}
+.tp-wal{display:flex;align-items:center;gap:2px;margin-top:8px}
+.tp-wal>span{margin-right:6px;color:var(--tp-muted);font-size:9.5px;letter-spacing:.08em}
+.tp-wal i{width:9px;height:9px;background:var(--tp-mid);box-shadow:inset 0 0 0 1px var(--tp-lo)}
+.tp-wal i[data-pending]{background:var(--tp-amber)}
+.tp-wal-note{margin:4px 0 0;color:var(--tp-muted);font-size:10px}
 .tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
 .tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
 .tp-tip b{color:var(--tp-strong);font-weight:500}
 .tp-tip i{color:var(--tp-red);font-style:normal}
+.k-corner[data-corner="hint"]{max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="readout"]{max-width:56%;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}

@@ -163,10 +163,30 @@ button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 v
 .tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
 .tp-route [data-bad]{color:var(--tp-red)}
+.tp-table{margin-top:10px}
+.tp-table+.tp-table{margin-top:14px}
+.tp-table-head{color:var(--tp-muted)}
+.tp-table-head b{color:var(--tp-strong);font-weight:600}
+.tp-table-head i,.tp-wal-note i{color:var(--tp-red);font-style:normal}
+.tp-table-head em{color:var(--tp-amber);font-style:normal}
+.tp-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px;margin-top:6px}
+.tp-row{display:flex;gap:8px;padding:2px 6px;background:var(--tp-shade-1);box-shadow:inset 2px 0 0 var(--tp-lo);font-variant-numeric:tabular-nums;transition:background .6s,box-shadow .6s}
+.tp-row b{color:var(--tp-strong);font-weight:500}
+.tp-row span{color:var(--tp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-row[data-fresh]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-green);transition:none}
+.tp-row[data-behind]{box-shadow:inset 2px 0 0 var(--tp-amber)}
+.tp-row[data-behind] span:first-of-type{color:var(--tp-amber)}
+.tp-wal{display:flex;align-items:center;gap:2px;margin-top:8px}
+.tp-wal>span{margin-right:6px;color:var(--tp-muted);font-size:9.5px;letter-spacing:.08em}
+.tp-wal i{width:9px;height:9px;background:var(--tp-mid);box-shadow:inset 0 0 0 1px var(--tp-lo)}
+.tp-wal i[data-pending]{background:var(--tp-amber)}
+.tp-wal-note{margin:4px 0 0;color:var(--tp-muted);font-size:10px}
 .tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
 .tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
 .tp-tip b{color:var(--tp-strong);font-weight:500}
 .tp-tip i{color:var(--tp-red);font-style:normal}
+.k-corner[data-corner="hint"]{max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="readout"]{max-width:56%;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
@@ -351,6 +371,20 @@ function createSim(spec) {
   for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
   const flagNode = [...nodes.values()].find((node) => node.kind === "flags");
 
+  // Tables: rows keyed by a record key, a write-ahead log, and replicas that apply its entries.
+  // A replica (a db fed by a replication edge) gets its primary's tables if it declares none.
+  for (const node of nodes.values()) {
+    const primaryEdge = node.into.find((edge) => edge.kind === "replication" && nodes.get(edge.from).tables);
+    if (!node.tables && primaryEdge && node.kind === "db") node.tables = nodes.get(primaryEdge.from).tables;
+    if (!node.tables) continue;
+    node.primary = primaryEdge ? nodes.get(primaryEdge.from) : null;
+    node.store = new Map(Object.entries(node.tables).map(([name, t]) => [name, { name, key: t.key || "id", show: t.show || 6, rows: new Map(), touched: [] }]));
+    node.wal = { lsn: 0, applied: 0, recent: [] };
+    node.tableStats = { writes: [], inserts: [], updates: [], conflicts: [], stale: [], misses: [], lockWaits: [], lost: [], applied: [] };
+    node.locked = new Map();
+  }
+  const records = spec.records || {};
+
   // Logs: kafka topics (partitions, consumer groups with exclusive assignment) and queues
   // (one lane, competing consumers).
   const logs = new Map();
@@ -408,6 +442,21 @@ function createSim(spec) {
     if (!node.routes.has(name)) node.routes.set(name, { name, recent: [], service: [], roots: [], errors: [] });
     return node.routes.get(name);
   };
+  // The record a request is about, one per table: a key from the table's keyspace (with
+  // `skew`, that share of requests hits the hottest 5% of keys) and a value for each field.
+  const recordOf = (msg, table) => {
+    msg.records ??= {};
+    if (!msg.records[table]) {
+      const def = records[table] || {};
+      const keys = def.keys || 100;
+      const hot = Math.max(1, Math.round(keys * 0.05));
+      const n = def.skew && rand() < def.skew ? Math.floor(rand() * hot) : Math.floor(rand() * keys);
+      const fields = {};
+      for (const [name, values] of Object.entries(def.fields || {})) fields[name] = values[Math.floor(rand() * values.length)];
+      msg.records[table] = { key: (def.start ?? 1000) + n, fields };
+    }
+    return msg.records[table];
+  };
   // The endpoint a request is calling at this node, if the node declares it.
   const endpointAt = (node, msg) => (node.endpoints && msg.endpoint ? node.endpoints[msg.endpoint] : undefined);
 
@@ -446,7 +495,7 @@ function createSim(spec) {
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
-    routeStats(node, msg.endpoint)?.recent.push(sim.time);
+    if (!extra.entry) routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
@@ -458,8 +507,26 @@ function createSim(spec) {
     reject(job);
   }
 
+  const WRITES = new Set(["insert", "upsert", "update", "delete", "rmw"]);
+  const tableOp = (job) => (job.node.store && job.op?.table && job.node.store.has(job.op.table) ? job.op : null);
+
   function begin(job) {
     const node = job.node;
+    // Row locks: a write waits for any other write on the same key to commit.
+    const op = tableOp(job);
+    if (op && node.locks && WRITES.has(op.op) && !job.holdsLock) {
+      const key = `${op.table}:${recordOf(job.msg, op.table).key}`;
+      if (node.locked.has(key)) {
+        node.locked.get(key).push(job);
+        node.tableStats.lockWaits.push(sim.time);
+        return;
+      }
+      node.locked.set(key, []);
+      job.holdsLock = key;
+    }
+    // An unlocked read-modify-write reads now and writes at commit: anything committed in
+    // between is overwritten (a lost update).
+    if (op && op.op === "rmw") job.readVersion = node.store.get(op.table).rows.get(recordOf(job.msg, op.table).key)?.version ?? 0;
     // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
     const base = (endpointAt(node, job.msg)?.ms ?? node.ms) + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
     const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
@@ -487,10 +554,20 @@ function createSim(spec) {
     const node = job.node;
     node.jobs.delete(job);
     if (!ok) node.recentErrors.push(sim.time);
+    if (job.holdsLock) {
+      const waiters = node.locked.get(job.holdsLock) || [];
+      const next = waiters.shift();
+      if (next) {
+        next.holdsLock = job.holdsLock;
+        node.locked.set(job.holdsLock, waiters);
+        if (!next.dead && !next.done) begin(next);
+      } else node.locked.delete(job.holdsLock);
+      job.holdsLock = null;
+    }
     const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
-    const ms = own + job.cost;
+    const ms = own + (job.spent || 0) + job.cost;
     node.service.push({ at: sim.time, ms });
-    const route = routeStats(node, job.msg.endpoint);
+    const route = job.entry ? null : routeStats(node, job.msg.endpoint);
     if (route) {
       route.service.push({ at: sim.time, ms });
       if (!ok) route.errors.push(sim.time);
@@ -506,6 +583,9 @@ function createSim(spec) {
     if (!node.up) return;
     if (isLog(node)) return respond(job, true);
     if (node.errorRate && rand() < node.errorRate) return respond(job, false);
+    if (job.entry) return applyEntry(job);
+    const op = tableOp(job);
+    if (op) return respond(job, commit(job, op));
     forward(job);
     job.forwarded = true;
     if (job.waiting === 0) respond(job, !job.failed);
@@ -526,19 +606,20 @@ function createSim(spec) {
     // A declared endpoint makes exactly its calls, each along the edge to its target.
     const endpoint = endpointAt(node, job.msg);
     if (endpoint && endpoint.calls) {
+      // Calls run in parallel, in stages: a call with `then: true` starts a new stage that
+      // waits for everything before it (write, then read your own write).
+      job.stages = [];
       for (const call of endpoint.calls) {
-        const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-        if (!edge || rand() >= (call.p ?? 1)) continue;
-        if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
-        else if (edge.sync) {
-          job.waiting++;
-          callOut(job, edge, 0, 0, call);
-        } else launch(edge, "request", { msg: job.msg, op: call });
+        if (call.then || !job.stages.length) job.stages.push([]);
+        job.stages[job.stages.length - 1].push(call);
       }
+      job.stage = 0;
+      issue(job, job.stages[0]);
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
-    for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
+    // A database with tables replicates WAL entries as it commits them, not every request.
+    if (!node.store) for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
     const data = node.gated ? node.data.filter(open) : node.data;
     if (!data.length) return;
     const mode = routeOf(node);
@@ -640,7 +721,117 @@ function createSim(spec) {
     job.waiting--;
     job.cost = Math.max(job.cost, ms);
     if (!ok) job.failed = true;
-    if (job.waiting === 0 && job.forwarded) respond(job, !job.failed);
+    if (job.waiting === 0 && job.forwarded) advance(job);
+  }
+
+  // One stage of an endpoint's calls; the next starts when this one has all answered.
+  function issue(job, calls) {
+    const node = job.node;
+    for (const call of calls) {
+      const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+      if (!edge || rand() >= (call.p ?? 1)) continue;
+      if (call.table) recordOf(job.msg, call.table);
+      if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
+      else if (edge.sync) {
+        job.waiting++;
+        callOut(job, edge, 0, 0, call);
+      } else launch(edge, "request", { msg: job.msg, op: call });
+    }
+  }
+  function advance(job) {
+    while (job.stages && job.stage < job.stages.length - 1 && !job.failed && job.waiting === 0) {
+      job.spent = (job.spent || 0) + job.cost;
+      job.cost = 0;
+      issue(job, job.stages[++job.stage]);
+    }
+    if (job.waiting === 0) respond(job, !job.failed);
+  }
+
+  // --- tables -------------------------------------------------------------------------------
+
+  const touch = (table, key) => {
+    table.touched = [key, ...table.touched.filter((k) => k !== key)].slice(0, 16);
+  };
+  const rowEvent = (node, op, table, key, extra) => !sim.quiet && sim.events.push({ type: "row", node: node.id, table: table.name, key, op, at: sim.time, ...extra });
+
+  // Apply a table operation at commit. Returns whether it succeeded.
+  function commit(job, op) {
+    const node = job.node;
+    const table = node.store.get(op.table);
+    const record = recordOf(job.msg, op.table);
+    const key = record.key;
+    const row = table.rows.get(key);
+    const stats = node.tableStats;
+    if (op.op === "select") {
+      if (row) touch(table, key);
+      if (!row) {
+        stats.misses.push(sim.time);
+        rowEvent(node, "miss", table, key);
+        return true;
+      }
+      // On a replica: stale if the primary has a newer version, or if this same request
+      // wrote a newer one (read-your-writes).
+      const newest = Math.max(node.primary?.store.get(op.table)?.rows.get(key)?.version ?? 0, job.msg.wrote?.[`${op.table}:${key}`] ?? 0);
+      const stale = newest > row.version;
+      if (stale) stats.stale.push(sim.time);
+      rowEvent(node, "select", table, key, { version: row.version, stale });
+      return true;
+    }
+    if (op.op === "insert" && row) {
+      stats.conflicts.push(sim.time);
+      rowEvent(node, "conflict", table, key, { version: row.version });
+      return false;
+    }
+    if (op.op === "update" && !row) {
+      stats.misses.push(sim.time);
+      rowEvent(node, "miss", table, key);
+      return true;
+    }
+    let kind = "delete";
+    if (op.op === "delete") {
+      if (!row) return true;
+      table.rows.delete(key);
+    } else {
+      // An unlocked read-modify-write that read an older version overwrites a newer one.
+      if (op.op === "rmw" && row && row.version !== job.readVersion) stats.lost.push(sim.time);
+      kind = row ? "update" : "insert";
+      table.rows.set(key, { key, version: (row?.version ?? 0) + 1, fields: record.fields, at: sim.time });
+    }
+    const version = (row?.version ?? 0) + 1;
+    touch(table, key);
+    stats.writes.push(sim.time);
+    if (kind === "insert") stats.inserts.push(sim.time);
+    if (kind === "update") stats.updates.push(sim.time);
+    job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: version };
+    const entry = { lsn: ++node.wal.lsn, table: op.table, key, op: kind, version, fields: record.fields, at: sim.time };
+    node.wal.recent = [...node.wal.recent.slice(-23), entry];
+    node.wal.applied = entry.lsn;
+    rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
+    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry });
+    return true;
+  }
+
+  // A replica applies a WAL entry, `lag` seconds after it arrives if it has one.
+  function applyEntry(job) {
+    const node = job.node;
+    const apply = () => {
+      const { entry } = job;
+      const table = node.store?.get(entry.table);
+      if (table) {
+        const row = table.rows.get(entry.key);
+        if (entry.op === "delete") table.rows.delete(entry.key);
+        else if (!row || row.version < entry.version) table.rows.set(entry.key, { key: entry.key, version: entry.version, fields: entry.fields, at: sim.time });
+        touch(table, entry.key);
+        node.tableStats.applied.push(sim.time);
+        node.wal.applied = Math.max(node.wal.applied, entry.lsn);
+        node.wal.lsn = Math.max(node.wal.lsn, entry.lsn);
+        node.wal.recent = [...node.wal.recent.slice(-23), entry];
+        rowEvent(node, "apply", table, entry.key, { version: entry.version, lsn: entry.lsn });
+      }
+      respond(job, true);
+    };
+    if (node.lag) sim.timers.push({ at: sim.time + node.lag, run: () => node.up && !job.dead && apply() });
+    else apply();
   }
 
   // --- arrivals -------------------------------------------------------------------------------
@@ -679,7 +870,7 @@ function createSim(spec) {
       log.end[p]++;
       log.appended++;
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry });
   }
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
@@ -871,6 +1062,7 @@ function createSim(spec) {
       trim(node.recentErrors);
       trim(node.service, 3);
       trim(node.roots, 3);
+      if (node.tableStats) for (const list of Object.values(node.tableStats)) trim(list);
       for (const route of node.routes.values()) {
         trim(route.recent);
         trim(route.errors);
@@ -947,7 +1139,7 @@ function createSim(spec) {
     }
   }
 
-  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs"]);
+  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs", "lag", "locks"]);
   function apply(step) {
     if (step.fail) [].concat(step.fail).forEach((id) => setUp(id, false));
     if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
@@ -993,6 +1185,39 @@ function createSim(spec) {
     const group = groupName ? log.groups.find((g) => g.name === groupName) : log.groups[0];
     if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+  };
+  // A database's tables for the inspector: recent rows, counts, rates, the WAL and lag.
+  sim.tablesOf = (id) => {
+    const node = nodes.get(id);
+    if (!node?.store) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    const rate = (list) => list.length / window;
+    const st = node.tableStats;
+    return [...node.store.values()].map((table) => {
+      const primary = node.primary?.store.get(table.name);
+      return {
+        name: table.name,
+        key: table.key,
+        count: table.rows.size,
+        rows: table.touched.slice(0, table.show).map((key) => {
+          const row = table.rows.get(key);
+          const newest = primary?.rows.get(key)?.version;
+          return { key, version: row?.version ?? null, fields: row?.fields || {}, age: row ? sim.time - row.at : null, behind: newest != null && (row?.version ?? 0) < newest };
+        }),
+        writes: rate(st.writes),
+        inserts: rate(st.inserts),
+        updates: rate(st.updates),
+        conflicts: rate(st.conflicts),
+        stale: rate(st.stale),
+        misses: rate(st.misses),
+        lockWaits: rate(st.lockWaits),
+        lost: rate(st.lost),
+        applied: rate(st.applied),
+        wal: { lsn: node.wal.lsn, applied: node.wal.applied, recent: node.wal.recent.slice(-16) },
+        primary: node.primary?.id ?? null,
+        behind: node.primary ? node.primary.wal.lsn - node.wal.applied : 0,
+      };
+    });
   };
   // Per-route numbers at a node: [{ name, rate, p50, p99, errors }], busiest first.
   sim.routesOf = (id) => {
@@ -1065,6 +1290,13 @@ function statsOf(sim, id) {
   } else if (node.service.length) {
     const sorted = node.service.map((s) => s.ms).sort((a, b) => a - b);
     bits.push(`${formatMs(quantile(sorted, 0.5))} p50`);
+  }
+  for (const t of sim.tablesOf(id)) {
+    bits.push(`${t.count} ${t.name}`);
+    if (t.primary) bits.push(`${t.behind} behind`);
+    if (t.stale) bits.push(`${formatRate(t.stale, per)} stale reads`);
+    if (t.conflicts) bits.push(`${formatRate(t.conflicts, per)} conflicts`);
+    if (t.lost) bits.push(`${formatRate(t.lost, per)} lost updates`);
   }
   if (node.capacity) bits.push(`cap ${formatRate(node.capacity, per)}`);
   if (node.queueMax) bits.push(`queue ${node.waiting.length}/${node.queueMax}`);
@@ -1536,6 +1768,7 @@ function prepare(spec) {
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
+  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && byId.get(edge.to).kind === "db") byId.get(edge.to).hasTables = true;
   for (const node of nodes) {
     if (!isLog(node)) continue;
     const names = [];
@@ -1545,7 +1778,7 @@ function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -1929,6 +2162,8 @@ const ISO = {
     out.push(c.L(k.ring(node.cx, node.cy, r - 4, 29, c.P, 40), { tone: "lo" }));
     out.push(c.dots([[node.cx, node.cy, 29]], { size: 0.8, tone: "mid" }));
     if (node.role) out.push(k.faceTextSvg(k.topMatrix([node.cx, node.cy + 4], 29, c.P, "x"), node.role.toUpperCase(), { size: 4, tone: "lo", anchor: "middle" }));
+    // Level 0 for a database with tables: a live row count, nothing more.
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${escape(node.id)}">${k.faceTextSvg(k.topMatrix([node.cx, node.cy + 11], 29, c.P, "x"), "0 rows", { size: 4, tone: "mid", anchor: "middle" })}</g>`);
     return out.join("");
   },
   storage(node, c) {
@@ -2195,6 +2430,7 @@ const FLAT = {
     out.push(`<path class="k-line" data-tone="faint" d="M${r1(cx - rx)} ${r1(top + 9)}A${r1(rx)} ${r1(ry)} 0 0 0 ${r1(cx + rx)} ${r1(top + 9)}"/>`);
     out.push(f.led(`${node.id}:0`, cx + rx - 5, top + 14, 1.6));
     if (node.role) out.push(f.text(cx, top + 2.6, node.role.toUpperCase(), 5.5, "tp-ft tp-ft-dim"));
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${escape(node.id)}">${f.text(cx, top + 22, "0 rows", 6, "tp-ft tp-ft-dim")}</g>`);
     return out.join("");
   },
   storage(node, f) {
@@ -2473,6 +2709,7 @@ function simSpec(model) {
     sim: model.sim,
     scenario: model.scenario,
     flags: model.flags,
+    records: model.records,
     features: model.features,
   };
 }
@@ -2572,10 +2809,30 @@ button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 v
 .tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
 .tp-route [data-bad]{color:var(--tp-red)}
+.tp-table{margin-top:10px}
+.tp-table+.tp-table{margin-top:14px}
+.tp-table-head{color:var(--tp-muted)}
+.tp-table-head b{color:var(--tp-strong);font-weight:600}
+.tp-table-head i,.tp-wal-note i{color:var(--tp-red);font-style:normal}
+.tp-table-head em{color:var(--tp-amber);font-style:normal}
+.tp-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px;margin-top:6px}
+.tp-row{display:flex;gap:8px;padding:2px 6px;background:var(--tp-shade-1);box-shadow:inset 2px 0 0 var(--tp-lo);font-variant-numeric:tabular-nums;transition:background .6s,box-shadow .6s}
+.tp-row b{color:var(--tp-strong);font-weight:500}
+.tp-row span{color:var(--tp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-row[data-fresh]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-green);transition:none}
+.tp-row[data-behind]{box-shadow:inset 2px 0 0 var(--tp-amber)}
+.tp-row[data-behind] span:first-of-type{color:var(--tp-amber)}
+.tp-wal{display:flex;align-items:center;gap:2px;margin-top:8px}
+.tp-wal>span{margin-right:6px;color:var(--tp-muted);font-size:9.5px;letter-spacing:.08em}
+.tp-wal i{width:9px;height:9px;background:var(--tp-mid);box-shadow:inset 0 0 0 1px var(--tp-lo)}
+.tp-wal i[data-pending]{background:var(--tp-amber)}
+.tp-wal-note{margin:4px 0 0;color:var(--tp-muted);font-size:10px}
 .tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
 .tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
 .tp-tip b{color:var(--tp-strong);font-weight:500}
 .tp-tip i{color:var(--tp-red);font-style:normal}
+.k-corner[data-corner="hint"]{max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="readout"]{max-width:56%;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
@@ -2630,13 +2887,14 @@ const NS = "http://www.w3.org/2000/svg";
 const views = {};
 for (const name of ["iso", "flat"]) {
   const svg = stage.querySelector(`.tp-${name}`);
-  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), status: new Map() };
+  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), rows: new Map(), status: new Map() };
   const all = (selector, fn) => svg.querySelectorAll(selector).forEach(fn);
   all("[data-breaker]", (el) => v.breakers.set(+el.dataset.breaker, el));
   all("[data-elabel]", (el) => v.elabels.set(+el.dataset.elabel, { el, text: el.querySelector("text") }));
   all("[data-qcell]", (el) => v.qcells.set(el.dataset.qcell, el));
   all("[data-flag]", (el) => v.knobs.set(el.dataset.flag, el));
   all("[data-lane]", (el) => v.lanes.set(el.dataset.lane, el));
+  all("[data-rows]", (el) => v.rows.set(el.dataset.rows, el));
   all("[data-part^='broker:']", (el) => v.brokers.set(`${el.closest("[data-node]").dataset.node}:${el.dataset.part.slice(7)}`, el));
   all("[data-led]", (el) => v.leds.set(el.dataset.led, el));
   all("[data-cell]", (el) => v.cells.set(el.dataset.cell, el));
@@ -2835,6 +3093,7 @@ function drawStatus() {
     const log = sim.logs.get(id);
     setOnce(v, `l${key}`, el, "data-paused", !!log && !sim.readable(log, +p));
   }
+  for (const [id, el] of v.rows) setOnce(v, `rows${id}`, el.querySelector("text"), "text", `${sim.tablesOf(id).reduce((n, t) => n + t.count, 0)} rows`);
   for (const [key, el] of v.brokers) {
     const [id, b] = key.split(":");
     setOnce(v, `b${key}`, el, "data-down", !sim.logs.get(id).brokers[+b]);
@@ -3154,6 +3413,34 @@ const inspector = (() => {
         return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
       });
       return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+    function tables(id) {
+      const list = sim.tablesOf(id);
+      if (!list.length) return "";
+      // Replicas of this primary, to show how far behind each one is.
+      const replicas = DATA.spec.edges.filter((e) => e.from === id && e.kind === "replication").map((e) => e.to);
+      return list
+        .map((t) => {
+          const bits = [`<b>${esc(t.name)}</b> ${t.count} rows`, t.primary ? `${rate(t.applied)} applied` : `${rate(t.writes)} writes`];
+          if (t.inserts || t.updates) bits.push(`${rate(t.inserts)} inserts · ${rate(t.updates)} updates`);
+          if (t.conflicts) bits.push(`<i>${rate(t.conflicts)} conflicts</i>`);
+          if (t.stale) bits.push(`<em>${rate(t.stale)} stale reads</em>`);
+          if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
+          if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
+          const field = (r) => Object.values(r.fields)[0] ?? "";
+          const rows = t.rows.map((r) => `<div class="tp-row"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></div>`).join("");
+          // WAL: the newest entries; amber ones haven't reached every replica yet.
+          const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
+          const cells = t.wal.recent.map((e) => `<i title="lsn ${e.lsn} ${e.op} ${esc(e.key)} v${e.version}"${e.lsn > shipped ? " data-pending" : ""}></i>`).join("");
+          const lagNotes = t.primary
+            ? [`${t.behind} ${t.behind === 1 ? "entry" : "entries"} behind ${esc(specOf.get(t.primary)?.label || t.primary)}${specOf.get(id)?.lag ? ` (applies ${specOf.get(id).lag}s late)` : ""}`]
+            : replicas.map((rid) => {
+                const r = sim.tablesOf(rid).find((x) => x.name === t.name);
+                return `${esc(specOf.get(rid)?.label || rid)} ${r ? r.behind : "?"} behind`;
+              });
+          return `<div class="tp-table"><div class="tp-table-head">${bits.join(" · ")}</div><div class="tp-rows">${rows || '<div class="tp-row"><span>no rows yet</span></div>'}</div>${cells ? `<div class="tp-wal"><span>WAL</span>${cells}</div>` : ""}<p class="tp-wal-note">lsn ${t.wal.lsn}${lagNotes.length ? ` · ${lagNotes.join(" · ")}` : ""}</p></div>`;
+        })
+        .join("");
     },
   ];
 

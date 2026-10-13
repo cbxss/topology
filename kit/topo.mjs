@@ -56,6 +56,7 @@ export function prepare(spec) {
   const groups = groupsOf(spec.groups || [], byId);
   route(nodes, edges, byId);
   for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
+  for (const edge of edges) if (edge.kind === "replication" && byId.get(edge.from).tables && byId.get(edge.to).kind === "db") byId.get(edge.to).hasTables = true;
   for (const node of nodes) {
     if (!isLog(node)) continue;
     const names = [];
@@ -65,7 +66,7 @@ export function prepare(spec) {
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, records: spec.records, features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -449,6 +450,8 @@ const ISO = {
     out.push(c.L(k.ring(node.cx, node.cy, r - 4, 29, c.P, 40), { tone: "lo" }));
     out.push(c.dots([[node.cx, node.cy, 29]], { size: 0.8, tone: "mid" }));
     if (node.role) out.push(k.faceTextSvg(k.topMatrix([node.cx, node.cy + 4], 29, c.P, "x"), node.role.toUpperCase(), { size: 4, tone: "lo", anchor: "middle" }));
+    // Level 0 for a database with tables: a live row count, nothing more.
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${escape(node.id)}">${k.faceTextSvg(k.topMatrix([node.cx, node.cy + 11], 29, c.P, "x"), "0 rows", { size: 4, tone: "mid", anchor: "middle" })}</g>`);
     return out.join("");
   },
   storage(node, c) {
@@ -715,6 +718,7 @@ const FLAT = {
     out.push(`<path class="k-line" data-tone="faint" d="M${r1(cx - rx)} ${r1(top + 9)}A${r1(rx)} ${r1(ry)} 0 0 0 ${r1(cx + rx)} ${r1(top + 9)}"/>`);
     out.push(f.led(`${node.id}:0`, cx + rx - 5, top + 14, 1.6));
     if (node.role) out.push(f.text(cx, top + 2.6, node.role.toUpperCase(), 5.5, "tp-ft tp-ft-dim"));
+    if (node.tables || node.hasTables) out.push(`<g class="tp-rows-badge" data-rows="${escape(node.id)}">${f.text(cx, top + 22, "0 rows", 6, "tp-ft tp-ft-dim")}</g>`);
     return out.join("");
   },
   storage(node, f) {
@@ -993,6 +997,7 @@ export function simSpec(model) {
     sim: model.sim,
     scenario: model.scenario,
     flags: model.flags,
+    records: model.records,
     features: model.features,
   };
 }
@@ -1092,10 +1097,30 @@ button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 v
 .tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
 .tp-route [data-bad]{color:var(--tp-red)}
+.tp-table{margin-top:10px}
+.tp-table+.tp-table{margin-top:14px}
+.tp-table-head{color:var(--tp-muted)}
+.tp-table-head b{color:var(--tp-strong);font-weight:600}
+.tp-table-head i,.tp-wal-note i{color:var(--tp-red);font-style:normal}
+.tp-table-head em{color:var(--tp-amber);font-style:normal}
+.tp-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:3px;margin-top:6px}
+.tp-row{display:flex;gap:8px;padding:2px 6px;background:var(--tp-shade-1);box-shadow:inset 2px 0 0 var(--tp-lo);font-variant-numeric:tabular-nums;transition:background .6s,box-shadow .6s}
+.tp-row b{color:var(--tp-strong);font-weight:500}
+.tp-row span{color:var(--tp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-row[data-fresh]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-green);transition:none}
+.tp-row[data-behind]{box-shadow:inset 2px 0 0 var(--tp-amber)}
+.tp-row[data-behind] span:first-of-type{color:var(--tp-amber)}
+.tp-wal{display:flex;align-items:center;gap:2px;margin-top:8px}
+.tp-wal>span{margin-right:6px;color:var(--tp-muted);font-size:9.5px;letter-spacing:.08em}
+.tp-wal i{width:9px;height:9px;background:var(--tp-mid);box-shadow:inset 0 0 0 1px var(--tp-lo)}
+.tp-wal i[data-pending]{background:var(--tp-amber)}
+.tp-wal-note{margin:4px 0 0;color:var(--tp-muted);font-size:10px}
 .tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
 .tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
 .tp-tip b{color:var(--tp-strong);font-weight:500}
 .tp-tip i{color:var(--tp-red);font-style:normal}
+.k-corner[data-corner="hint"]{max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.k-corner[data-corner="readout"]{max-width:56%;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}

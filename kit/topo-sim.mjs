@@ -152,6 +152,20 @@ export function createSim(spec) {
   for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
   const flagNode = [...nodes.values()].find((node) => node.kind === "flags");
 
+  // Tables: rows keyed by a record key, a write-ahead log, and replicas that apply its entries.
+  // A replica (a db fed by a replication edge) gets its primary's tables if it declares none.
+  for (const node of nodes.values()) {
+    const primaryEdge = node.into.find((edge) => edge.kind === "replication" && nodes.get(edge.from).tables);
+    if (!node.tables && primaryEdge && node.kind === "db") node.tables = nodes.get(primaryEdge.from).tables;
+    if (!node.tables) continue;
+    node.primary = primaryEdge ? nodes.get(primaryEdge.from) : null;
+    node.store = new Map(Object.entries(node.tables).map(([name, t]) => [name, { name, key: t.key || "id", show: t.show || 6, rows: new Map(), touched: [] }]));
+    node.wal = { lsn: 0, applied: 0, recent: [] };
+    node.tableStats = { writes: [], inserts: [], updates: [], conflicts: [], stale: [], misses: [], lockWaits: [], lost: [], applied: [] };
+    node.locked = new Map();
+  }
+  const records = spec.records || {};
+
   // Logs: kafka topics (partitions, consumer groups with exclusive assignment) and queues
   // (one lane, competing consumers).
   const logs = new Map();
@@ -209,6 +223,21 @@ export function createSim(spec) {
     if (!node.routes.has(name)) node.routes.set(name, { name, recent: [], service: [], roots: [], errors: [] });
     return node.routes.get(name);
   };
+  // The record a request is about, one per table: a key from the table's keyspace (with
+  // `skew`, that share of requests hits the hottest 5% of keys) and a value for each field.
+  const recordOf = (msg, table) => {
+    msg.records ??= {};
+    if (!msg.records[table]) {
+      const def = records[table] || {};
+      const keys = def.keys || 100;
+      const hot = Math.max(1, Math.round(keys * 0.05));
+      const n = def.skew && rand() < def.skew ? Math.floor(rand() * hot) : Math.floor(rand() * keys);
+      const fields = {};
+      for (const [name, values] of Object.entries(def.fields || {})) fields[name] = values[Math.floor(rand() * values.length)];
+      msg.records[table] = { key: (def.start ?? 1000) + n, fields };
+    }
+    return msg.records[table];
+  };
   // The endpoint a request is calling at this node, if the node declares it.
   const endpointAt = (node, msg) => (node.endpoints && msg.endpoint ? node.endpoints[msg.endpoint] : undefined);
 
@@ -247,7 +276,7 @@ export function createSim(spec) {
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
-    routeStats(node, msg.endpoint)?.recent.push(sim.time);
+    if (!extra.entry) routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
@@ -259,8 +288,26 @@ export function createSim(spec) {
     reject(job);
   }
 
+  const WRITES = new Set(["insert", "upsert", "update", "delete", "rmw"]);
+  const tableOp = (job) => (job.node.store && job.op?.table && job.node.store.has(job.op.table) ? job.op : null);
+
   function begin(job) {
     const node = job.node;
+    // Row locks: a write waits for any other write on the same key to commit.
+    const op = tableOp(job);
+    if (op && node.locks && WRITES.has(op.op) && !job.holdsLock) {
+      const key = `${op.table}:${recordOf(job.msg, op.table).key}`;
+      if (node.locked.has(key)) {
+        node.locked.get(key).push(job);
+        node.tableStats.lockWaits.push(sim.time);
+        return;
+      }
+      node.locked.set(key, []);
+      job.holdsLock = key;
+    }
+    // An unlocked read-modify-write reads now and writes at commit: anything committed in
+    // between is overwritten (a lost update).
+    if (op && op.op === "rmw") job.readVersion = node.store.get(op.table).rows.get(recordOf(job.msg, op.table).key)?.version ?? 0;
     // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
     const base = (endpointAt(node, job.msg)?.ms ?? node.ms) + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
     const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
@@ -288,10 +335,20 @@ export function createSim(spec) {
     const node = job.node;
     node.jobs.delete(job);
     if (!ok) node.recentErrors.push(sim.time);
+    if (job.holdsLock) {
+      const waiters = node.locked.get(job.holdsLock) || [];
+      const next = waiters.shift();
+      if (next) {
+        next.holdsLock = job.holdsLock;
+        node.locked.set(job.holdsLock, waiters);
+        if (!next.dead && !next.done) begin(next);
+      } else node.locked.delete(job.holdsLock);
+      job.holdsLock = null;
+    }
     const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
-    const ms = own + job.cost;
+    const ms = own + (job.spent || 0) + job.cost;
     node.service.push({ at: sim.time, ms });
-    const route = routeStats(node, job.msg.endpoint);
+    const route = job.entry ? null : routeStats(node, job.msg.endpoint);
     if (route) {
       route.service.push({ at: sim.time, ms });
       if (!ok) route.errors.push(sim.time);
@@ -307,6 +364,9 @@ export function createSim(spec) {
     if (!node.up) return;
     if (isLog(node)) return respond(job, true);
     if (node.errorRate && rand() < node.errorRate) return respond(job, false);
+    if (job.entry) return applyEntry(job);
+    const op = tableOp(job);
+    if (op) return respond(job, commit(job, op));
     forward(job);
     job.forwarded = true;
     if (job.waiting === 0) respond(job, !job.failed);
@@ -327,19 +387,20 @@ export function createSim(spec) {
     // A declared endpoint makes exactly its calls, each along the edge to its target.
     const endpoint = endpointAt(node, job.msg);
     if (endpoint && endpoint.calls) {
+      // Calls run in parallel, in stages: a call with `then: true` starts a new stage that
+      // waits for everything before it (write, then read your own write).
+      job.stages = [];
       for (const call of endpoint.calls) {
-        const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
-        if (!edge || rand() >= (call.p ?? 1)) continue;
-        if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
-        else if (edge.sync) {
-          job.waiting++;
-          callOut(job, edge, 0, 0, call);
-        } else launch(edge, "request", { msg: job.msg, op: call });
+        if (call.then || !job.stages.length) job.stages.push([]);
+        job.stages[job.stages.length - 1].push(call);
       }
+      job.stage = 0;
+      issue(job, job.stages[0]);
       return;
     }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
-    for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
+    // A database with tables replicates WAL entries as it commits them, not every request.
+    if (!node.store) for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
     const data = node.gated ? node.data.filter(open) : node.data;
     if (!data.length) return;
     const mode = routeOf(node);
@@ -441,7 +502,117 @@ export function createSim(spec) {
     job.waiting--;
     job.cost = Math.max(job.cost, ms);
     if (!ok) job.failed = true;
-    if (job.waiting === 0 && job.forwarded) respond(job, !job.failed);
+    if (job.waiting === 0 && job.forwarded) advance(job);
+  }
+
+  // One stage of an endpoint's calls; the next starts when this one has all answered.
+  function issue(job, calls) {
+    const node = job.node;
+    for (const call of calls) {
+      const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+      if (!edge || rand() >= (call.p ?? 1)) continue;
+      if (call.table) recordOf(job.msg, call.table);
+      if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
+      else if (edge.sync) {
+        job.waiting++;
+        callOut(job, edge, 0, 0, call);
+      } else launch(edge, "request", { msg: job.msg, op: call });
+    }
+  }
+  function advance(job) {
+    while (job.stages && job.stage < job.stages.length - 1 && !job.failed && job.waiting === 0) {
+      job.spent = (job.spent || 0) + job.cost;
+      job.cost = 0;
+      issue(job, job.stages[++job.stage]);
+    }
+    if (job.waiting === 0) respond(job, !job.failed);
+  }
+
+  // --- tables -------------------------------------------------------------------------------
+
+  const touch = (table, key) => {
+    table.touched = [key, ...table.touched.filter((k) => k !== key)].slice(0, 16);
+  };
+  const rowEvent = (node, op, table, key, extra) => !sim.quiet && sim.events.push({ type: "row", node: node.id, table: table.name, key, op, at: sim.time, ...extra });
+
+  // Apply a table operation at commit. Returns whether it succeeded.
+  function commit(job, op) {
+    const node = job.node;
+    const table = node.store.get(op.table);
+    const record = recordOf(job.msg, op.table);
+    const key = record.key;
+    const row = table.rows.get(key);
+    const stats = node.tableStats;
+    if (op.op === "select") {
+      if (row) touch(table, key);
+      if (!row) {
+        stats.misses.push(sim.time);
+        rowEvent(node, "miss", table, key);
+        return true;
+      }
+      // On a replica: stale if the primary has a newer version, or if this same request
+      // wrote a newer one (read-your-writes).
+      const newest = Math.max(node.primary?.store.get(op.table)?.rows.get(key)?.version ?? 0, job.msg.wrote?.[`${op.table}:${key}`] ?? 0);
+      const stale = newest > row.version;
+      if (stale) stats.stale.push(sim.time);
+      rowEvent(node, "select", table, key, { version: row.version, stale });
+      return true;
+    }
+    if (op.op === "insert" && row) {
+      stats.conflicts.push(sim.time);
+      rowEvent(node, "conflict", table, key, { version: row.version });
+      return false;
+    }
+    if (op.op === "update" && !row) {
+      stats.misses.push(sim.time);
+      rowEvent(node, "miss", table, key);
+      return true;
+    }
+    let kind = "delete";
+    if (op.op === "delete") {
+      if (!row) return true;
+      table.rows.delete(key);
+    } else {
+      // An unlocked read-modify-write that read an older version overwrites a newer one.
+      if (op.op === "rmw" && row && row.version !== job.readVersion) stats.lost.push(sim.time);
+      kind = row ? "update" : "insert";
+      table.rows.set(key, { key, version: (row?.version ?? 0) + 1, fields: record.fields, at: sim.time });
+    }
+    const version = (row?.version ?? 0) + 1;
+    touch(table, key);
+    stats.writes.push(sim.time);
+    if (kind === "insert") stats.inserts.push(sim.time);
+    if (kind === "update") stats.updates.push(sim.time);
+    job.msg.wrote = { ...(job.msg.wrote || {}), [`${op.table}:${key}`]: version };
+    const entry = { lsn: ++node.wal.lsn, table: op.table, key, op: kind, version, fields: record.fields, at: sim.time };
+    node.wal.recent = [...node.wal.recent.slice(-23), entry];
+    node.wal.applied = entry.lsn;
+    rowEvent(node, kind, table, key, { version: entry.version, lsn: entry.lsn });
+    for (const edge of node.repl) launch(edge, "replication", { msg: job.msg, entry });
+    return true;
+  }
+
+  // A replica applies a WAL entry, `lag` seconds after it arrives if it has one.
+  function applyEntry(job) {
+    const node = job.node;
+    const apply = () => {
+      const { entry } = job;
+      const table = node.store?.get(entry.table);
+      if (table) {
+        const row = table.rows.get(entry.key);
+        if (entry.op === "delete") table.rows.delete(entry.key);
+        else if (!row || row.version < entry.version) table.rows.set(entry.key, { key: entry.key, version: entry.version, fields: entry.fields, at: sim.time });
+        touch(table, entry.key);
+        node.tableStats.applied.push(sim.time);
+        node.wal.applied = Math.max(node.wal.applied, entry.lsn);
+        node.wal.lsn = Math.max(node.wal.lsn, entry.lsn);
+        node.wal.recent = [...node.wal.recent.slice(-23), entry];
+        rowEvent(node, "apply", table, entry.key, { version: entry.version, lsn: entry.lsn });
+      }
+      respond(job, true);
+    };
+    if (node.lag) sim.timers.push({ at: sim.time + node.lag, run: () => node.up && !job.dead && apply() });
+    else apply();
   }
 
   // --- arrivals -------------------------------------------------------------------------------
@@ -480,7 +651,7 @@ export function createSim(spec) {
       log.end[p]++;
       log.appended++;
     }
-    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge });
+    startJob(node, packet.msg || newMsg(edge.from), packet.call || null, { via: edge, op: packet.op || packet.call?.op, entry: packet.entry });
   }
 
   const isrOf = (log, part) => part.replicas.filter((b) => log.brokers[b]).length;
@@ -672,6 +843,7 @@ export function createSim(spec) {
       trim(node.recentErrors);
       trim(node.service, 3);
       trim(node.roots, 3);
+      if (node.tableStats) for (const list of Object.values(node.tableStats)) trim(list);
       for (const route of node.routes.values()) {
         trim(route.recent);
         trim(route.errors);
@@ -748,7 +920,7 @@ export function createSim(spec) {
     }
   }
 
-  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs"]);
+  const SETTABLE = new Set(["emit", "rate", "capacity", "burst", "errorRate", "ms", "queue", "detect", "ttl", "route", "health", "sidecarMs", "lag", "locks"]);
   function apply(step) {
     if (step.fail) [].concat(step.fail).forEach((id) => setUp(id, false));
     if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
@@ -794,6 +966,39 @@ export function createSim(spec) {
     const group = groupName ? log.groups.find((g) => g.name === groupName) : log.groups[0];
     if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+  };
+  // A database's tables for the inspector: recent rows, counts, rates, the WAL and lag.
+  sim.tablesOf = (id) => {
+    const node = nodes.get(id);
+    if (!node?.store) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    const rate = (list) => list.length / window;
+    const st = node.tableStats;
+    return [...node.store.values()].map((table) => {
+      const primary = node.primary?.store.get(table.name);
+      return {
+        name: table.name,
+        key: table.key,
+        count: table.rows.size,
+        rows: table.touched.slice(0, table.show).map((key) => {
+          const row = table.rows.get(key);
+          const newest = primary?.rows.get(key)?.version;
+          return { key, version: row?.version ?? null, fields: row?.fields || {}, age: row ? sim.time - row.at : null, behind: newest != null && (row?.version ?? 0) < newest };
+        }),
+        writes: rate(st.writes),
+        inserts: rate(st.inserts),
+        updates: rate(st.updates),
+        conflicts: rate(st.conflicts),
+        stale: rate(st.stale),
+        misses: rate(st.misses),
+        lockWaits: rate(st.lockWaits),
+        lost: rate(st.lost),
+        applied: rate(st.applied),
+        wal: { lsn: node.wal.lsn, applied: node.wal.applied, recent: node.wal.recent.slice(-16) },
+        primary: node.primary?.id ?? null,
+        behind: node.primary ? node.primary.wal.lsn - node.wal.applied : 0,
+      };
+    });
   };
   // Per-route numbers at a node: [{ name, rate, p50, p99, errors }], busiest first.
   sim.routesOf = (id) => {
@@ -866,6 +1071,13 @@ export function statsOf(sim, id) {
   } else if (node.service.length) {
     const sorted = node.service.map((s) => s.ms).sort((a, b) => a - b);
     bits.push(`${formatMs(quantile(sorted, 0.5))} p50`);
+  }
+  for (const t of sim.tablesOf(id)) {
+    bits.push(`${t.count} ${t.name}`);
+    if (t.primary) bits.push(`${t.behind} behind`);
+    if (t.stale) bits.push(`${formatRate(t.stale, per)} stale reads`);
+    if (t.conflicts) bits.push(`${formatRate(t.conflicts, per)} conflicts`);
+    if (t.lost) bits.push(`${formatRate(t.lost, per)} lost updates`);
   }
   if (node.capacity) bits.push(`cap ${formatRate(node.capacity, per)}`);
   if (node.queueMax) bits.push(`queue ${node.waiting.length}/${node.queueMax}`);

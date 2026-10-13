@@ -44,6 +44,34 @@ const inspector = (() => {
       });
       return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
     },
+    function tables(id) {
+      const list = sim.tablesOf(id);
+      if (!list.length) return "";
+      // Replicas of this primary, to show how far behind each one is.
+      const replicas = DATA.spec.edges.filter((e) => e.from === id && e.kind === "replication").map((e) => e.to);
+      return list
+        .map((t) => {
+          const bits = [`<b>${esc(t.name)}</b> ${t.count} rows`, t.primary ? `${rate(t.applied)} applied` : `${rate(t.writes)} writes`];
+          if (t.inserts || t.updates) bits.push(`${rate(t.inserts)} inserts · ${rate(t.updates)} updates`);
+          if (t.conflicts) bits.push(`<i>${rate(t.conflicts)} conflicts</i>`);
+          if (t.stale) bits.push(`<em>${rate(t.stale)} stale reads</em>`);
+          if (t.lost) bits.push(`<i>${rate(t.lost)} lost updates</i>`);
+          if (t.lockWaits) bits.push(`${rate(t.lockWaits)} lock waits`);
+          const field = (r) => Object.values(r.fields)[0] ?? "";
+          const rows = t.rows.map((r) => `<div class="tp-row"${r.age != null && r.age < 0.7 ? " data-fresh" : ""}${r.behind ? ` data-behind title="behind the primary"` : ""}><b>${esc(r.key)}</b><span>${r.version == null ? "gone" : `v${r.version}`}</span><span>${esc(field(r))}</span></div>`).join("");
+          // WAL: the newest entries; amber ones haven't reached every replica yet.
+          const shipped = replicas.length ? Math.min(...replicas.map((rid) => sim.tablesOf(rid).find((x) => x.name === t.name)?.wal.applied ?? 0)) : Infinity;
+          const cells = t.wal.recent.map((e) => `<i title="lsn ${e.lsn} ${e.op} ${esc(e.key)} v${e.version}"${e.lsn > shipped ? " data-pending" : ""}></i>`).join("");
+          const lagNotes = t.primary
+            ? [`${t.behind} ${t.behind === 1 ? "entry" : "entries"} behind ${esc(specOf.get(t.primary)?.label || t.primary)}${specOf.get(id)?.lag ? ` (applies ${specOf.get(id).lag}s late)` : ""}`]
+            : replicas.map((rid) => {
+                const r = sim.tablesOf(rid).find((x) => x.name === t.name);
+                return `${esc(specOf.get(rid)?.label || rid)} ${r ? r.behind : "?"} behind`;
+              });
+          return `<div class="tp-table"><div class="tp-table-head">${bits.join(" · ")}</div><div class="tp-rows">${rows || '<div class="tp-row"><span>no rows yet</span></div>'}</div>${cells ? `<div class="tp-wal"><span>WAL</span>${cells}</div>` : ""}<p class="tp-wal-note">lsn ${t.wal.lsn}${lagNotes.length ? ` · ${lagNotes.join(" · ")}` : ""}</p></div>`;
+        })
+        .join("");
+    },
   ];
 
   function render() {

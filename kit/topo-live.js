@@ -18,13 +18,14 @@ const NS = "http://www.w3.org/2000/svg";
 const views = {};
 for (const name of ["iso", "flat"]) {
   const svg = stage.querySelector(`.tp-${name}`);
-  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), status: new Map() };
+  const v = { name, svg, data: DATA.views[name], layer: svg.querySelector("[data-packets]"), pool: [], leds: new Map(), cells: new Map(), cursors: [], nodes: new Map(), edges: [], labels: new Map(), cellState: new Map(), breakers: new Map(), elabels: new Map(), qcells: new Map(), knobs: new Map(), lanes: new Map(), brokers: new Map(), rows: new Map(), status: new Map() };
   const all = (selector, fn) => svg.querySelectorAll(selector).forEach(fn);
   all("[data-breaker]", (el) => v.breakers.set(+el.dataset.breaker, el));
   all("[data-elabel]", (el) => v.elabels.set(+el.dataset.elabel, { el, text: el.querySelector("text") }));
   all("[data-qcell]", (el) => v.qcells.set(el.dataset.qcell, el));
   all("[data-flag]", (el) => v.knobs.set(el.dataset.flag, el));
   all("[data-lane]", (el) => v.lanes.set(el.dataset.lane, el));
+  all("[data-rows]", (el) => v.rows.set(el.dataset.rows, el));
   all("[data-part^='broker:']", (el) => v.brokers.set(`${el.closest("[data-node]").dataset.node}:${el.dataset.part.slice(7)}`, el));
   all("[data-led]", (el) => v.leds.set(el.dataset.led, el));
   all("[data-cell]", (el) => v.cells.set(el.dataset.cell, el));
@@ -223,6 +224,7 @@ function drawStatus() {
     const log = sim.logs.get(id);
     setOnce(v, `l${key}`, el, "data-paused", !!log && !sim.readable(log, +p));
   }
+  for (const [id, el] of v.rows) setOnce(v, `rows${id}`, el.querySelector("text"), "text", `${sim.tablesOf(id).reduce((n, t) => n + t.count, 0)} rows`);
   for (const [key, el] of v.brokers) {
     const [id, b] = key.split(":");
     setOnce(v, `b${key}`, el, "data-down", !sim.logs.get(id).brokers[+b]);
