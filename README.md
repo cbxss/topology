@@ -166,6 +166,34 @@ node scripts/build.mjs examples/order-events/order-events.spec.mjs --light
 node scripts/record-demo.mjs
 ```
 
+## npm releases
+
+The package name is `@cbxss/topology`. It distributes the complete skill, kit,
+references, scripts, runnable examples, and verification files. README recordings
+and local working files are excluded from the npm archive.
+
+After the first publish, install it with `npm install @cbxss/topology`. The skill
+folder is `node_modules/@cbxss/topology`; keep its contents together when copying
+or linking it into your agent's skills directory. You can also build directly:
+
+```sh
+node node_modules/@cbxss/topology/scripts/build.mjs my.spec.mjs
+```
+
+Maintainers: the **Publish to npm** workflow runs the full CI suite and verifies
+builds from an isolated npm archive before publishing publicly with provenance.
+It reads the repository secret `NPM_PUBLISH` only in the publishing step.
+
+- For the initial `1.0.0` npm release, run **Publish to npm → Run workflow** on
+  `main`. The existing `v1.0.0` Git tag predates the npm manifest.
+- For subsequent releases, update `package.json` and the version in `SKILL.md`,
+  commit, and push a matching `vX.Y.Z` tag. A mismatched tag fails publication.
+- Manual runs on `main` are also supported. Each npm version can be published
+  once; rerunning an already published version will fail instead of replacing it.
+
+Run `npm run verify:package` to check the archive locally. Token authentication
+and provenance follow [npm's publishing guidance](https://docs.npmjs.com/generating-provenance-statements/).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

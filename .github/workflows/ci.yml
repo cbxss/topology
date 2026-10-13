@@ -5,12 +5,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -36,6 +37,9 @@ jobs:
         run: |
           "$CHROME_PATH" --version
           node scripts/verify-sim-browser.mjs
+
+      - name: npm package contains a working skill
+        run: npm run verify:package
 
       - name: Evals file is valid
         run: node -e 'const e = require("./evals/evals.json"); if (e.skill_name !== "topology" || !e.evals.every((x) => x.id && x.prompt && x.expected_output)) process.exit(1)'
