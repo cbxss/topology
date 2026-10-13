@@ -94,7 +94,7 @@ Build one with `node scripts/build.mjs examples/checkout/checkout.spec.mjs` (add
 | `kit/topo-features.mjs` | The tool's feature toggles and their resolution (spec < CLI < URL). |
 | `tests/` | `node --test tests/*.test.mjs`: the model's behaviour and the page build. |
 | `kit/iso.mjs` | The drawing core: an orthographic camera (`iso`, `depthOf`, `fitProjection`), shaded prisms (`extrude`, `slabOf`, `cylinder`), lines on faces (`onTop`, `ring`, `sideArc`, `sideSeam`, `radialTicks`, `topMatrix`), SVG emitters (`solidSvg`, `lineSvg`, `dotsSvg`, `faceTextSvg`, `figureSvg`), the card (`plateHtml`), the page (`pageHtml`) and the palette (`KIT_CSS`, `--tp-*` tokens). |
-| `scripts/capture.mjs`, `scripts/drive.mjs`, `scripts/lines.mjs` | Headless Chrome screenshots, scripted sessions and the line-end check. |
+| `scripts/capture.mjs`, `scripts/drive.mjs`, `scripts/lines.mjs`, `scripts/browser.mjs` | Headless Chrome screenshots, scripted sessions and the line-end check, over a small DevTools client (`browser.mjs`). Set `CHROME_PATH` if Chrome isn't found. |
 
 ## Embedding
 

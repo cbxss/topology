@@ -1581,13 +1581,7 @@ function route(nodes, edges, byId) {
       entry.end.offset = list.length === 1 ? 0 : -span / 2 + (span * index) / (list.length - 1);
     });
   }
-  for (const edge of edges) {
-    edge.ports = edge.ends.map(({ node, side, offset }) => {
-      const sx = side === "+x" ? 1 : side === "-x" ? -1 : 0;
-      const sy = side === "+y" ? 1 : side === "-y" ? -1 : 0;
-      return [node.cx + (sx * node.w) / 2 + (sx ? 0 : offset), node.cy + (sy * node.d) / 2 + (sy ? 0 : offset)];
-    });
-  }
+  for (const edge of edges) edge.ports = edge.ends.map(({ node, side, offset }) => portOf(node, side, offset));
   // Edges whose elbows fall in the same channel get their own lane in it, so their
   // middle legs run side by side instead of on top of each other.
   const channels = new Map();
@@ -1686,6 +1680,23 @@ function applyHops(model, radius = 4.2) {
     measure(edge);
     edge.hops = hops.length;
   }
+}
+
+// Where a link meets a node: on the face, `offset` along it. Round bodies (disks, the
+// octagonal LB) and inset ones (the DNS tower's base) are met on their real outline, so a
+// link spread off-centre still touches the body.
+const ROUND = { db: 1, storage: 1, cdn: 0, lb: Math.cos(Math.PI / 8) };
+const INSET = { dns: 4 };
+function portOf(node, side, offset) {
+  const across = side.endsWith("x");
+  const sign = side[0] === "+" ? 1 : -1;
+  const half = across ? node.w / 2 : node.d / 2;
+  let reach = half - (INSET[node.kind] || 0);
+  if (ROUND[node.kind]) {
+    const r = (Math.min(node.w, node.d) / 2) * ROUND[node.kind];
+    reach = Math.sqrt(Math.max(0, r * r - offset * offset));
+  }
+  return across ? [node.cx + sign * reach, node.cy + offset] : [node.cx + offset, node.cy + sign * reach];
 }
 
 // Cumulative lengths along an edge's points: packets are placed by them.
@@ -1815,7 +1826,7 @@ const ISO = {
     return out.join("");
   },
   db(node, c) {
-    const r = Math.min(node.w, node.d) / 2 - 1;
+    const r = Math.min(node.w, node.d) / 2;
     const out = [];
     const toward = [Math.cos(Math.PI / 4), Math.sin(Math.PI / 4)];
     for (let s = 0; s < 3; s++) {
@@ -1830,7 +1841,7 @@ const ISO = {
     return out.join("");
   },
   storage(node, c) {
-    const r = Math.min(node.w, node.d) / 2 - 1;
+    const r = Math.min(node.w, node.d) / 2;
     const out = [];
     [r - 5, r - 2.5, r].forEach((radius, s) => {
       out.push(c.S(k.cylinder(node.cx, node.cy, radius, s * 8, s === 2 ? 10 : 8, c.P, 48, s === 2 ? 0.8 : 0), { tone: "mid" }));
@@ -2220,7 +2231,7 @@ function renderView(model, view, width = 640, camera) {
       out.push(`<g class="tp-zone" data-depth="${group.depth}"${group.region ? ' data-region=""' : ""}>${iso.S(k.slabOf(group.box, z0, h, P, 6, 0.6), { tone: group.region ? "mid" : "lo", crease: "faint" })}`);
       out.push(iso.L(k.planOutline(k.insetPlan(group.box, 4), z0 + h, P, 5), { tone: "faint", dashed: !group.region }));
       // Along the plate's left edge, where node labels never sit.
-      out.push(k.faceTextSvg(k.topMatrix([group.box.x + 6.5, group.box.y + 10], z0 + h, P, "y"), String(group.label).toUpperCase(), { size: group.region ? 7 : 6, tone: group.region ? "hi" : "mid" }));
+      out.push(k.faceTextSvg(k.topMatrix([group.box.x + 6.5, group.box.y + group.box.d - 8], z0 + h, P, "y"), String(group.label).toUpperCase(), { size: group.region ? 7 : 6, tone: group.region ? "hi" : "mid" }));
       out.push(`</g>`);
     } else {
       const b = flat.box(group.box);
