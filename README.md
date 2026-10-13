@@ -2,14 +2,24 @@
 
 **A Claude skill that draws a distributed system as a small working model of itself.**
 
-Write a spec of nodes, links, zones and rates. The build lays it out, routes the links, and draws it two ways: **isometric** (servers, disks, brokers and gateways standing on a floor) and **flat 2D** (the same layout as glyphs). A seeded simulation moves packets through it. Kafka partitions fill with records, consumer cursors chase them, the LB round-robins, the gateway sheds load, replicas follow their primary. Click any node to fail it and watch what happens next: the readout always says what the model says.
+Write a spec of nodes, links, zones, rates and a short story. The build lays it out, routes the links, and draws it two ways: **isometric** (servers, disks, brokers and gateways standing on a floor) and **flat 2D** (the same layout as glyphs, reached by a camera morph). A seeded simulation moves requests through it with honest p50/p99 latency:
+
+- queues fill and answer 503
+- timeouts trigger retries, and breakers trip
+- Kafka partitions fill, cursors chase them, and leaders get re-elected
+- DNS keeps sending to a dead region until its TTL expires
+- canaries ramp, and a kill switch sends traffic back
+
+The story plays on its own with a timeline and narration. Click any node to take over and break things yourself; the readout always says what the model says.
 
 ## Quick start
 
 ```sh
+node scripts/serve.mjs examples                                             # dev server with live reload: http://127.0.0.1:8765/
 node scripts/build.mjs examples/order-events/order-events.spec.mjs          # → order-events.html
 node scripts/build.mjs examples/order-events/order-events.spec.mjs --light
-node scripts/build.mjs examples/order-events/order-events.spec.mjs --check  # run the model headless
+node scripts/build.mjs examples/order-events/order-events.spec.mjs --check  # run the model and the story headless
+node --test tests/*.test.mjs                                                # the model's tests
 ```
 
 No dependencies: Node 20.10+ only. Chrome or Chromium for the screenshot checks.
@@ -41,7 +51,19 @@ export default {
 };
 ```
 
-Kinds: `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `db`, `storage`, `kafka`, `queue`, `box`. Behaviour: sources (`emit`), routing (`all` with per-edge probability, `roundrobin`, `random`), sync responses, `capacity` (rate limits), Kafka partitions and consumer groups with rebalancing, competing-consumer queues, replication, failure injection. Every field is in [`references/spec.md`](references/spec.md).
+Kinds: `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `db`, `storage`, `kafka`, `queue`, `cdn`, `dns`, `external`, `scheduler`, `flags`, `box`.
+
+Behaviour:
+- sources, emit curves and schedulers
+- routing: `all` with per-edge probability, `roundrobin` with health-check delay, `random`
+- awaited sync calls, with model-time latency
+- `capacity` + `queue`, timeouts, retries with backoff, circuit breakers
+- Kafka partitions, consumer groups, brokers, RF, min ISR, acks, hot partitions
+- competing-consumer queues, replication, CDN hit ratios, DNS TTLs
+- feature flags with rollouts and kill switches
+- scenarios with named phases
+
+Tool features (the morph, trails, labels, hops and the rest) can be toggled per spec, per build or per URL. Every field is in [`references/spec.md`](references/spec.md).
 
 ## Layout
 
@@ -56,7 +78,10 @@ kit/topo-live.js         the page runtime
 kit/iso.mjs              the drawing core: camera, shaded solids, lines on faces, SVG, the card
 scripts/build.mjs        spec → standalone HTML (and --check, --svg)
 scripts/capture.mjs …    headless Chrome screenshots, scripted sessions, line-end check (browser.mjs)
-examples/                order-events (Kafka, consumer groups), checkout (zones, rate limit, cache-aside)
+kit/topo-story.js        the scenario player; kit/topo-edit.js the drag editor; kit/topo-features.mjs toggles
+scripts/serve.mjs        dev server: rebuild per request, SSE reload, ?edit
+examples/                order-events, checkout, retry-storm, failover, kafka-brokers, canary
+tests/                   node --test tests/*.test.mjs
 ```
 
 ## License

@@ -1,6 +1,6 @@
 # Spec
 
-A spec is a `.spec.mjs` with a default export (or a `.json` file). `scripts/build.mjs` reads it, `kit/topo.mjs` lays it out and draws it, and `kit/topo-sim.mjs` runs it. Nothing else feeds the figure.
+A spec is a `.spec.mjs` with a default export (or a `.json` file). `scripts/build.mjs` reads it, `kit/topo.mjs` lays it out and draws it, and `kit/topo-sim.mjs` runs it. A `<name>.layout.json` next to it (written by the serve editor) overrides node positions. Nothing else feeds the figure.
 
 ```js
 export default {
@@ -10,7 +10,11 @@ export default {
   hint: "…",                      // bottom-left corner; default "Hover a node · click to fail it · V for 2D"
   view: "iso",                    // or "flat": which view opens (both are built)
   grid: [150, 90],                // world units per column and row; default from the largest node
+  labels: "rate",                 // live rate labels on every edge (default: only edges with `label`, `flag` or `unless`)
   sim: { per: 40, seed: 3 },      // see "Simulation"
+  flags: { "new-checkout": { rollout: 0 } },   // feature flags in the modelled system
+  scenario: { … },                // the story: phases and steps, see "Scenario"
+  features: { trails: false },    // tool features, see "Features"
   keys: [{ mark: "lit", label: "Request" }],   // legend; default is derived from what the spec uses
   nodes: [ … ],
   edges: [ … ],
@@ -22,23 +26,32 @@ export default {
 
 | Field | Meaning |
 |---|---|
-| `id` | Required, unique. Used by edges, groups and `data-node`. |
-| `kind` | `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `db`, `storage`, `kafka`, `queue`, or `box` (anything else). Sets the drawing and some defaults. |
+| `id` | Required, unique. Used by edges, groups, scenario steps and `data-node`. |
+| `kind` | `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `db`, `storage`, `kafka`, `queue`, `cdn`, `dns`, `external`, `scheduler`, `flags`, or `box` (anything else). Sets the drawing, the default service time and some routing defaults. |
 | `label` | Text on the floor (iso) or under the glyph (flat). Default: `id`. Keep it under ~14 characters. |
-| `at` | `[col, row]` in grid units, fractions allowed. Omit on every node for auto-layout; if any node lacks `at`, the unplaced ones are auto-ranked. |
-| `replicas` | `service`/`worker`: 1–4 stacked units, each with its own LED; requests rotate across them. |
-| `partitions` | `kafka`: number of partitions (lanes). Default 3. |
-| `role` | `db`: a tag on the top (`primary`, `replica`, `standby`). |
-| `emit` | Makes the node a source: packets per second it starts, with ±40% jitter. |
-| `rate` | A consumer's pull rate from a log, packets per second (default 40). Can be set per edge instead. |
-| `route` | How a node forwards: `all` (every outgoing edge, each with its `p`; the default), `roundrobin` (one edge, rotating; the default for `lb` and `gateway`), `random` (one edge, weighted by `p`). |
-| `latency` | Seconds a node holds a message before forwarding or answering (default `sim.latency`, 0.03). |
-| `capacity` | Admits at most this many packets per second (a token bucket); the rest are dropped red. For rate limits and overload. |
-| `burst` | Bucket size as a fraction of `capacity` (default 0.25). |
-| `health` | `false` on an `lb`/`gateway`: no health checks, it keeps sending to a dead target (drops). |
-| `up` | `false` to start the node failed. |
-| `labelAt` | `front` or `side` to force the iso label spot (default: front, else side if front is hidden). |
+| `at` | `[col, row]` in grid units, fractions allowed. If any node lacks `at`, the unplaced ones are auto-ranked. |
+| `labelAt` | `front` or `side`: force the iso label spot (default: front, else side if front is hidden). |
 | `w`, `d` | Override the footprint in world units. |
+| `replicas` | `service`/`worker`: 1–4 stacked units, each with its own LED; requests rotate across them. |
+| `role` | `db`: a tag on the top (`primary`, `replica`, `standby`). |
+| `sidecar`, `sidecarMs` | A proxy box on the node's side that adds `sidecarMs` (default 1.5) to its service time. |
+| **Traffic** | |
+| `emit` | Makes the node a source. A number (requests per second, ±40% jitter), a curve `[[t, rate], …]` (linear, looping over the scenario's length), or `{ every, burst }` for a scheduler (`burst` requests every `every` seconds). |
+| `route` | How a node forwards: `all` (every outgoing edge, each with its `p`; the default), `roundrobin` (one edge, rotating; default for `lb`, `gateway`, `dns`), `random` (one edge, weighted by `p`). |
+| `ms` | Service time in model milliseconds. Defaults by kind: client 0, lb 0.3, gateway 1, service 8, worker 15, cache 0.4, db 4, storage 20, kafka 2, queue 1, cdn 0.5, dns 1, external 120, flags 1, box 5. Each request varies ±40%, and one in 30 takes 2–5× as long. |
+| `capacity` | The node serves at most this many requests per second (a token bucket). |
+| `burst` | Bucket size as a fraction of `capacity` (default 0.25). |
+| `queue` | Buffer length when over capacity (default 0). A full buffer answers 503 at once. Lit amber cells on the node show how full it is. |
+| `errorRate` | Fraction of requests the node answers with an error (a bad deploy). |
+| `hit` | `cdn`/`cache` with `route: "all"`: only misses (1 − `hit`) go on to its outgoing edges. |
+| `detect`, `ttl` | A router's delay before it notices a dead target: `detect` seconds (default 0.6 for `lb`/`gateway`), or `ttl` for `dns` (default 3). Until then it keeps sending there, and those requests are refused. |
+| `health` | `false` on a router: it never notices. |
+| `rate` | A consumer's pull rate from a log, per second (default 40). Can be set per edge instead. |
+| `up` | `false` to start the node failed. |
+| **Kafka** | |
+| `partitions` | Number of partitions (lanes). Default 3. |
+| `brokers`, `rf`, `minIsr`, `acks`, `election` | Brokers (drawn as clickable units), the replication factor (default 3), min in-sync replicas (default 2), `acks: "all"` to refuse writes under min ISR, and election seconds (default 2). See "Simulation". |
+| `skew` | Write share per partition, e.g. `[0.5, 0.25, 0.25]` (a hot partition). Default round-robin. |
 
 ## Edges
 
@@ -46,20 +59,53 @@ export default {
 
 | Field | Meaning |
 |---|---|
-| `kind` | `sync` (default between ordinary nodes: solid line, request then response), `async` (default to or from a `kafka`/`queue`: dashed, no response), `replication` (dashed; the source sends one along it for every message it handles). |
-| `sync` | Override whether the target answers. Responses travel back along the edge after the target's `latency`; they don't wait for the target's own downstream calls. |
-| `p` | With `route: "all"`: the chance this edge is called per message (cache-aside: `api → db` with `p: 0.2` is an 80% hit ratio). With `route: "random"`: the weight. |
-| `group` | On an edge out of a `kafka` node: the consumer group of the target (default `"default"`). Each group has its own committed offsets. |
-| `key` | On an edge into a `kafka` node: a fixed partition key (hashed), to show a hot partition. Without it, writes round-robin over partitions. |
+| `kind` | `sync` (default between ordinary nodes: solid line, request then response), `async` (default to or from a `kafka`/`queue`: dashed, no response), `replication` (dashed; the source sends one along it for every request it handles), `config` (dotted; drawn, never carries traffic: a flag service pushing config). |
+| `sync` | Override whether the target answers. A sync caller waits for the reply before it answers its own caller. |
+| `ms` | Network round-trip in model milliseconds, counted twice per call (default `sim.net`, 0.5). |
+| `p` | With `route: "all"`: the chance this edge is called per request (cache-aside: `api → db` with `p: 0.2` is an 80% hit ratio). With `route: "random"`: the weight. |
+| `timeout` | Seconds of model time the caller waits. A slower reply is discarded (drawn grey) and counted as a failure at exactly `timeout`. |
+| `retries`, `backoff` | Resend a failed call up to `retries` times, waiting `backoff · 2^attempt · (0.5–1.5)` seconds (default `backoff` 0.05). Retries are drawn amber. |
+| `breaker` | `true` or `{ errors: 0.5, min: 8, window: 2, open: 3 }`: a caller-side circuit breaker. It opens when at least `min` calls in the last `window` seconds failed at a rate of `errors` or more. While open, calls fail at once without being sent. After `open` seconds it half-opens: one trial call, and success closes it. The port ring at the caller shows the state (red open, amber half-open). |
+| `flag`, `unless` | Take this edge only when the named flag is on for this request (`flag`), or only when it's off (`unless`). A pair of edges, one `flag` and one `unless`, is a canary split. |
+| `group` | On an edge out of a `kafka` node: the consumer group of the target (default `"default"`). |
+| `key` | On an edge into a `kafka` node: a fixed partition key (hashed). |
 | `rate` | A per-consumer pull rate that overrides the target's `rate`. |
-| `bend` | 0–1: where along the run the elbow pair sits (default: the middle, or the edge's own lane when several share a channel). |
-| `via` | World-unit waypoints `[[x, y], …]` that replace the routed corners: the escape hatch for a route around a node. |
-| `axis` | `x` or `y`: force which faces the edge leaves and enters. |
-| `back` | `true` to ignore this edge for auto-ranking (a callback that would otherwise push its source right). |
+| `label` | A fixed label on the edge. |
+| `bend`, `via`, `axis` | Routing: where the elbow sits (0–1), explicit world-unit waypoints, or which faces to use (`x`/`y`). |
+| `back` | `true` to ignore this edge for auto-ranking. |
 
 ## Groups
 
-`{ id, label, nodes: [ids], pad }`. A floor plate (iso) or dashed region (flat) around its members, which can be nodes or other groups. Inner groups stand on outer ones. Zones read best as contiguous rows or columns: if a node that isn't a member sits inside a group's box, rearrange.
+`{ id, label, nodes: [ids], pad, region }`. A floor plate (iso) or dashed region (flat) around its members, which can be nodes or other groups. Inner groups stand on outer ones. `region: true` draws a heavier plate with a bigger label. The label runs along the plate's left edge.
+
+## Feature flags
+
+`flags: { name: { rollout: 0.1, sticky: false } }`. Each request draws once per flag and keeps that decision through every hop, so a request either always sees the flag or never does. `sticky: true` decides per source node instead. A `flags`-kind node shows one switch per flag (up to 4), its knob at the rollout. A config change reaches the system only while the flag service is up; while it is down, everyone keeps the last value.
+
+## Scenario
+
+```js
+scenario: {
+  length: 40,                     // seconds; default: last step or phase + 8
+  loop: true,                     // default true: restart from 0 at the end
+  phases: [{ name: "steady", at: 0 }, { name: "incident", at: 10 }, { name: "recovery", at: 22 }],
+  steps: [
+    { at: 1, say: "…" },                                    // narration only
+    { phase: "incident", fail: "billing-a", say: "…" },     // at a phase's start
+    { phase: "incident", after: 5, say: "…" },              // or after it
+    { at: 12, recover: ["billing-a"] },
+    { at: 6, set: { web: { emit: 18 } } },                  // change a node
+    { at: 20, set: { "api>inventory": { breaker: true } } },// change an edge ("from>to")
+    { at: 8, fail: "topic:b0" },                            // fail a Kafka broker
+    { at: 6, flag: "new-checkout", rollout: 0.1 },          // move a flag
+    { at: 24, kill: "new-checkout" },                       // kill switch: rollout 0
+  ],
+}
+```
+
+Settable on nodes: `emit`, `rate`, `capacity`, `burst`, `errorRate`, `ms`, `queue`, `detect`, `ttl`, `route`, `health`, `sidecarMs`. Settable on edges: `retries`, `timeout`, `backoff`, `p`, `breaker`, `rate`.
+
+The page plays the story and loops it. A timeline under the card shows the phases (click one, or press 1–9) and a tick per step; the narration line shows the latest `say`. Scrubbing re-simulates from 0, and the sim is seeded, so a time always looks the same. Clicking a node or a broker takes over: the rest of the script stops applying until the reader presses play, which re-simulates the story up to the current time.
 
 ## Simulation
 
@@ -67,26 +113,46 @@ export default {
 
 | Field | Default | Meaning |
 |---|---|---|
-| `per` | 1 | Messages each packet stands for. The readout multiplies by it: `emit: 6, per: 40` reads 240/s. Keep packets under ~30/s on screen. |
-| `seed` | 7 | The RNG seed. The same spec always runs the same way, in Node and in the page. |
-| `speed` | 150 | Packet speed, world units per second. Edge length sets travel time. |
-| `latency` | 0.03 | Default node latency in seconds. |
-| `window` | 2 | Seconds of history behind each rate in the readout. |
-| `rebalance` | 0.9 | Seconds a consumer group stops consuming while it rebalances after a member fails or returns. |
+| `per` | 1 | Requests each packet stands for. The readout multiplies by it. Keep packets under ~30/s on screen. |
+| `seed` | 7 | The RNG seed: the same spec always runs the same way, in Node and in the page. |
+| `speed` | 150 | Packet speed in world units per second (animation only). |
+| `net` | 0.5 | Default network ms per hop, each way. |
+| `window` | 2 | Seconds of history behind each rate. |
+| `rebalance` | 0.9 | Seconds a consumer group pauses to rebalance after a member fails or returns. |
+| `refuse` | 0.02 | Seconds before a refused connection's error starts back. |
+| `jitter` | true | `false` makes every service time exact. |
 
-What happens, exactly:
+**Time.** Packet travel is slowed down so people can watch it; everything else runs in real seconds. Latency is built up in model time, not measured off the clock: a job costs its queue wait plus its service time plus its slowest sync call. A call costs its network round trip plus the callee's job, plus any earlier failed attempts and their backoff. The readout's p50/p99 are over requests completed in the last 3 s.
 
-- **Sources** (`emit`) start packets and forward them.
-- **Forwarding**: when a node finishes a message (after `latency`) it sends one along each `replication` edge, then routes on its other edges per `route`. A `roundrobin` node skips targets that are down (unless `health: false`); with no healthy target the message is lost.
-- **Arrival**: a node that is down, or out of `capacity` tokens, drops the packet (red, fades out at the target). Otherwise it handles it: the LED of the next replica blinks, and a `sync` edge answers.
-- **Kafka**: an arriving record is appended to a partition (its `key`'s hash, else round-robin). Each consumer group assigns partitions to its live members round-robin (`p % members`), so 3 partitions over 2 consumers gives one consumer two. Each consumer pulls up to its `rate`, always from its assigned partition with the most lag, commits, and sends the record down its edge (blue); the consumer then forwards it like any node. When a member fails or recovers, the group pauses for `rebalance` seconds and reassigns. Lag is log-end offset minus committed offset, summed over partitions.
-- **Queue**: one lane; every live consumer competes for the same messages (no assignment, no rebalance pause).
-- **Failure**: clicking a node (or Enter on the focused node) toggles it. A down node drops what arrives, forgets work in progress and stops emitting or consuming.
+**A request's life.**
+- A source starts it.
+- Each node, after its queue wait and service time, sends one along each `replication` edge, then routes on its other edges.
+- Sync calls are awaited, and the node answers when all of them have answered, failed or timed out. Any failure makes its answer an error.
+- A node that is down refuses (red, at once). A node over capacity with a full buffer answers 503.
+- A node that dies mid-request resets its callers.
+- A `roundrobin` router skips targets it knows are dead, after `detect` or `ttl`.
 
-The readout shows the summary (`380/s in · lag 40 · healthy`, or `… lost`, or `n down`) and, while a node is focused, that node's line: rate, capacity and rejections, or for a log its inflow, each group's lag and live consumers, and `rebalancing`.
+**Kafka.**
+- Writes go to a partition by `key`, by `skew`, or round-robin.
+- Each consumer group assigns partitions to its live members (`p % members`) and pulls from its most-lagged partition at each member's `rate`.
+- With `brokers`, partition p's replicas are brokers `p … p + rf − 1`, led by the first. Losing a leader moves leadership to the next live replica, and the partition pauses (dims) for `election` seconds.
+- A partition whose leader is down accepts nothing. With `acks: "all"`, a partition with fewer than `minIsr` live replicas refuses writes.
+
+**Queue:** one lane; live consumers compete.
+
+**Readout.**
+- **Summary:** `in/s · p50 · p99 · lag`, then either `failing/s` (client-visible failures), `lost/s` (drops), `n down`, or `healthy`.
+- **A focused node:** its rate, p50 (or the end-to-end p50/p99 at a source), capacity, queue depth, rejections, errors and open breakers.
+- **A focused log:** its inflow, each group's lag and live consumers, and broker, election and ISR state.
+
+## Features
+
+Tool features, all on by default: `scenario`, `labels`, `trails`, `morph`, `sparkline`, `hops`, `breakers`, `queues`, `flags`, `edit`. Resolution order, last wins: defaults, then spec `features: { trails: false }`, then `build.mjs --features trails,-morph` or `--no-morph`, then `?features=-morph` on a serve page.
+
+A disabled feature emits no markup and no inlined code, and the sim ignores the spec fields it owns. With `queues` off, `queue` is ignored. With `breakers` off, `breaker` is ignored. With `flags` off, `flag`/`unless` edges are always taken. With `scenario` off, there is no timeline and no steps. `morph` adds ~75 KB to the page (the iso kit and renderers inlined), so turn it off for the leanest page.
 
 ## Layout rules
 
-- Auto-layout ranks nodes by longest path from the sources (ignoring `replication` and `back` edges), one column per rank, ordered within a column by the average row of their inputs. A replication target goes in its primary's column, right after it.
-- Routes are orthogonal: an edge leaves the face that looks at its target (x faces unless the target is mostly above or below) and enters the opposite face, with one elbow pair. Ports spread along a face when several edges share it; edges whose elbows fall in the same channel get separate lanes.
-- `--check` warns about overlapping nodes, edges that pass under a node, and iso labels hidden behind a nearer node. Fix them with `at`, `grid`, `bend`, `via` or `labelAt`.
+- **Auto-layout** ranks nodes by longest path from the sources (ignoring `replication` and `back` edges), one column per rank, ordered by the average row of their inputs. A replication target goes right after its primary.
+- **Routes** are orthogonal, leaving the face that looks at the target. Ports spread along shared faces, and edges whose elbows share a channel get separate lanes. A crossing at right angles hops on whichever edge has room.
+- **`--check`** warns about overlapping nodes, edges passing under a node, and iso labels hidden behind a nearer node.

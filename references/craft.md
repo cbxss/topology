@@ -17,6 +17,13 @@ Each kind has one object in iso and one glyph in flat, on the same footprint, so
 | `kafka` | A broker plinth with one lane per partition, 12 record cells each, and a cursor per consumer group | A box with lanes of cells and cursor ticks | three broker LEDs |
 | `queue` | `kafka` with one lane | as `kafka` | three |
 | `box` | A plain block with a seam | A plain box | one |
+| `cdn` | A PoP slab with a globe on top | A box with a globe | one |
+| `dns` | A small tower with a dish | A mast with a dish | one, on the dish |
+| `external` | A block outlined dashed, three dots on top | A dashed box | one |
+| `scheduler` | A clock face on a slab | A clock | one |
+| `flags` | A panel of switches, one knob per flag sliding with its rollout | A list of switches | one, blinks on config changes |
+| sidecar | A small box on the node's right side | A small box | one |
+| `kafka` with `brokers` | Broker units down the left end of the plinth (click to fail) | Broker chips | one per broker |
 
 ## Colour
 
@@ -26,6 +33,12 @@ The machines stay monochrome in the kit's four tones; colour carries meaning onl
 |---|---|---|
 | Request packet | white | black |
 | Response packet | mid grey | mid grey |
+| Retry | amber | amber |
+| Error reply | red | red |
+| Late reply (after a timeout) | dark grey | light grey |
+| Buffer filling (queue cells) | amber | amber |
+| Breaker port: open / half-open | red / amber | red / amber |
+| Partition electing a leader | dimmed lane | dimmed lane |
 | Record pulled from a log | blue | blue |
 | Replication | green | green |
 | Dropped (down or over capacity) | red, growing and fading at the target | red |
@@ -44,6 +57,18 @@ The machines stay monochrome in the kit's four tones; colour carries meaning onl
 - **Cache-aside**: the cache above the database in the next column; `api → cache` at `p: 1`, `api → db` at `p: 1 - hit`.
 - **CDC / outbox**: `db → connector (worker) → kafka` with `route: "all"`; downstream consumers in groups.
 - **Row pitch.** Tall nodes (db, storage, client) hide what lies just behind them in iso. Leave a row pitch of at least ~64 world units under a database, or let `--check` tell you which label is hidden.
+
+## Story patterns
+
+Each of these has an example to copy:
+
+- **Consumer lost** (`order-events`). Fail one member of a consumer group. The group pauses to rebalance, the survivors fall behind, and recovery drains the lag. Size the survivors just under the inflow.
+- **Health-check delay** (`checkout`). Fail a target behind an LB. A few requests are refused before `detect` notices; then the rest of the pool absorbs the load.
+- **Retry storm** (`retry-storm`). Slow a dependency past its callers' `timeout`. Every call times out and retries multiply the load, so the buffer fills and 503s follow. Then turn on a breaker with a `set` step on the edge (`"a>b": { breaker: … }`), and fix the dependency later so the breaker half-opens and closes.
+- **Regional failover** (`failover`). DNS with `ttl` over two `region` groups. Fail one region's LB: errors last for the TTL, then everything moves.
+- **Broker loss** (`kafka-brokers`). RF 3, min ISR 2, acks=all. One broker down is an election pause; two down refuses every write.
+- **Canary and kill switch** (`canary`). Ramp a flag, give v2 an `errorRate`, then `kill` the flag.
+- **Traffic spike.** `set: { src: { emit: … } }`, or an `emit` curve, against a rate limit or a fixed capacity.
 
 ## Sizing the numbers
 

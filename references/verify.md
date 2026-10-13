@@ -2,6 +2,13 @@
 
 Rendering is cheap and guessing is expensive. Check the model, then look at the figure the way a reviewer would.
 
+## 0. The edit loop
+
+```sh
+node scripts/serve.mjs examples --port 8765     # http://127.0.0.1:8765/ (over SSH: ssh -N -L 8765:localhost:8765 host)
+```
+Every page rebuilds on load and reloads when a spec, its layout file or anything in `kit/` changes; a build error shows as a page with the stack. `?edit` drags nodes in 2D and writes `<name>.layout.json`; delete that file to go back to the spec's own layout. Headless Chrome needs a few hundred MB of temp space: if `/tmp` is small or full, run the scripts with `TMPDIR=~/.cache/topology-tmp`.
+
 ## 1. The model
 
 ```sh
@@ -17,7 +24,16 @@ nodes:
   …
 check passed
 ```
-Read the per-node lines: they are what the readout says when the reader hovers each node. Warnings to clear (or keep on purpose):
+With a scenario, the check first prints the story, phase by phase:
+```
+story: 40s, loops, 3 phases, 4 steps
+phase steady (0–10s): 428/s in · p50 16ms · p99 51ms · lag 13 · 0.0/s failing
+phase consumer lost (10–22s): 393/s in · p50 15ms · p99 40ms · lag 1.3k · 0.0/s failing
+    9.9s before fail billing-a: 420/s in · p50 15ms · p99 57ms · lag 0 · healthy
+   13.0s   +3s  fail billing-a: 400/s in · p50 16ms · p99 19ms · lag 600 · 100/s lost
+phase recovery (22–40s): 435/s in · p50 15ms · p99 37ms · lag 230 · 0.0/s failing
+```
+Every number your `say` lines and caption claim must match these. Then read the per-node lines: they are what the readout says when the reader hovers each node. Warnings to clear (or keep on purpose):
 
 | Warning | Fix |
 |---|---|
@@ -28,6 +44,8 @@ Read the per-node lines: they are what the readout says when the reader hovers e
 | `nodes … overlap` | Set `at` or a larger `grid`. |
 | `edge … passes under …` | `bend`, `via`, `axis`, or move a node. |
 | `label … is hidden behind …` | Space the rows (`grid`), move a node, or `labelAt`. |
+| `the story ends with lag …` / `ends failing …` | Recover what the story breaks and leave time to drain before `length`, or set `loop: false`. |
+| `scenario step … names unknown node or edge` | Fix the id; edges are `"from>to"`, brokers `"topic:b0"`. |
 
 Then simulate the failure you want the reader to try. In Node:
 ```js
@@ -65,6 +83,14 @@ node scripts/drive.mjs my.html --actions fail.json --scale 2
 ```
 Use `.tp-flat [data-node='…']` after switching to 2D. `["slow", 0.1]` slows the page's clock for a contact sheet (`["sheet", "s.png", 120, 12]`). The page exposes `window.__topo` (`sim`, `setView`, `setFocus`, `toggle`) for `["eval", …]` and `["until", …]`, for example `["until", "window.__topo.sim.lagOf('topic') > 100"]`.
 
+Scenario pages: seek to each step and shoot it. `window.__topo.story.seek(t)` re-simulates to `t`:
+```json
+[["wait", 800], ["eval", "window.__topo.story.seek(17); 1"], ["wait", 900], ["shot", "shots/incident.png"],
+ ["click", ".tp-phase[data-at='22']"], ["wait", 500], ["eval", "document.querySelector('.tp-say').textContent"],
+ ["click", ".tp-iso [data-node='indexer']"], ["eval", "window.__topo.story.mode"]]
+```
+The last two lines check takeover: `mode` turns `free`. Morph: click `[data-view='flat']`, then `["slow", 0.5]` and `["sheet", "morph.png", 30, 12, null, 0.5, null, 4]`. The camera should swing smoothly to top-down and crossfade, with no pops and no blank frame.
+
 ## 3. Line ends
 
 ```sh
@@ -86,4 +112,6 @@ Open every PNG and ask:
 - Light theme: do packets and cursors stay legible on paper?
 - Phone (390 wide): does it still read, with no sideways scroll?
 - Reduced motion (`--reduced`): no packets move, and the readout still updates.
+- Story: does each phase show what its narration says, at the moment it says it? Does it loop without a jump?
+- Breakers, queue cells, edge labels and flag knobs: do they change when the readout says they should?
 - Console: clean.
