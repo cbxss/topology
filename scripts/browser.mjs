@@ -134,7 +134,11 @@ export async function openBrowser({ width = 1440, height = 1000, scale = 2, redu
       } catch {}
       chrome.kill();
       await new Promise((done) => (chrome.exitCode !== null ? done() : chrome.once("exit", done)));
-      rmSync(profile, { recursive: true, force: true });
+      // Chrome's helper processes can still be writing the profile after the main one exits:
+      // retry, and never fail a finished check over a leftover temp directory.
+      try {
+        rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch {}
     },
   };
   return page;
