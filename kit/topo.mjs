@@ -3,7 +3,8 @@
 // One world layout feeds both views, so edges, packets and ports line up in each.
 
 import * as k from "./iso.mjs";
-import { isLog } from "./topo-sim.mjs";
+import { groupOf, isLog } from "./topo-sim.mjs";
+import { resolveFeatures, stripFeatures } from "./topo-features.mjs";
 
 // Footprints in world units (x along the flow, y across it).
 export const KINDS = {
@@ -28,7 +29,7 @@ export const SLOTS = 12;
 const PITCH = 7;
 const LANE = 11;
 
-const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const { escape } = k;
 const r1 = (n) => Math.round(n * 10) / 10;
 
 // ---------------------------------------------------------------------------------------------
@@ -48,8 +49,8 @@ export function prepare(spec) {
   const edges = (spec.edges || []).map((raw, index) => {
     const [from, to] = raw.from ? [raw.from, raw.to] : raw;
     if (!byId.has(from) || !byId.has(to)) throw new Error(`edge ${index}: unknown node ${byId.has(from) ? to : from}`);
-    const sync = raw.sync ?? (raw.kind ? false : !isLog(byId.get(to)) && !isLog(byId.get(from)));
-    return { ...(Array.isArray(raw) ? {} : raw), from, to, index, kind: raw.kind || (isLog(byId.get(to)) || isLog(byId.get(from)) ? "async" : "sync"), sync };
+    const viaLog = isLog(byId.get(to)) || isLog(byId.get(from));
+    return { ...(Array.isArray(raw) ? {} : raw), from, to, index, kind: raw.kind || (viaLog ? "async" : "sync"), sync: raw.sync ?? (!raw.kind && !viaLog) };
   });
   const grid = layout(nodes, edges, spec);
   const groups = groupsOf(spec.groups || [], byId);
@@ -59,12 +60,12 @@ export function prepare(spec) {
     if (!isLog(node)) continue;
     const names = [];
     for (const edge of edges) if (edge.from === node.id) {
-      const name = node.kind === "queue" ? "queue" : edge.group || "default";
+      const name = groupOf(node, edge);
       if (!names.includes(name)) names.push(name);
     }
     node.groups = names.length ? names : ["default"];
   }
-  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
 }
 
 function layout(nodes, edges, spec) {
@@ -223,11 +224,7 @@ function route(nodes, edges, byId) {
     });
   }
   for (const edge of edges) {
-    const [p, q] = edge.ends.map(({ node, side, offset }) => {
-      const sx = side === "+x" ? 1 : side === "-x" ? -1 : 0;
-      const sy = side === "+y" ? 1 : side === "-y" ? -1 : 0;
-      return [node.cx + (sx * node.w) / 2 + (sx ? 0 : offset), node.cy + (sy * node.d) / 2 + (sy ? 0 : offset)];
-    });
+    const [p, q] = edge.ports;
     let corners;
     if (edge.axisOf === "x") {
       const mx = edge.bend != null ? p[0] + (q[0] - p[0]) * edge.bend : edge.channel ?? (p[0] + q[0]) / 2;
@@ -239,9 +236,7 @@ function route(nodes, edges, byId) {
     if (edge.via) corners = [p, ...edge.via, q];
     edge.corners = corners;
     edge.points = rounded(corners, 7);
-    edge.lens = [0];
-    for (let i = 1; i < edge.points.length; i++) edge.lens.push(edge.lens[i - 1] + Math.hypot(edge.points[i][0] - edge.points[i - 1][0], edge.points[i][1] - edge.points[i - 1][1]));
-    edge.len = edge.lens[edge.lens.length - 1];
+    measure(edge);
   }
 }
 
@@ -297,11 +292,16 @@ export function applyHops(model, radius = 4.2) {
       }
       edge.points.splice(i, 0, ...inserted);
     }
-    edge.lens = [0];
-    for (let i = 1; i < edge.points.length; i++) edge.lens.push(edge.lens[i - 1] + Math.hypot(edge.points[i][0] - edge.points[i - 1][0], edge.points[i][1] - edge.points[i - 1][1]));
-    edge.len = edge.lens[edge.lens.length - 1];
+    measure(edge);
     edge.hops = hops.length;
   }
+}
+
+// Cumulative lengths along an edge's points: packets are placed by them.
+function measure(edge) {
+  edge.lens = [0];
+  for (let i = 1; i < edge.points.length; i++) edge.lens.push(edge.lens[i - 1] + Math.hypot(edge.points[i][0] - edge.points[i - 1][0], edge.points[i][1] - edge.points[i - 1][1]));
+  edge.len = edge.lens[edge.lens.length - 1];
 }
 
 function rounded(points, radius, steps = 5) {
@@ -351,7 +351,7 @@ function extentOf(model, view) {
 
 export function heightOf(node) {
   if (node.kind === "service" || node.kind === "worker") return node.replicas * 8.8 + 1;
-  if (node.kind === "kafka" || node.kind === "queue") return 10;
+  if (isLog(node)) return 10;
   return node.h;
 }
 
@@ -451,8 +451,7 @@ const ISO = {
   },
   lb(node, c) {
     const r = Math.min(node.w, node.d) / 2;
-    const ring = k.circleRing(node.cx, node.cy, r, 8).map(([x, y]) => [x, y]);
-    const rot = ring.map((_, i) => {
+    const rot = Array.from({ length: 8 }, (_, i) => {
       const a = ((i + 0.5) / 8) * Math.PI * 2;
       return [node.cx + r * Math.cos(a), node.cy + r * Math.sin(a)];
     });
@@ -616,34 +615,22 @@ export function labelSpots(node) {
   return [front, side];
 }
 
+// The spots a label may take: the one `labelAt` forces, else front then side.
+export function labelTries(node) {
+  const [front, side] = labelSpots(node);
+  return node.labelAt === "side" ? [side] : node.labelAt === "front" ? [front] : [front, side];
+}
+
 export function hiddenBy(model, node, spot, P) {
   const marks = spot.marks.map((m) => ({ s: k.iso([m[0], m[1], 0], P), depth: k.depthOf([m[0], m[1], 0], P) }));
   const blockers = [];
   for (const other of model.nodes) {
     if (other === node) continue;
-    const hull = hullOf(k.boxCorners(other.plan, 0, heightOf(other)).map((c) => k.iso(c, P)));
+    const hull = k.convexHull(k.pointsAt(k.boxCorners(other.plan, 0, heightOf(other)), P));
     const front = k.depthOf([other.cx, other.cy, 0], P);
-    const hidden = marks.filter((m) => front > m.depth - 20 && inside(hull, m.s)).length;
-    if (hidden >= 1) blockers.push(other.id);
+    if (marks.some((m) => front > m.depth - 20 && inside(hull, m.s))) blockers.push(other.id);
   }
-    return blockers;
-}
-
-function hullOf(points) {
-  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const lower = [];
-  for (const p of pts) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
-    lower.push(p);
-  }
-  const upper = [];
-  for (let i = pts.length - 1; i >= 0; i--) {
-    const p = pts[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
-    upper.push(p);
-  }
-  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+  return blockers;
 }
 
 function inside(hull, [x, y]) {
@@ -658,8 +645,8 @@ function inside(hull, [x, y]) {
 function isoLabel(node, c, model) {
   // Morph frames reuse the spot chosen for the resting view.
   if (model.fastLabels && node.labelSpot) return k.faceTextSvg(k.topMatrix(node.labelSpot.at, 0, c.P, node.labelSpot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
-  const spots = labelSpots(node);
-  const spot = (node.labelAt === "side" ? [spots[1]] : node.labelAt === "front" ? [spots[0]] : spots).find((s) => !hiddenBy(model, node, s, c.P).length) || spots[0];
+  const tries = labelTries(node);
+  const spot = tries.find((s) => !hiddenBy(model, node, s, c.P).length) || tries[0];
   node.labelSpot = spot;
   return k.faceTextSvg(k.topMatrix(spot.at, 0, c.P, spot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
 }
@@ -853,7 +840,8 @@ export function renderView(model, view, width = 640, camera) {
   // Edges on the floor, with a chevron where they arrive and a port ring (or a breaker) at the caller.
   const labels = [];
   for (const edge of model.edges) {
-    const screen = edge.points.map((p) => k.iso([p[0], p[1], 0], P));
+    const line = k.onTop(edge.points, 0, P);
+    const start = k.iso([edge.points[0][0], edge.points[0][1], 0], P);
     const dashed = edge.kind === "async" || edge.kind === "replication" || edge.kind === "config";
     const [a, b] = [edge.points[edge.points.length - 2], edge.points[edge.points.length - 1]];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
@@ -866,10 +854,10 @@ export function renderView(model, view, width = 640, camera) {
       [tip[0] - u[0] * 5 - v[0] * 3, tip[1] - u[1] * 5 - v[1] * 3],
     ];
     const tone = edge.kind === "config" ? "lo" : "mid";
-    const port = edge.breaker && features.breakers !== false
-      ? `<circle class="tp-breaker" data-breaker="${edge.index}" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="2.4"/>`
-      : edge.sync ? `<circle class="tp-port" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="1.4"/>` : "";
-    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}"><path class="tp-edge-bed" d="${k.pathOf(screen)}"/>${k.lineSvg(k.pathOf(screen), { tone, dashed })}${k.lineSvg(k.pathOf(head.map((p) => k.iso([p[0], p[1], 0], P))), { tone, free: true })}${port}</g>`);
+    const port = edge.breaker
+      ? `<circle class="tp-breaker" data-breaker="${edge.index}" cx="${r1(start[0])}" cy="${r1(start[1])}" r="2.4"/>`
+      : edge.sync ? `<circle class="tp-port" cx="${r1(start[0])}" cy="${r1(start[1])}" r="1.4"/>` : "";
+    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}"><path class="tp-edge-bed" d="${line}"/>${k.lineSvg(line, { tone, dashed })}${k.lineSvg(k.onTop(head, 0, P), { tone, free: true })}${port}</g>`);
     if (features.labels !== false && edge.kind !== "config" && (edge.label || model.labels === "rate" || edge.flag || edge.unless)) labels.push(edgeLabel(edge, P, view));
   }
   if (iso) for (const node of model.nodes) out.push(`<g class="tp-label" data-label="${escape(node.id)}">${isoLabel(node, iso, model)}</g>`);
@@ -885,7 +873,7 @@ export function renderView(model, view, width = 640, camera) {
   for (const node of order) {
     const halo = iso ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
     const body = iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
-    const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue && features.queues !== false ? queueCellsOf(node, iso, flat) : "");
+    const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue ? queueCellsOf(node, iso, flat) : "");
     out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}${extra}</g>`);
   }
 
@@ -971,18 +959,28 @@ function describe(model) {
   return `${model.title}: ${kinds}. Connections: ${links}.`;
 }
 
+// The one way a model is built, in Node and in the page: resolve the tool's features, lay
+// out and route the spec, then add hops if they're on.
+export function modelOf(spec, featureLayers = []) {
+  const features = resolveFeatures(spec.features, ...featureLayers);
+  const model = prepare(stripFeatures(spec, features));
+  model.features = features;
+  if (features.hops) applyHops(model);
+  return model;
+}
+
 const GEOMETRY = new Set(["plan", "cx", "cy", "w", "d", "h", "auto", "at", "labelSpot", "groups", "index", "points", "lens", "corners", "ends", "ports", "channel", "axisOf", "via", "bend", "axis"]);
 const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key, value]) => !GEOMETRY.has(key) && value !== undefined));
 
 // What the sim needs: everything in the spec except geometry, plus each edge's length.
-export function simSpec(model, features) {
+export function simSpec(model) {
   return {
     nodes: model.nodes.map(strip),
     edges: model.edges.map((edge) => ({ ...strip(edge), len: edge.len })),
     sim: model.sim,
     scenario: model.scenario,
     flags: model.flags,
-    features: features || model.features,
+    features: model.features,
   };
 }
 

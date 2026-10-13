@@ -17,6 +17,11 @@ export const FEATURES = {
   edit: true, // drag-to-arrange in serve mode
 };
 
+const known = (name) => {
+  if (!(name in FEATURES)) throw new Error(`unknown feature "${name}" (known: ${Object.keys(FEATURES).join(", ")})`);
+  return name;
+};
+
 // `list` is "a,-b,+c" or an array of the same; returns the changes it names.
 export function parseFeatures(list) {
   const out = {};
@@ -25,9 +30,7 @@ export function parseFeatures(list) {
     const item = String(raw).trim();
     if (!item) continue;
     const off = item.startsWith("-") || item.startsWith("no-");
-    const name = item.replace(/^[-+]/, "").replace(/^no-/, "");
-    if (!(name in FEATURES)) throw new Error(`unknown feature "${name}" (known: ${Object.keys(FEATURES).join(", ")})`);
-    out[name] = !off;
+    out[known(item.replace(/^[-+]/, "").replace(/^no-/, ""))] = !off;
   }
   return out;
 }
@@ -37,10 +40,7 @@ export function resolveFeatures(...layers) {
   for (const layer of layers) {
     if (!layer) continue;
     const changes = typeof layer === "string" || Array.isArray(layer) ? parseFeatures(layer) : layer;
-    for (const [name, value] of Object.entries(changes)) {
-      if (!(name in FEATURES)) throw new Error(`unknown feature "${name}" (known: ${Object.keys(FEATURES).join(", ")})`);
-      out[name] = value !== false;
-    }
+    for (const [name, value] of Object.entries(changes)) out[known(name)] = value !== false;
   }
   return out;
 }
@@ -49,3 +49,32 @@ export const describeFeatures = (set) =>
   Object.entries(set)
     .map(([name, on]) => (on ? name : `-${name}`))
     .join(" ");
+
+// The model features own: a disabled feature's fields are removed from the spec once, before
+// anything is laid out or simulated, so neither the sim nor the renderer checks features.
+export function stripFeatures(spec, set) {
+  const out = { ...spec, nodes: spec.nodes.map((node) => ({ ...node })), edges: (spec.edges || []).map((edge) => (Array.isArray(edge) ? edge : { ...edge })) };
+  const objects = (list) => list.filter((item) => !Array.isArray(item));
+  if (!set.scenario) delete out.scenario;
+  if (!set.queues) objects(out.nodes).forEach((node) => delete node.queue);
+  if (!set.breakers) objects(out.edges).forEach((edge) => delete edge.breaker);
+  if (!set.flags) {
+    delete out.flags;
+    objects(out.edges).forEach((edge) => {
+      delete edge.flag;
+      delete edge.unless;
+    });
+  }
+  if (out.scenario && (!set.queues || !set.breakers || !set.flags)) {
+    out.scenario = {
+      ...out.scenario,
+      steps: (out.scenario.steps || []).map((step) => {
+        const next = { ...step };
+        if (!set.flags) for (const key of ["flag", "rollout", "kill"]) delete next[key];
+        if (next.set) next.set = Object.fromEntries(Object.entries(next.set).map(([id, props]) => [id, Object.fromEntries(Object.entries(props).filter(([key]) => !(key === "queue" && !set.queues) && !(key === "breaker" && !set.breakers)))]));
+        return next;
+      }),
+    };
+  }
+  return out;
+}

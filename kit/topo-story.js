@@ -10,7 +10,7 @@
   const hint = plate.querySelector('[data-corner="hint"]');
   const hintText = hint ? hint.textContent : "";
   const pct = (t) => `${((100 * t) / story.length).toFixed(3)}%`;
-  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   const phases = story.phases
     .map((phase, index) => `<button type="button" class="tp-phase" data-at="${phase.at}" style="left:${pct(phase.at)};width:${pct(phase.end - phase.at)}" title="${esc(phase.name)} (${index + 1})"><span>${esc(phase.name)}</span></button>`)
@@ -31,28 +31,48 @@
   paused = !playing;
   let preview = null;
 
+  // Going forward in the story steps the current sim on; going back (or leaving free play)
+  // re-simulates from 0. Either way the same time looks the same: the sim is seeded.
   function seek(t) {
-    const next = createSim(DATA.spec);
-    const steps = Math.round(Math.max(0, Math.min(t, story.length)) * 60);
-    for (let i = 0; i < steps; i++) next.step(1 / 60);
+    t = Math.max(0, Math.min(t, story.length));
+    const next = mode === "story" && t >= sim.time ? sim : createSim(DATA.spec);
+    next.quiet = true;
+    while (next.time < t - 1e-9) next.step(1 / 60);
+    next.quiet = false;
     resetVisuals(next);
     mode = "story";
     render();
   }
 
-  const phaseAt = (t) => story.phases.filter((phase) => phase.at <= t + 1e-6).pop();
-  const sayAt = (t) => story.steps.filter((step) => step.say && step.at <= t + 1e-6).pop();
+  // The last of a sorted list at or before t.
+  const lastAt = (list, t) => {
+    let found;
+    for (const item of list) if (item.at <= t + 1e-6) found = item;
+    return found;
+  };
+  const spoken = story.steps.filter((step) => step.say);
+  // Writes only what changed: this runs every frame.
+  const written = new Map();
+  const write = (key, fn, value) => {
+    if (written.get(key) === value) return;
+    written.set(key, value);
+    fn(value);
+  };
   let shown = { say: null, phase: null };
   function render() {
     const t = preview ?? Math.min(sim.time, story.length);
-    head.style.left = pct(t);
-    clock.textContent = `${t.toFixed(1)}s`;
-    track.setAttribute("aria-valuenow", t.toFixed(1));
-    bar.dataset.mode = mode;
-    play.textContent = playing && mode === "story" ? "❚❚" : "▶";
-    play.setAttribute("aria-label", mode === "free" ? "Resume the story" : playing ? "Pause" : "Play");
-    const phase = mode === "story" ? phaseAt(t) : null;
-    const step = mode === "story" ? sayAt(t) : null;
+    write("head", (v) => (head.style.left = v), pct(Math.round(t * 20) / 20));
+    write("clock", (v) => {
+      clock.textContent = `${v}s`;
+      track.setAttribute("aria-valuenow", v);
+    }, t.toFixed(1));
+    write("mode", (v) => {
+      bar.dataset.mode = mode;
+      play.textContent = v === "playing" ? "❚❚" : "▶";
+      play.setAttribute("aria-label", mode === "free" ? "Resume the story" : playing ? "Pause" : "Play");
+    }, mode === "free" ? "free" : playing ? "playing" : "paused");
+    const phase = mode === "story" ? lastAt(story.phases, t) : null;
+    const step = mode === "story" ? lastAt(spoken, t) : null;
     if (phase !== shown.phase) {
       shown.phase = phase;
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));

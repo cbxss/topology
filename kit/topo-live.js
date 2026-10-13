@@ -24,15 +24,15 @@ for (const name of ["iso", "flat"]) {
   all("[data-flag]", (el) => v.knobs.set(el.dataset.flag, el));
   all("[data-lane]", (el) => v.lanes.set(el.dataset.lane, el));
   all("[data-part^='broker:']", (el) => v.brokers.set(`${el.closest("[data-node]").dataset.node}:${el.dataset.part.slice(7)}`, el));
-  svg.querySelectorAll("[data-led]").forEach((el) => v.leds.set(el.dataset.led, el));
-  svg.querySelectorAll("[data-cell]").forEach((el) => v.cells.set(el.dataset.cell, el));
-  svg.querySelectorAll("[data-cursor]").forEach((el) => {
+  all("[data-led]", (el) => v.leds.set(el.dataset.led, el));
+  all("[data-cell]", (el) => v.cells.set(el.dataset.cell, el));
+  all("[data-cursor]", (el) => {
     const [id, g, p] = el.dataset.cursor.split(":");
     v.cursors.push({ el, id, g: +g, p: +p, at: -1 });
   });
-  svg.querySelectorAll("[data-node]").forEach((el) => v.nodes.set(el.dataset.node, el));
-  svg.querySelectorAll("[data-edge]").forEach((el) => (v.edges[+el.dataset.edge] = el));
-  svg.querySelectorAll("[data-label]").forEach((el) => v.labels.set(el.dataset.label, el));
+  all("[data-node]", (el) => v.nodes.set(el.dataset.node, el));
+  all("[data-edge]", (el) => (v.edges[+el.dataset.edge] = el));
+  all("[data-label]", (el) => v.labels.set(el.dataset.label, el));
   views[name] = v;
 }
 let view = DATA.view;
@@ -112,32 +112,28 @@ function drawPackets() {
 const lit = new Map();
 function ledFor(event) {
   const node = sim.nodes.get(event.node);
-  if (node.kind === "kafka" || node.kind === "queue") return `${event.node}:b${node.handled % (node.brokers || 3)}`;
+  if (isLog(node)) return `${event.node}:b${node.handled % (node.brokers || 3)}`;
   if (node.kind === "service" || node.kind === "worker") return `${event.node}:${event.replica}`;
   return `${event.node}:0`;
 }
+const flagPanel = DATA.spec.nodes.find((node) => node.kind === "flags");
+const viewList = Object.values(views);
+function light(id, until) {
+  for (const v of viewList) {
+    const el = v.leds.get(id);
+    if (el) {
+      el.setAttribute("data-on", "");
+      lit.set(el, until);
+    }
+  }
+}
 function events(now) {
   for (const event of sim.events) {
-    if (event.type === "handle") {
-      const id = ledFor(event);
-      for (const v of Object.values(views)) {
-        const el = v.leds.get(id);
-        if (el) {
-          el.setAttribute("data-on", "");
-          lit.set(el, now + 90);
-        }
-      }
-    } else if (event.type === "flag") {
-      const panel = DATA.spec.nodes.find((node) => node.kind === "flags");
-      if (panel) for (const v of Object.values(views)) {
-        const el = v.leds.get(`${panel.id}:0`);
-        if (el) {
-          el.setAttribute("data-on", "");
-          lit.set(el, now + 600);
-        }
-      }
+    if (event.type === "handle") light(ledFor(event), now + 90);
+    else if (event.type === "flag") {
+      if (flagPanel) light(`${flagPanel.id}:0`, now + 600);
     } else if (event.type === "fail" || event.type === "recover") {
-      for (const v of Object.values(views)) v.nodes.get(event.node)?.toggleAttribute("data-down", event.type === "fail");
+      for (const v of viewList) v.nodes.get(event.node)?.toggleAttribute("data-down", event.type === "fail");
     }
   }
   sim.events.length = 0;
@@ -184,7 +180,6 @@ const setOnce = (v, key, el, attr, value) => {
   if (v.status.get(key) === value) return;
   v.status.set(key, value);
   if (attr === "text") el.textContent = value;
-  else if (attr === "transform") el.setAttribute("transform", value);
   else if (value === false || value == null) el.removeAttribute(attr);
   else el.setAttribute(attr, value === true ? "" : value);
 };
@@ -250,7 +245,7 @@ function setFocus(id) {
   focus = id;
   const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
   stage.toggleAttribute("data-focus", !!id);
-  for (const v of Object.values(views)) {
+  for (const v of viewList) {
     for (const [nid, el] of v.nodes) {
       el.toggleAttribute("data-near", near.has(nid));
       el.toggleAttribute("data-sel", nid === id);
@@ -288,7 +283,6 @@ function say(force, now = performance.now()) {
 
 // Switching views: with the morph feature, the iso camera swings up to look straight down
 // (re-rendering the scene each frame), then crossfades into the 2D glyphs; and the reverse.
-const CAMERAS = { iso: { azimuth: 56, elevation: 32 }, flat: { azimuth: 90, elevation: 90 } };
 let morphing = false;
 let morphModel = null;
 function setView(name) {
@@ -310,17 +304,14 @@ function morphTo(name) {
   holder.className = "tp-morph";
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
   const camera = (t) => {
-    const [a, b] = name === "flat" ? [CAMERAS.iso, CAMERAS.flat] : [CAMERAS.flat, CAMERAS.iso];
+    const [a, b] = name === "flat" ? [TOPO.VIEWS.iso, TOPO.VIEWS.flat] : [TOPO.VIEWS.flat, TOPO.VIEWS.iso];
     const e = ease(t);
     return { azimuth: a.azimuth + (b.azimuth - a.azimuth) * e, elevation: a.elevation + (b.elevation - a.elevation) * e };
   };
   const frame = (t) => (holder.innerHTML = TOPO.renderView(morphModel, "iso", 640, camera(t)).svg);
   const fade = (el, from, to, ms) => el.animate([{ opacity: from }, { opacity: to }], { duration: ms, easing: "ease-out", fill: "forwards" }).finished;
   frame(0);
-  views[view].pool.forEach((slot) => {
-    slot.g.style.display = "none";
-    slot.shown = false;
-  });
+  hidePool(views[view]);
   const leaving = views[view].svg;
   stage.appendChild(holder);
   if (name === "flat") leaving.setAttribute("hidden", "");
@@ -358,17 +349,26 @@ function morphTo(name) {
   else run(performance.now());
 }
 
-function swap(name) {
-  views[view].svg.setAttribute("hidden", "");
-  views[view].pool.forEach((slot) => {
+// Forget what a view's attributes were last set to, so the next draw writes them all.
+function hidePool(v) {
+  for (const slot of v.pool) {
     slot.g.style.display = "none";
     slot.shown = false;
-  });
+  }
+}
+function resetView(v) {
+  hidePool(v);
+  v.cellState.clear();
+  v.cursors.forEach((cursor) => (cursor.at = -1));
+  v.status.clear();
+}
+
+function swap(name) {
+  views[view].svg.setAttribute("hidden", "");
+  hidePool(views[view]);
   view = name;
   views[view].svg.removeAttribute("hidden");
-  views[view].cellState.clear();
-  views[view].cursors.forEach((cursor) => (cursor.at = -1));
-  views[view].status.clear();
+  resetView(views[view]);
   document.querySelectorAll(".tp-views button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === name)));
   drawLogs();
   drawPackets();
@@ -438,7 +438,7 @@ stage.addEventListener("click", (event) => {
     say(true);
   } else if (id) toggle(id);
 });
-const ring = [...DATA.spec.nodes].map((node) => node.id);
+const ring = DATA.spec.nodes.map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
   if (hooks.key.some((hook) => hook(event))) {
@@ -466,14 +466,8 @@ document.querySelectorAll(".tp-views button").forEach((button) => button.addEven
 // Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
 function resetVisuals(next) {
   sim = next;
-  for (const v of Object.values(views)) {
-    v.pool.forEach((slot) => {
-      slot.g.style.display = "none";
-      slot.shown = false;
-    });
-    v.cellState.clear();
-    v.cursors.forEach((cursor) => (cursor.at = -1));
-    v.status.clear();
+  for (const v of viewList) {
+    resetView(v);
     for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
   }
   for (const el of lit.keys()) el.removeAttribute("data-on");

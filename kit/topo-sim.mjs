@@ -25,6 +25,20 @@ export function rngOf(seed) {
 }
 
 export const isLog = (node) => node.kind === "kafka" || node.kind === "queue";
+// A log's consumer group for an edge out of it: a queue has one shared group.
+export const groupOf = (log, edge) => (log.kind === "queue" ? "queue" : edge.group || "default");
+
+// The grammar of scenario targets: "a>b" is an edge, "topic:b0" a Kafka broker, else a node.
+export function targetOf(id, nodeIds) {
+  if (id.includes(">")) {
+    const [from, to] = id.split(">");
+    return { type: "edge", from, to };
+  }
+  const broker = /^(.*):b(\d+)$/.exec(id);
+  if (broker && !(nodeIds && nodeIds.has(id))) return { type: "broker", node: broker[1], broker: +broker[2] };
+  return { type: "node", id };
+}
+
 export const routeOf = (node) => node.route || (node.kind === "lb" || node.kind === "gateway" || node.kind === "dns" ? "roundrobin" : "all");
 
 export function hashOf(text) {
@@ -55,14 +69,22 @@ export function normalizeScenario(scenario) {
   return { length, loop: scenario.loop !== false, steps, phases };
 }
 
+// One pass: [items where test holds, the rest].
+function split(list, test) {
+  const yes = [];
+  const no = [];
+  for (const item of list) (test(item) ? yes : no).push(item);
+  return [yes, no];
+}
+
 const quantile = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] : 0);
 
 // spec: { nodes, edges (with `len` in world units), sim, scenario, flags, features }.
 export function createSim(spec) {
+  // Disabled tool features have already been stripped from the spec (stripFeatures).
   const features = spec.features || {};
-  const on = (name) => features[name] !== false;
   const cfg = { ...SIM_DEFAULTS, ...(spec.sim || {}) };
-  const scenario = on("scenario") ? normalizeScenario(spec.scenario) : null;
+  const scenario = normalizeScenario(spec.scenario);
   if (scenario) cfg.length = scenario.length;
   const rand = rngOf(cfg.seed);
   const nodes = new Map();
@@ -77,7 +99,7 @@ export function createSim(spec) {
     recentErrors: [],
     flow: 0,
     errorRate: 0,
-    breaker: on("breakers") && edge.breaker ? { errors: 0.5, min: 8, window: 2, open: 3, ...(edge.breaker === true ? {} : edge.breaker), state: "closed", outcomes: [], until: 0, trial: false } : null,
+    breaker: breakerOf(edge.breaker),
   }));
   for (const node of spec.nodes) {
     nodes.set(node.id, {
@@ -85,7 +107,7 @@ export function createSim(spec) {
       up: node.up !== false,
       downSince: node.up === false ? 0 : null,
       ms: node.ms ?? SERVICE_MS[node.kind] ?? 5,
-      queueMax: on("queues") ? node.queue || 0 : 0,
+      queueMax: node.queue || 0,
       out: [],
       into: [],
       rr: 0,
@@ -113,12 +135,21 @@ export function createSim(spec) {
     nodes.get(edge.from).out.push(edge);
     nodes.get(edge.to).into.push(edge);
   }
+  // What each node forwards along, worked out once: data edges, replication edges, and
+  // whether any edge is gated by a flag.
+  for (const node of nodes.values()) {
+    const live = node.out.filter((edge) => edge.kind !== "config");
+    node.data = live.filter((edge) => edge.kind !== "replication");
+    node.repl = live.filter((edge) => edge.kind === "replication");
+    node.gated = live.some((edge) => edge.flag || edge.unless);
+    node.answers = node.data.some((edge) => edge.sync);
+  }
 
   // Feature flags in the modelled system. A service evaluates flags locally from the last
   // config it got; while the flag service is down, changes don't reach anyone.
   const flags = new Map();
-  if (on("flags")) for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
-  const flagNode = on("flags") ? [...nodes.values()].find((node) => node.kind === "flags") : null;
+  for (const [name, flag] of Object.entries(spec.flags || {})) flags.set(name, { name, rollout: flag.rollout ?? 0, sticky: !!flag.sticky, effective: flag.rollout ?? 0 });
+  const flagNode = [...nodes.values()].find((node) => node.kind === "flags");
 
   // Logs: kafka topics (partitions, consumer groups with exclusive assignment) and queues
   // (one lane, competing consumers).
@@ -128,7 +159,7 @@ export function createSim(spec) {
     const partitions = node.kind === "queue" ? 1 : node.partitions || 3;
     const groups = new Map();
     for (const edge of node.out) {
-      const name = node.kind === "queue" ? "queue" : edge.group || "default";
+      const name = groupOf(node, edge);
       if (!groups.has(name)) groups.set(name, { name, members: [], committed: Array(partitions).fill(0), assign: new Map(), pause: 0, generation: 0 });
       groups.get(name).members.push(edge);
     }
@@ -148,6 +179,9 @@ export function createSim(spec) {
     logs.set(node.id, log);
   }
 
+  function breakerOf(value) {
+    return value ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], bad: 0, until: 0, trial: false } : null;
+  }
   const durationOf = (edge) => Math.max(edge.len / cfg.speed, 0.08);
   // Timeouts are judged in model time when the reply arrives. For a reply that never comes,
   // a backstop deadline in sim time: the call's animation round trip, the slowest sync call
@@ -165,7 +199,7 @@ export function createSim(spec) {
   };
   edges.forEach((edge) => allowanceOf(edge));
 
-  const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
+  const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
   let ids = 0;
   const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
 
@@ -204,7 +238,7 @@ export function createSim(spec) {
     node.handled++;
     node.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
-    sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
+    if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
     if (node.bucket >= 1) {
       node.bucket -= 1;
@@ -223,14 +257,17 @@ export function createSim(spec) {
     node.working.push(job);
   }
 
+  // A request that never got in: counted at the node and on the edge, drawn as a red burst.
+  function dropAt(edge, node) {
+    node.recentDrops.push(sim.time);
+    if (!edge) return;
+    edge.dropped++;
+    burst(edge);
+  }
+
   // Over capacity with a full buffer: answer 503 at once.
   function reject(job) {
-    const node = job.node;
-    node.recentDrops.push(sim.time);
-    if (job.call) {
-      job.call.edge.dropped++;
-      burst(job.call.edge);
-    } else if (job.via) burst(job.via);
+    dropAt(job.call ? job.call.edge : job.via, job.node);
     respond(job, false);
   }
 
@@ -244,7 +281,7 @@ export function createSim(spec) {
     const ms = own + job.cost;
     node.service.push({ at: sim.time, ms });
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
-    if (job.root) node.roots.push({ at: sim.time, ms, ok });
+    if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
 
   function ready(job) {
@@ -270,11 +307,9 @@ export function createSim(spec) {
 
   function forward(job) {
     const node = job.node;
-    const usable = node.out.filter((edge) => edge.kind !== "config").filter((edge) => (edge.flag && on("flags") ? decide(job.msg, edge.flag) : edge.unless && on("flags") ? !decide(job.msg, edge.unless) : true));
-    for (const edge of usable) if (edge.kind === "replication") {
-      launch(edge, "replication", { msg: job.msg });
-    }
-    const data = usable.filter((edge) => edge.kind !== "replication");
+    const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
+    for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
+    const data = node.gated ? node.data.filter(open) : node.data;
     if (!data.length) return;
     const mode = routeOf(node);
     const chosen = [];
@@ -324,6 +359,7 @@ export function createSim(spec) {
     }
     const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
     sim.calls.add(call);
+    if (edge.timeout) sim.timed.add(call);
     call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
   }
 
@@ -332,7 +368,10 @@ export function createSim(spec) {
     br.state = state;
     br.trial = false;
     if (state === "open") br.until = sim.time + br.open;
-    if (state === "closed") br.outcomes = [];
+    if (state === "closed") {
+      br.outcomes = [];
+      br.bad = 0;
+    }
     sim.events.push({ type: "breaker", edge: edge.index, state, at: sim.time });
   }
 
@@ -341,6 +380,7 @@ export function createSim(spec) {
     const spent = call.prior + ms;
     call.done = true;
     sim.calls.delete(call);
+    sim.timed.delete(call);
     const { edge, job } = call;
     if (!ok) {
       edge.failed++;
@@ -351,9 +391,11 @@ export function createSim(spec) {
       if (call.trial) setBreaker(edge, ok ? "closed" : "open");
       else if (br.state === "closed") {
         br.outcomes.push({ at: sim.time, ok });
-        while (br.outcomes.length && br.outcomes[0].at < sim.time - br.window) br.outcomes.shift();
-        const bad = br.outcomes.filter((o) => !o.ok).length;
-        if (br.outcomes.length >= br.min && bad / br.outcomes.length >= br.errors) setBreaker(edge, "open");
+        if (!ok) br.bad++;
+        let old = 0;
+        while (old < br.outcomes.length && br.outcomes[old].at < sim.time - br.window) if (!br.outcomes[old++].ok) br.bad--;
+        if (old) br.outcomes.splice(0, old);
+        if (br.outcomes.length >= br.min && br.bad / br.outcomes.length >= br.errors) setBreaker(edge, "open");
       }
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
@@ -388,9 +430,7 @@ export function createSim(spec) {
     }
     const node = nodes.get(edge.to);
     if (!node.up) {
-      node.recentDrops.push(sim.time);
-      edge.dropped++;
-      burst(edge);
+      dropAt(edge, node);
       // Connection refused: the caller hears about it straight away.
       if (packet.call) {
         const call = packet.call;
@@ -402,9 +442,7 @@ export function createSim(spec) {
       const log = logs.get(node.id);
       const p = chooseP(log, edge, packet);
       if (!writable(log, p)) {
-        node.recentDrops.push(sim.time);
-        edge.dropped++;
-        burst(edge);
+        dropAt(edge, node);
         if (packet.call) launch(edge, "error", { call: packet.call, ms: netOf(edge) });
         return;
       }
@@ -469,21 +507,7 @@ export function createSim(spec) {
     return 0;
   };
 
-  function emitOne(node) {
-    const msg = newMsg(node.id);
-    const job = { node, msg, call: null, waiting: 0, forwarded: false, failed: false, dead: false, done: false, arrived: sim.time, cost: 0, root: true };
-    node.jobs.add(job);
-    node.handled++;
-    node.recent.push(sim.time);
-    sim.events.push({ type: "handle", node: node.id, replica: 0, at: sim.time });
-    forward(job);
-    job.forwarded = true;
-    if (job.waiting === 0) {
-      job.done = true;
-      node.jobs.delete(job);
-      if (node.out.some((edge) => edge.sync)) node.roots.push({ at: sim.time, ms: 0, ok: !job.failed });
-    }
-  }
+  const emitOne = (node) => startJob(node, newMsg(node.id), null, { root: true });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -498,9 +522,9 @@ export function createSim(spec) {
       }
     }
     if (sim.timers.length) {
-      const due = sim.timers.filter((timer) => timer.at <= now);
+      const [due, later] = split(sim.timers, (timer) => timer.at <= now);
       if (due.length) {
-        sim.timers = sim.timers.filter((timer) => timer.at > now);
+        sim.timers = later;
         due.forEach((timer) => timer.run());
       }
     }
@@ -528,16 +552,16 @@ export function createSim(spec) {
         begin(node.waiting.shift());
       }
       if (node.working.length) {
-        const due = node.working.filter((job) => job.readyAt <= now);
+        const [due, later] = split(node.working, (job) => job.readyAt <= now);
         if (due.length) {
-          node.working = node.working.filter((job) => job.readyAt > now);
+          node.working = later;
           due.forEach(ready);
         }
       }
     }
     // Timeouts: the caller gives up; a reply still on its way arrives late and is ignored.
-    if (sim.calls.size) {
-      for (const call of [...sim.calls]) if (now >= call.deadline) {
+    if (sim.timed.size) {
+      for (const call of [...sim.timed]) if (now >= call.deadline) {
         for (const packet of call.packets) if (packet.dir < 0) packet.kind = "late";
         call.timedOut = true;
         settle(call, false, call.edge.timeout * 1000);
@@ -596,7 +620,9 @@ export function createSim(spec) {
     sim.packets = live.concat(sim.packets);
     const window = Math.min(cfg.window, Math.max(now, 0.25));
     const trim = (list, keep = cfg.window) => {
-      while (list.length && (list[0].at ?? list[0]) < now - keep) list.shift();
+      let old = 0;
+      while (old < list.length && (list[old].at ?? list[old]) < now - keep) old++;
+      if (old) list.splice(0, old);
     };
     for (const node of nodes.values()) {
       trim(node.recent);
@@ -630,8 +656,8 @@ export function createSim(spec) {
   const totalIn = () => [...nodes.values()].reduce((sum, node) => sum + (node.emit && node.up ? node.flow : 0), 0);
 
   function setUp(id, up) {
-    const broker = /^(.*):b(\d+)$/.exec(id);
-    if (broker && !nodes.has(id)) return setBroker(broker[1], +broker[2], up);
+    const target = targetOf(id, nodes);
+    if (target.type === "broker") return setBroker(target.node, target.broker, up);
     const node = nodes.get(id);
     if (!node || node.up === up) return;
     node.up = up;
@@ -661,13 +687,13 @@ export function createSim(spec) {
   // "from>to" in a scenario's `set` changes that edge: retries, timeout, backoff, p, breaker.
   const EDGE_SETTABLE = new Set(["retries", "timeout", "backoff", "p", "breaker", "rate"]);
   function setEdge(key, props) {
-    const [from, to] = key.split(">");
+    const { from, to } = targetOf(key);
     const list = edges.filter((edge) => edge.from === from && edge.to === to);
     if (!list.length) throw new Error(`scenario: no edge "${key}"`);
     for (const edge of list) for (const [name, value] of Object.entries(props)) {
       if (!EDGE_SETTABLE.has(name)) throw new Error(`scenario: can't set "${name}" on an edge (settable: ${[...EDGE_SETTABLE].join(", ")})`);
       if (name === "breaker") {
-        edge.breaker = value && on("breakers") ? { errors: 0.5, min: 8, window: 2, open: 3, ...(value === true ? {} : value), state: "closed", outcomes: [], until: 0, trial: false } : null;
+        edge.breaker = breakerOf(value);
         sim.events.push({ type: "breaker", edge: edge.index, state: edge.breaker ? "closed" : "none", at: sim.time });
       } else edge[name] = value;
       if (name === "timeout") allowanceOf(edge);
@@ -680,7 +706,7 @@ export function createSim(spec) {
     if (step.recover) [].concat(step.recover).forEach((id) => setUp(id, true));
     if (step.set) {
       for (const [id, props] of Object.entries(step.set)) {
-        if (id.includes(">")) {
+        if (targetOf(id).type === "edge") {
           setEdge(id, props);
           continue;
         }
@@ -688,25 +714,18 @@ export function createSim(spec) {
         if (!node) throw new Error(`scenario: unknown node "${id}"`);
         for (const [key, value] of Object.entries(props)) {
           if (!SETTABLE.has(key)) throw new Error(`scenario: can't set "${key}" (settable: ${[...SETTABLE].join(", ")})`);
-          if (key === "queue") node.queueMax = on("queues") ? value : 0;
+          if (key === "queue") node.queueMax = value;
           else node[key] = value;
           if (key === "emit" && typeof value === "number") node.clock = Math.min(node.clock, 1 / Math.max(value, 0.001));
         }
       }
     }
-    if (on("flags")) {
-      if (step.flag) {
-        const flag = flags.get(step.flag);
-        if (!flag) throw new Error(`scenario: unknown flag "${step.flag}"`);
-        flag.rollout = step.rollout ?? 1;
-        syncFlag(flag);
-      }
-      if (step.kill) {
-        const flag = flags.get(step.kill);
-        if (!flag) throw new Error(`scenario: unknown flag "${step.kill}"`);
-        flag.rollout = 0;
-        syncFlag(flag);
-      }
+    for (const [name, rollout] of [[step.flag, step.rollout ?? 1], [step.kill, 0]]) {
+      if (!name) continue;
+      const flag = flags.get(name);
+      if (!flag) throw new Error(`scenario: unknown flag "${name}"`);
+      flag.rollout = rollout;
+      syncFlag(flag);
     }
   }
 
@@ -760,7 +779,7 @@ export function statsOf(sim, id) {
   const log = sim.logs.get(id);
   if (log) {
     const parts = log.groups.map((group) => {
-      const lag = log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
+      const lag = sim.lagOf(id, group.name);
       const live = [...group.assign.values()].filter((list) => list.length).length;
       return `${log.groups.length > 1 ? group.name + " " : ""}lag ${formatCount(lag, per)}${group.pause > 0 ? " · rebalancing" : node.kind === "kafka" ? ` · ${live}/${group.members.length} consumers` : ""}`;
     });

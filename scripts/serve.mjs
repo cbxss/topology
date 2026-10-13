@@ -9,6 +9,7 @@ import { existsSync, readdirSync, statSync, watch, writeFileSync } from "node:fs
 import http from "node:http";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { escape } from "../kit/iso.mjs";
 import { layoutFileOf, nameOf } from "./page.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -47,9 +48,16 @@ function discover() {
   return specs;
 }
 
+// Specs found under the roots, and built pages, are kept until something changes on disk.
+let found = null;
+const discovered = () => (found ||= discover());
+const pages = new Map();
+
 const clients = new Set();
 let timer = 0;
 function reload(reason) {
+  found = null;
+  pages.clear();
   clearTimeout(timer);
   timer = setTimeout(() => {
     console.log(`reload: ${reason}`);
@@ -64,7 +72,6 @@ for (const dir of [...roots.map((path) => (statSync(path).isFile() ? dirname(pat
 }
 
 const RELOAD = `<script>(()=>{const s=new EventSource("/events");s.addEventListener("reload",()=>location.reload());})();</script>`;
-const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
 function build(file, params) {
   const args = [join(HERE, "build.mjs"), file, "--stdout"];
@@ -89,7 +96,7 @@ function index(specs) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
-  const specs = discover();
+  const specs = discovered();
   if (url.pathname === "/events") {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
     res.write(": hi\n\n");
@@ -106,7 +113,10 @@ const server = http.createServer(async (req, res) => {
     const file = specs.get(decodeURIComponent(page[1]));
     if (!file) return res.writeHead(404).end("no such spec");
     const started = Date.now();
-    const result = await build(file, url.searchParams);
+    const key = `${file}?${[...url.searchParams].sort().join("&")}`;
+    if (!pages.has(key)) pages.set(key, build(file, url.searchParams));
+    const result = await pages.get(key);
+    if (!result.ok) pages.delete(key);
     console.log(`${req.method} ${req.url} ${result.ok ? "ok" : "FAILED"} ${Date.now() - started}ms`);
     res.writeHead(result.ok ? 200 : 500, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
     if (result.ok) return res.end(result.out.replace("</body>", `${RELOAD}</body>`));
@@ -140,7 +150,7 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404).end("not found");
 });
 server.listen(port, host, () => {
-  const specs = discover();
+  const specs = discovered();
   console.log(`topology serve: http://${host}:${port}/  (${specs.size} spec${specs.size === 1 ? "" : "s"}: ${[...specs.keys()].join(", ")})`);
   if (!existsSync(join(ROOT, "kit"))) console.log("warning: kit/ not found");
 });

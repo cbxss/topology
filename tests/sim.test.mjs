@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSim } from "../kit/topo-sim.mjs";
-import { prepare, simSpec } from "../kit/topo.mjs";
+import { modelOf, simSpec } from "../kit/topo.mjs";
 import orderEvents from "../examples/order-events/order-events.spec.mjs";
 
-const simOf = (spec) => createSim(simSpec(prepare(spec)));
+const simOf = (spec, features) => createSim(simSpec(modelOf(spec, features ? [features] : [])));
 const run = (sim, seconds) => {
   for (let i = 0; i < Math.round(seconds * 60); i++) sim.step(1 / 60);
 };
@@ -49,7 +49,7 @@ test("a full queue answers 503 and the client sees failures", () => {
 });
 
 test("queues feature off: no buffer, arrivals over capacity drop", () => {
-  const sim = createSim({ ...simSpec(prepare(chain({ b: { capacity: 1, queue: 50 } }))), features: { queues: false } });
+  const sim = simOf(chain({ b: { capacity: 1, queue: 50 } }), "-queues");
   run(sim, 6);
   assert.equal(sim.nodes.get("b").queueMax, 0);
 });
@@ -75,21 +75,20 @@ test("a breaker opens on errors, then half-opens and closes on recovery", () => 
   const spec = chain({ ab: { breaker: { errors: 0.5, min: 4, window: 2, open: 1 } } });
   const sim = simOf(spec);
   const states = [];
+  const watch = (frames) => {
+    for (let i = 0; i < frames; i++) {
+      sim.step(1 / 60);
+      for (const e of sim.events) if (e.type === "breaker") states.push(e.state);
+      sim.events.length = 0;
+    }
+  };
   run(sim, 2);
   sim.setUp("b", false);
-  for (let i = 0; i < 300; i++) {
-    sim.step(1 / 60);
-    for (const e of sim.events) if (e.type === "breaker") states.push(e.state);
-    sim.events.length = 0;
-  }
+  watch(300);
   assert.ok(states.includes("open"), states.join());
   assert.ok(sim.edges[1].fast > 0, "fast failures while open");
   sim.setUp("b", true);
-  for (let i = 0; i < 300; i++) {
-    sim.step(1 / 60);
-    for (const e of sim.events) if (e.type === "breaker") states.push(e.state);
-    sim.events.length = 0;
-  }
+  watch(300);
   assert.ok(states.includes("half"), states.join());
   assert.equal(sim.edges[1].breaker.state, "closed", states.join());
 });
@@ -117,7 +116,7 @@ test("an LB keeps sending to a dead target until health checks notice", () => {
 });
 
 test("kafka lag grows when a consumer dies and drains when it returns", () => {
-  const sim = createSim({ ...simSpec(prepare(orderEvents)), features: { scenario: false } });
+  const sim = simOf(orderEvents, "-scenario");
   run(sim, 10);
   assert.ok(sim.lagOf("topic", "billing") < 10);
   sim.setUp("billing-a", false);
