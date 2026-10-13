@@ -117,7 +117,7 @@ test("an LB keeps sending to a dead target until health checks notice", () => {
 });
 
 test("kafka lag grows when a consumer dies and drains when it returns", () => {
-  const sim = simOf(orderEvents);
+  const sim = createSim({ ...simSpec(prepare(orderEvents)), features: { scenario: false } });
   run(sim, 10);
   assert.ok(sim.lagOf("topic", "billing") < 10);
   sim.setUp("billing-a", false);

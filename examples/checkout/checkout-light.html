@@ -120,6 +120,22 @@ body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sa
 .tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
 .tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
 .k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+.tp-story{margin:18px 0 -10px}
+.tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
+.tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-play:focus-visible,.tp-track:focus-visible{outline:1px solid var(--tp-lit);outline-offset:2px}
+.tp-track{position:relative;flex:1;height:28px;cursor:pointer;touch-action:none}
+.tp-track::before{content:"";position:absolute;left:0;right:0;top:20px;height:1px;background:var(--tp-lo)}
+.tp-phase{all:unset;position:absolute;top:0;bottom:0;box-sizing:border-box;border-left:1px solid var(--tp-lo);cursor:pointer}
+.tp-phase span{position:absolute;left:5px;top:2px;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--tp-muted)}
+.tp-phase:hover span,.tp-phase[data-now] span{color:var(--tp-strong)}
+.tp-phase[data-now]{background:color-mix(in srgb,var(--tp-hi) 5%,transparent)}
+.tp-tick{position:absolute;top:16px;width:1px;height:9px;background:var(--tp-mid);pointer-events:none}
+.tp-head{position:absolute;top:12px;height:17px;width:2px;margin-left:-1px;background:var(--tp-lit);pointer-events:none}
+.tp-time{flex:none;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-say{margin:8px 0 0 34px;min-height:3em;font-size:12.5px;line-height:1.5;color:var(--tp-text)}
+.tp-story[data-mode="free"] .tp-track{opacity:.4}
+@media (max-width:560px){.tp-say{margin-left:0}}
 .tp-pk .pk-top{fill:var(--pk)}
 .tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
 .tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
@@ -855,14 +871,17 @@ function summaryOf(sim) {
   return bits.join(" · ");
 }
 
-const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"grid":[118,64],"positions":{"clients":[0,0.8],"gw":[1,0.8],"lb":[2,0.8],"api-a":[3,0],"api-b":[3,1.65],"redis":[4.35,-1],"pg":[4.35,0],"standby":[4.35,1.65]},"spec":{"nodes":[{"id":"clients","kind":"client","emit":14,"partitions":0,"replicas":1,"label":"clients"},{"id":"gw","kind":"gateway","label":"gateway","capacity":12,"burst":0.2,"partitions":0,"replicas":1},{"id":"lb","kind":"lb","label":"nlb","partitions":0,"replicas":1},{"id":"api-a","kind":"service","replicas":2,"label":"api-a","partitions":0},{"id":"api-b","kind":"service","replicas":2,"label":"api-b","partitions":0},{"id":"redis","kind":"cache","label":"redis","partitions":0,"replicas":1},{"id":"pg","kind":"db","label":"pg-primary","role":"primary","partitions":0,"replicas":1},{"id":"standby","kind":"db","label":"pg-standby","role":"standby","partitions":0,"replicas":1}],"edges":[{"from":"clients","to":"gw","kind":"sync","sync":true,"len":74},{"from":"gw","to":"lb","kind":"sync","sync":true,"len":73},{"from":"lb","to":"api-a","kind":"sync","sync":true,"len":104.07149520792613},{"from":"lb","to":"api-b","kind":"sync","sync":true,"len":107.27149520792612},{"from":"api-a","to":"redis","kind":"sync","sync":true,"len":164.9314952079261},{"from":"api-b","to":"redis","kind":"sync","sync":true,"len":250.3714952079261},{"from":"api-a","to":"pg","p":0.2,"kind":"sync","sync":true,"len":127.77149520792607},{"from":"api-b","to":"pg","p":0.2,"kind":"sync","sync":true,"len":209.85149520792606},{"from":"pg","to":"standby","kind":"replication","sync":false,"len":63.599999999999994}],"sim":{"per":100,"seed":11},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,74],[0,73],[0,23.5,26.04,28.17,30.15,32.28,34.82,60.26,62.79,64.92,66.9,69.04,71.57,104.07],[0,32.5,35.04,37.17,39.15,41.28,43.82,72.46,74.99,77.12,79.1,81.24,83.77,107.27],[0,33.9,36.44,38.57,40.55,42.68,45.22,95.22,97.75,99.88,101.86,104,106.53,164.93],[0,51.9,54.44,56.57,58.55,60.68,63.22,198.66,201.19,203.32,205.3,207.44,209.97,250.37],[0,42.9,45.44,47.57,49.55,51.68,54.22,62.06,64.59,66.72,68.7,70.84,73.37,127.77],[0,60.9,63.44,65.57,67.55,69.68,72.22,162.14,164.67,166.8,168.78,170.92,173.45,209.85],[0,63.6]],"views":{"iso":{"edges":[[[73.2,61.3],[133.6,82.8]],[[172.8,96.8],[232.3,118.1]],[[273.1,125.3],[292.2,132.1],[294.4,132.7],[296.5,133],[298.4,132.8],[300.2,132.2],[301.8,131.1],[315.8,120.1],[317.4,119.1],[319.2,118.5],[321.1,118.3],[323.1,118.5],[325.3,119.2],[351.9,128.6]],[[260.1,135.4],[286.6,144.9],[288.5,145.8],[289.7,146.7],[290,147.7],[289.6,148.8],[288.5,150],[272.7,162.4],[271.6,163.5],[271.2,164.6],[271.5,165.6],[272.7,166.6],[274.6,167.4],[293.8,174.3]],[[401.5,140],[429.1,149.9],[431.3,150.5],[433.4,150.7],[435.3,150.5],[437.1,149.9],[438.7,148.9],[466.2,127.3],[467.8,126.3],[469.6,125.7],[471.5,125.5],[473.5,125.7],[475.7,126.3],[523.4,143.4]],[[343.3,185.7],[385.7,200.8],[387.9,201.4],[390,201.6],[391.9,201.4],[393.6,200.8],[395.2,199.8],[469.8,141.3],[471.4,140.3],[473.2,139.7],[475.1,139.5],[477.1,139.7],[479.3,140.3],[512.3,152.1]],[[390.4,148.7],[425.4,161.2],[427.6,161.9],[429.6,162.1],[431.5,161.9],[433.3,161.3],[434.9,160.3],[439.2,156.9],[440.8,155.9],[442.6,155.3],[444.5,155.1],[446.6,155.3],[448.8,155.9],[493.2,171.8]],[[332.3,194.4],[381.9,212.1],[384.1,212.8],[386.2,213],[388.1,212.8],[389.9,212.2],[391.5,211.2],[441,172.3],[442.6,171.3],[444.4,170.7],[446.3,170.5],[448.3,170.7],[450.5,171.3],[480.2,181.9]],[[492.3,192],[457.3,219.5]]],"step":[5.710391444900537,2.0410940913957276],"packet":{"top":"M3 -3.2L0.6 -1.3L-3 -2.6L-0.6 -4.5Z","sides":"M3 -3.2L0.6 -1.3L0.6 1.6L3 -0.3ZM0.6 -1.3L-3 -2.6L-3 0.3L0.6 1.6Z","outline":"M-3 -2.6L-0.6 -4.5L3 -3.2L3 -0.3L0.6 1.6L-3 0.3Z"}},"flat":{"edges":[[[65.8,190.3],[139.4,190.3]],[[187.1,190.3],[259.7,190.3]],[[301.5,178.6],[324.8,178.6],[327.3,178.3],[329.3,177.5],[330.7,176.1],[331.5,174.1],[331.8,171.6],[331.8,146.3],[332.1,143.8],[332.9,141.9],[334.3,140.5],[336.2,139.7],[338.7,139.4],[371.1,139.4]],[[301.5,202],[333.8,202],[336.3,202.3],[338.2,203.1],[339.6,204.5],[340.5,206.4],[340.7,208.9],[340.7,237.4],[341,239.9],[341.8,241.9],[343.2,243.3],[345.2,244.1],[347.7,244.4],[371.1,244.4]],[[424.8,129.4],[458.5,129.4],[461,129.1],[462.9,128.2],[464.3,126.9],[465.2,124.9],[465.4,122.4],[465.4,72.7],[465.7,70.2],[466.5,68.2],[467.9,66.8],[469.9,66],[472.4,65.7],[530.5,65.7]],[[424.8,234.4],[476.4,234.4],[478.9,234.1],[480.8,233.3],[482.2,231.9],[483.1,229.9],[483.3,227.4],[483.3,92.7],[483.6,90.2],[484.4,88.3],[485.8,86.9],[487.8,86],[490.3,85.8],[530.5,85.8]],[[424.8,149.4],[467.4,149.4],[469.9,149.1],[471.9,148.3],[473.3,146.9],[474.1,144.9],[474.4,142.4],[474.4,134.6],[474.7,132.1],[475.5,130.2],[476.9,128.8],[478.8,128],[481.3,127.7],[535.4,127.7]],[[424.8,254.4],[485.3,254.4],[487.8,254.1],[489.8,253.3],[491.2,251.9],[492,250],[492.3,247.5],[492.3,158],[492.6,155.5],[493.4,153.6],[494.8,152.2],[496.7,151.4],[499.2,151.1],[535.4,151.1]],[[556.3,160.3],[556.3,223.5]]],"step":[6.960933536276002,0],"packet":null,"k":0.9944190766108575}}};
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"grid":[118,64],"positions":{"clients":[0,0.8],"gw":[1,0.8],"lb":[2,0.8],"api-a":[3,0],"api-b":[3,1.65],"redis":[4.35,-1],"pg":[4.35,0],"standby":[4.35,1.65]},"spec":{"nodes":[{"id":"clients","kind":"client","emit":14,"partitions":0,"replicas":1,"label":"clients"},{"id":"gw","kind":"gateway","label":"gateway","capacity":12,"burst":0.2,"partitions":0,"replicas":1},{"id":"lb","kind":"lb","label":"nlb","partitions":0,"replicas":1},{"id":"api-a","kind":"service","replicas":2,"label":"api-a","partitions":0},{"id":"api-b","kind":"service","replicas":2,"label":"api-b","partitions":0},{"id":"redis","kind":"cache","label":"redis","partitions":0,"replicas":1},{"id":"pg","kind":"db","label":"pg-primary","role":"primary","partitions":0,"replicas":1},{"id":"standby","kind":"db","label":"pg-standby","role":"standby","partitions":0,"replicas":1}],"edges":[{"from":"clients","to":"gw","kind":"sync","sync":true,"len":74},{"from":"gw","to":"lb","kind":"sync","sync":true,"len":73},{"from":"lb","to":"api-a","kind":"sync","sync":true,"len":104.07149520792613},{"from":"lb","to":"api-b","kind":"sync","sync":true,"len":107.27149520792612},{"from":"api-a","to":"redis","kind":"sync","sync":true,"len":164.9314952079261},{"from":"api-b","to":"redis","kind":"sync","sync":true,"len":250.3714952079261},{"from":"api-a","to":"pg","p":0.2,"kind":"sync","sync":true,"len":127.77149520792607},{"from":"api-b","to":"pg","p":0.2,"kind":"sync","sync":true,"len":209.85149520792606},{"from":"pg","to":"standby","kind":"replication","sync":false,"len":63.599999999999994}],"sim":{"per":100,"seed":11},"scenario":{"length":36,"phases":[{"name":"steady","at":0},{"name":"spike","at":8},{"name":"api-a down","at":18},{"name":"recovered","at":28}],"steps":[{"at":1,"say":"~14 req/s offered; the gateway admits 12 and sheds the rest as 429s (red). Reads mostly hit Redis."},{"phase":"spike","set":{"clients":{"emit":24}},"say":"Traffic nearly doubles. The gateway holds the line at 12 req/s: more 429s, but the APIs and Postgres see the same load and p99 doesn't move."},{"phase":"api-a down","set":{"clients":{"emit":14}},"fail":"api-a","say":"api-a dies. For 0.6 s the NLB keeps sending to it (refused, red), until its health check notices and api-b takes everything."},{"phase":"recovered","recover":"api-a","say":"api-a is back in rotation."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,74],[0,73],[0,23.5,26.04,28.17,30.15,32.28,34.82,60.26,62.79,64.92,66.9,69.04,71.57,104.07],[0,32.5,35.04,37.17,39.15,41.28,43.82,72.46,74.99,77.12,79.1,81.24,83.77,107.27],[0,33.9,36.44,38.57,40.55,42.68,45.22,95.22,97.75,99.88,101.86,104,106.53,164.93],[0,51.9,54.44,56.57,58.55,60.68,63.22,198.66,201.19,203.32,205.3,207.44,209.97,250.37],[0,42.9,45.44,47.57,49.55,51.68,54.22,62.06,64.59,66.72,68.7,70.84,73.37,127.77],[0,60.9,63.44,65.57,67.55,69.68,72.22,162.14,164.67,166.8,168.78,170.92,173.45,209.85],[0,63.6]],"views":{"iso":{"edges":[[[73.2,61.3],[133.6,82.8]],[[172.8,96.8],[232.3,118.1]],[[273.1,125.3],[292.2,132.1],[294.4,132.7],[296.5,133],[298.4,132.8],[300.2,132.2],[301.8,131.1],[315.8,120.1],[317.4,119.1],[319.2,118.5],[321.1,118.3],[323.1,118.5],[325.3,119.2],[351.9,128.6]],[[260.1,135.4],[286.6,144.9],[288.5,145.8],[289.7,146.7],[290,147.7],[289.6,148.8],[288.5,150],[272.7,162.4],[271.6,163.5],[271.2,164.6],[271.5,165.6],[272.7,166.6],[274.6,167.4],[293.8,174.3]],[[401.5,140],[429.1,149.9],[431.3,150.5],[433.4,150.7],[435.3,150.5],[437.1,149.9],[438.7,148.9],[466.2,127.3],[467.8,126.3],[469.6,125.7],[471.5,125.5],[473.5,125.7],[475.7,126.3],[523.4,143.4]],[[343.3,185.7],[385.7,200.8],[387.9,201.4],[390,201.6],[391.9,201.4],[393.6,200.8],[395.2,199.8],[469.8,141.3],[471.4,140.3],[473.2,139.7],[475.1,139.5],[477.1,139.7],[479.3,140.3],[512.3,152.1]],[[390.4,148.7],[425.4,161.2],[427.6,161.9],[429.6,162.1],[431.5,161.9],[433.3,161.3],[434.9,160.3],[439.2,156.9],[440.8,155.9],[442.6,155.3],[444.5,155.1],[446.6,155.3],[448.8,155.9],[493.2,171.8]],[[332.3,194.4],[381.9,212.1],[384.1,212.8],[386.2,213],[388.1,212.8],[389.9,212.2],[391.5,211.2],[441,172.3],[442.6,171.3],[444.4,170.7],[446.3,170.5],[448.3,170.7],[450.5,171.3],[480.2,181.9]],[[492.3,192],[457.3,219.5]]],"step":[5.710391444900537,2.0410940913957276],"packet":{"top":"M3 -3.2L0.6 -1.3L-3 -2.6L-0.6 -4.5Z","sides":"M3 -3.2L0.6 -1.3L0.6 1.6L3 -0.3ZM0.6 -1.3L-3 -2.6L-3 0.3L0.6 1.6Z","outline":"M-3 -2.6L-0.6 -4.5L3 -3.2L3 -0.3L0.6 1.6L-3 0.3Z"}},"flat":{"edges":[[[65.8,190.3],[139.4,190.3]],[[187.1,190.3],[259.7,190.3]],[[301.5,178.6],[324.8,178.6],[327.3,178.3],[329.3,177.5],[330.7,176.1],[331.5,174.1],[331.8,171.6],[331.8,146.3],[332.1,143.8],[332.9,141.9],[334.3,140.5],[336.2,139.7],[338.7,139.4],[371.1,139.4]],[[301.5,202],[333.8,202],[336.3,202.3],[338.2,203.1],[339.6,204.5],[340.5,206.4],[340.7,208.9],[340.7,237.4],[341,239.9],[341.8,241.9],[343.2,243.3],[345.2,244.1],[347.7,244.4],[371.1,244.4]],[[424.8,129.4],[458.5,129.4],[461,129.1],[462.9,128.2],[464.3,126.9],[465.2,124.9],[465.4,122.4],[465.4,72.7],[465.7,70.2],[466.5,68.2],[467.9,66.8],[469.9,66],[472.4,65.7],[530.5,65.7]],[[424.8,234.4],[476.4,234.4],[478.9,234.1],[480.8,233.3],[482.2,231.9],[483.1,229.9],[483.3,227.4],[483.3,92.7],[483.6,90.2],[484.4,88.3],[485.8,86.9],[487.8,86],[490.3,85.8],[530.5,85.8]],[[424.8,149.4],[467.4,149.4],[469.9,149.1],[471.9,148.3],[473.3,146.9],[474.1,144.9],[474.4,142.4],[474.4,134.6],[474.7,132.1],[475.5,130.2],[476.9,128.8],[478.8,128],[481.3,127.7],[535.4,127.7]],[[424.8,254.4],[485.3,254.4],[487.8,254.1],[489.8,253.3],[491.2,251.9],[492,250],[492.3,247.5],[492.3,158],[492.6,155.5],[493.4,153.6],[494.8,152.2],[496.7,151.4],[499.2,151.1],[535.4,151.1]],[[556.3,160.3],[556.3,223.5]]],"step":[6.960933536276002,0],"packet":null,"k":0.9944190766108575}}};
 // The live page. Inlined after topo-sim.mjs (exports stripped) and `const DATA = …`.
 // It steps the sim, draws its packets into the visible view and writes attributes:
 // it never re-renders markup per frame.
 const stage = document.querySelector(".tp-stage");
 const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
-const sim = createSim(DATA.spec);
+let sim = createSim(DATA.spec);
+// Extension points for topo-story.js and topo-edit.js.
+const hooks = { tick: [], takeover: [], key: [] };
+let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
 const POOL_MAX = 420;
@@ -1066,8 +1085,9 @@ let logClock = 0;
 function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
   last = now;
-  sim.step(dt * (window.__topoSpeed ?? 1));
+  if (!paused) sim.step(dt * (window.__topoSpeed ?? 1));
   events(now);
+  for (const hook of hooks.tick) hook(dt);
   logClock += dt;
   if (logClock > 0.05) {
     logClock = 0;
@@ -1090,6 +1110,7 @@ new IntersectionObserver((entries) => {
 
 const nodeAt = (target) => target.closest?.("[data-node]")?.dataset.node;
 const toggle = (id) => {
+  for (const hook of hooks.takeover) hook(id);
   const node = sim.nodes.get(id);
   if (node) sim.setUp(id, !node.up);
   say(true);
@@ -1111,6 +1132,10 @@ stage.addEventListener("click", (event) => {
 const ring = [...DATA.spec.nodes].map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
+  if (hooks.key.some((hook) => hook(event))) {
+    event.preventDefault();
+    return;
+  }
   if (event.key === "ArrowRight" || event.key === "ArrowDown") {
     pinned = true;
     setFocus(ring[(here + 1) % ring.length]);
@@ -1129,7 +1154,177 @@ stage.addEventListener("keydown", (event) => {
 });
 document.querySelectorAll(".tp-views button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 
-window.__topo = { sim, setView, setFocus, toggle, get view() { return view; } };
+// Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
+function resetVisuals(next) {
+  sim = next;
+  for (const v of Object.values(views)) {
+    v.pool.forEach((slot) => {
+      slot.g.style.display = "none";
+      slot.shown = false;
+    });
+    v.cellState.clear();
+    v.cursors.forEach((cursor) => (cursor.at = -1));
+    for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
+  }
+  for (const el of lit.keys()) el.removeAttribute("data-on");
+  lit.clear();
+  sim.events.length = 0;
+  drawLogs();
+  drawPackets();
+  say(true);
+}
+
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
 drawLogs();
 say(true);
+
+// The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
+// `scenario` feature is on. A timeline under the stage shows the named phases and each step;
+// the story plays and loops on its own. Scrubbing or jumping to a phase re-simulates from 0
+// (the sim is seeded, so the same time always looks the same). Clicking a node takes over:
+// the story stops applying and the reader plays freely until they press play again.
+(() => {
+  const story = normalizeScenario(DATA.spec.scenario);
+  if (!story) return;
+  const plate = stage.closest(".k-card");
+  const hint = plate.querySelector('[data-corner="hint"]');
+  const hintText = hint ? hint.textContent : "";
+  const pct = (t) => `${((100 * t) / story.length).toFixed(3)}%`;
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+  const phases = story.phases
+    .map((phase, index) => `<button type="button" class="tp-phase" data-at="${phase.at}" style="left:${pct(phase.at)};width:${pct(phase.end - phase.at)}" title="${esc(phase.name)} (${index + 1})"><span>${esc(phase.name)}</span></button>`)
+    .join("");
+  const ticks = story.steps.map((step) => `<i class="tp-tick" style="left:${pct(step.at)}"${step.say ? ` title="${esc(step.say)}"` : ""}></i>`).join("");
+  const bar = document.createElement("div");
+  bar.className = "tp-story";
+  bar.innerHTML = `<div class="tp-timeline"><button type="button" class="tp-play"></button><div class="tp-track" tabindex="0" role="slider" aria-label="Story time" aria-valuemin="0" aria-valuemax="${story.length}">${phases}${ticks}<div class="tp-head"></div></div><span class="tp-time"></span></div><p class="tp-say" aria-live="polite"></p>`;
+  stage.after(bar);
+  const play = bar.querySelector(".tp-play");
+  const track = bar.querySelector(".tp-track");
+  const head = bar.querySelector(".tp-head");
+  const clock = bar.querySelector(".tp-time");
+  const line = bar.querySelector(".tp-say");
+
+  let mode = "story";
+  let playing = !still.matches;
+  paused = !playing;
+  let preview = null;
+
+  function seek(t) {
+    const next = createSim(DATA.spec);
+    const steps = Math.round(Math.max(0, Math.min(t, story.length)) * 60);
+    for (let i = 0; i < steps; i++) next.step(1 / 60);
+    resetVisuals(next);
+    mode = "story";
+    render();
+  }
+
+  const phaseAt = (t) => story.phases.filter((phase) => phase.at <= t + 1e-6).pop();
+  const sayAt = (t) => story.steps.filter((step) => step.say && step.at <= t + 1e-6).pop();
+  let shown = { say: null, phase: null };
+  function render() {
+    const t = preview ?? Math.min(sim.time, story.length);
+    head.style.left = pct(t);
+    clock.textContent = `${t.toFixed(1)}s`;
+    track.setAttribute("aria-valuenow", t.toFixed(1));
+    bar.dataset.mode = mode;
+    play.textContent = playing && mode === "story" ? "❚❚" : "▶";
+    play.setAttribute("aria-label", mode === "free" ? "Resume the story" : playing ? "Pause" : "Play");
+    const phase = mode === "story" ? phaseAt(t) : null;
+    const step = mode === "story" ? sayAt(t) : null;
+    if (phase !== shown.phase) {
+      shown.phase = phase;
+      bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click a node to take over · 1–${Math.min(9, story.phases.length)} jump · V for 2D` : hintText;
+    }
+    const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
+    if (text !== shown.say) {
+      shown.say = text;
+      line.textContent = text;
+    }
+  }
+
+  hooks.tick.push(() => {
+    if (mode === "story" && sim.time >= story.length) {
+      if (story.loop) seek(0);
+      else {
+        playing = false;
+        paused = true;
+      }
+    }
+    render();
+  });
+  hooks.takeover.push(() => {
+    if (mode !== "story") return;
+    mode = "free";
+    playing = true;
+    paused = false;
+    // Free play: the rest of the script no longer applies.
+    sim.stepIndex = Infinity;
+    shown.phase = undefined;
+    render();
+  });
+  hooks.key.push((event) => {
+    if (/^[1-9]$/.test(event.key) && story.phases[+event.key - 1]) {
+      seek(story.phases[+event.key - 1].at);
+      return true;
+    }
+    if (event.key === "p" || event.key === "P") {
+      toggle_();
+      return true;
+    }
+    return false;
+  });
+
+  function toggle_() {
+    if (mode === "free") {
+      seek(sim.time);
+      playing = true;
+    } else playing = !playing;
+    paused = !playing;
+    render();
+  }
+  play.addEventListener("click", toggle_);
+  bar.querySelectorAll(".tp-phase").forEach((el) =>
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      seek(+el.dataset.at);
+    }),
+  );
+  const fractionOf = (event) => {
+    const box = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+  };
+  track.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".tp-phase")) return;
+    track.setPointerCapture(event.pointerId);
+    preview = fractionOf(event) * story.length;
+    render();
+  });
+  track.addEventListener("pointermove", (event) => {
+    if (preview == null) return;
+    preview = fractionOf(event) * story.length;
+    render();
+  });
+  const release = () => {
+    if (preview == null) return;
+    const t = preview;
+    preview = null;
+    seek(t);
+  };
+  track.addEventListener("pointerup", release);
+  track.addEventListener("pointercancel", release);
+  track.addEventListener("keydown", (event) => {
+    const t = Math.min(sim.time, story.length);
+    if (event.key === "ArrowRight") seek(t + 1);
+    else if (event.key === "ArrowLeft") seek(t - 1);
+    else if (event.key === "Home") seek(0);
+    else if (event.key === " ") toggle_();
+    else return;
+    event.preventDefault();
+  });
+  window.__topo.story = { seek, get mode() { return mode; }, get playing() { return playing; }, story };
+  render();
+})();
 </script></body></html>

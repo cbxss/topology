@@ -5,7 +5,7 @@ import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as k from "../kit/iso.mjs";
 import { hiddenBy, labelSpots, prepare, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
-import { createSim } from "../kit/topo-sim.mjs";
+import { createSim, formatCount, formatMs, formatRate, normalizeScenario } from "../kit/topo-sim.mjs";
 import { describeFeatures, resolveFeatures } from "../kit/topo-features.mjs";
 
 const KIT = join(dirname(fileURLToPath(import.meta.url)), "..", "kit");
@@ -68,6 +68,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
     body: stageHtml,
   });
   let script = strip(readFileSync(join(KIT, "topo-sim.mjs"), "utf8")) + `\nconst DATA = ${JSON.stringify(data)};\n` + readFileSync(join(KIT, "topo-live.js"), "utf8");
+  if (features.scenario && spec.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
   if (data.edit) script += "\n" + readFileSync(join(KIT, "topo-edit.js"), "utf8");
   const html = k.pageHtml({ title: model.title, theme, body, script, width: Math.max(rendered.iso.width, 650) + 48 });
   return { html, rendered, model };
@@ -97,17 +98,26 @@ const escapeAttr = (text) => String(text).replace(/&/g, "&amp;").replace(/"/g, "
 export function check(spec, { seconds = 30, featureLayers = [], log = console.log } = {}) {
   const model = modelOf(spec, featureLayers);
   const sim = createSim(simSpec(model));
+  const warnings = [];
+  const story = model.features.scenario ? normalizeScenario(spec.scenario) : null;
+  if (story) seconds = Math.max(seconds, story.length);
   log(`${model.title}: ${model.nodes.length} nodes, ${model.edges.length} edges, ${seconds}s simulated`);
   log(`features: ${describeFeatures(model.features)}`);
+  if (story) {
+    try {
+      storyTimeline(model, story, log, warnings);
+    } catch (error) {
+      warnings.push(`scenario: ${error.message}`);
+    }
+  }
   const lagAt = [];
   for (let t = 1; t <= seconds; t++) {
     for (let i = 0; i < 60; i++) sim.step(1 / 60);
     lagAt.push([...sim.logs.keys()].map((id) => sim.lagOf(id)));
     if (t % Math.max(1, Math.floor(seconds / 6)) === 0) log(`  t=${String(t).padStart(3)}s  ${sim.summary()}`);
   }
-  log("nodes:");
+  log(story ? `nodes at ${seconds}s:` : "nodes:");
   for (const node of model.nodes) log(`  ${sim.statsOf(node.id)}`);
-  const warnings = [];
   [...sim.logs.keys()].forEach((id, index) => {
     const mid = lagAt[Math.floor(lagAt.length / 2)]?.[index] ?? 0;
     const end = lagAt[lagAt.length - 1]?.[index] ?? 0;
@@ -128,6 +138,48 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   } else log("check passed");
   return { model, sim, warnings };
 }
+
+// The story, phase by phase: the readout just before and 3 s after each step, and each
+// phase's settled numbers (averaged over its last 3 s).
+function storyTimeline(model, story, log, warnings) {
+  const sim = createSim(simSpec(model));
+  const per = sim.cfg.per;
+  const ids = new Set(model.nodes.map((node) => node.id));
+  for (const step of story.steps) {
+    for (const id of [].concat(step.fail || [], step.recover || [], Object.keys(step.set || {}))) if (!ids.has(id)) warnings.push(`scenario step at ${step.at}s names unknown node "${id}"`);
+    if (step.at > story.length) warnings.push(`scenario step at ${step.at}s is past the story's length (${story.length}s)`);
+  }
+  const samples = [];
+  const marks = story.steps.flatMap((step) => [{ at: step.at - 0.1, label: "before", step }, { at: step.at + 3, label: "+3s", step }]);
+  log(`story: ${story.length}s${story.loop ? ", loops" : ""}, ${story.phases.length} phases, ${story.steps.length} steps`);
+  const lines = [];
+  for (let i = 1; i <= story.length * 60; i++) {
+    sim.step(1 / 60);
+    const t = i / 60;
+    if (i % 15 === 0) {
+      const lat = sim.latencyOf();
+      samples.push({ t, in: sim.totalIn(), p50: lat.p50, p99: lat.p99, failing: lat.failed / 3, lag: [...sim.logs.keys()].reduce((sum, id) => sum + sim.lagOf(id), 0) });
+    }
+    for (const mark of marks) if (!mark.done && t >= mark.at) {
+      mark.done = true;
+      lines.push({ at: mark.at, text: `  ${t.toFixed(1).padStart(5)}s ${mark.label === "before" ? "before" : "  +3s "} ${describeStep(mark.step)}: ${sim.summary()}` });
+    }
+  }
+  const phases = story.phases.length ? story.phases : [{ name: "story", at: 0, end: story.length }];
+  for (const phase of phases) {
+    const window = samples.filter((s) => s.t > Math.max(phase.at, phase.end - 3) && s.t <= phase.end);
+    const mean = (key) => window.reduce((sum, s) => sum + s[key], 0) / Math.max(1, window.length);
+    log(`phase ${phase.name} (${phase.at}–${phase.end}s): ${formatRate(mean("in"), per)} in · p50 ${formatMs(mean("p50"))} · p99 ${formatMs(mean("p99"))}${sim.logs.size ? ` · lag ${formatCount(mean("lag"), per)}` : ""} · ${formatRate(mean("failing"), per)} failing`);
+    for (const line of lines) if (line.at >= phase.at - 0.2 && line.at < phase.end - 0.2) log(line.text);
+  }
+  const end = samples[samples.length - 1];
+  const start = samples.find((s) => s.t >= 3) || samples[0];
+  if (story.loop && end && end.lag > Math.max(20, start.lag * 3)) warnings.push(`the story ends with lag ${formatCount(end.lag, per)} (it began near ${formatCount(start.lag, per)}); it will jump when it loops`);
+  if (story.loop && end && end.failing > Math.max(0.5, start.failing * 3)) warnings.push("the story ends still failing; it will jump when it loops");
+}
+
+const describeStep = (step) =>
+  [step.fail && `fail ${[].concat(step.fail).join(",")}`, step.recover && `recover ${[].concat(step.recover).join(",")}`, step.set && `set ${Object.keys(step.set).join(",")}`, step.flag && `${step.flag} → ${Math.round((step.rollout ?? 1) * 100)}%`, step.kill && `kill ${step.kill}`].filter(Boolean).join(", ") || "say";
 
 export function layoutWarnings(model) {
   const warnings = [];

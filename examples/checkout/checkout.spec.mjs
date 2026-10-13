@@ -8,6 +8,21 @@ export default {
   caption:
     "Clients send ~14 req/s to the gateway, which admits at most 12 req/s (the red packets are 429s). The LB round-robins over the healthy API in each zone. Each API checks Redis first; on a miss (about 1 in 5) it reads Postgres. The primary streams its WAL to a standby in zone b.",
   sim: { per: 100, seed: 11 },
+  scenario: {
+    length: 36,
+    phases: [
+      { name: "steady", at: 0 },
+      { name: "spike", at: 8 },
+      { name: "api-a down", at: 18 },
+      { name: "recovered", at: 28 },
+    ],
+    steps: [
+      { at: 1, say: "~14 req/s offered; the gateway admits 12 and sheds the rest as 429s (red). Reads mostly hit Redis." },
+      { phase: "spike", set: { clients: { emit: 24 } }, say: "Traffic nearly doubles. The gateway holds the line at 12 req/s: more 429s, but the APIs and Postgres see the same load and p99 doesn't move." },
+      { phase: "api-a down", set: { clients: { emit: 14 } }, fail: "api-a", say: "api-a dies. For 0.6 s the NLB keeps sending to it (refused, red), until its health check notices and api-b takes everything." },
+      { phase: "recovered", recover: "api-a", say: "api-a is back in rotation." },
+    ],
+  },
   grid: [118, 64],
   nodes: [
     { id: "clients", kind: "client", at: [0, 0.8], emit: 14 },

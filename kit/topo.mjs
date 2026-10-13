@@ -805,6 +805,22 @@ export const TOPO_CSS = `
 .tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
 .tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
 .k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+.tp-story{margin:18px 0 -10px}
+.tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
+.tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-play:focus-visible,.tp-track:focus-visible{outline:1px solid var(--tp-lit);outline-offset:2px}
+.tp-track{position:relative;flex:1;height:28px;cursor:pointer;touch-action:none}
+.tp-track::before{content:"";position:absolute;left:0;right:0;top:20px;height:1px;background:var(--tp-lo)}
+.tp-phase{all:unset;position:absolute;top:0;bottom:0;box-sizing:border-box;border-left:1px solid var(--tp-lo);cursor:pointer}
+.tp-phase span{position:absolute;left:5px;top:2px;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--tp-muted)}
+.tp-phase:hover span,.tp-phase[data-now] span{color:var(--tp-strong)}
+.tp-phase[data-now]{background:color-mix(in srgb,var(--tp-hi) 5%,transparent)}
+.tp-tick{position:absolute;top:16px;width:1px;height:9px;background:var(--tp-mid);pointer-events:none}
+.tp-head{position:absolute;top:12px;height:17px;width:2px;margin-left:-1px;background:var(--tp-lit);pointer-events:none}
+.tp-time{flex:none;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-say{margin:8px 0 0 34px;min-height:3em;font-size:12.5px;line-height:1.5;color:var(--tp-text)}
+.tp-story[data-mode="free"] .tp-track{opacity:.4}
+@media (max-width:560px){.tp-say{margin-left:0}}
 .tp-pk .pk-top{fill:var(--pk)}
 .tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
 .tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}

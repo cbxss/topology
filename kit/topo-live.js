@@ -4,7 +4,10 @@
 const stage = document.querySelector(".tp-stage");
 const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
-const sim = createSim(DATA.spec);
+let sim = createSim(DATA.spec);
+// Extension points for topo-story.js and topo-edit.js.
+const hooks = { tick: [], takeover: [], key: [] };
+let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
 const POOL_MAX = 420;
@@ -208,8 +211,9 @@ let logClock = 0;
 function tick(now) {
   const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60;
   last = now;
-  sim.step(dt * (window.__topoSpeed ?? 1));
+  if (!paused) sim.step(dt * (window.__topoSpeed ?? 1));
   events(now);
+  for (const hook of hooks.tick) hook(dt);
   logClock += dt;
   if (logClock > 0.05) {
     logClock = 0;
@@ -232,6 +236,7 @@ new IntersectionObserver((entries) => {
 
 const nodeAt = (target) => target.closest?.("[data-node]")?.dataset.node;
 const toggle = (id) => {
+  for (const hook of hooks.takeover) hook(id);
   const node = sim.nodes.get(id);
   if (node) sim.setUp(id, !node.up);
   say(true);
@@ -253,6 +258,10 @@ stage.addEventListener("click", (event) => {
 const ring = [...DATA.spec.nodes].map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
+  if (hooks.key.some((hook) => hook(event))) {
+    event.preventDefault();
+    return;
+  }
   if (event.key === "ArrowRight" || event.key === "ArrowDown") {
     pinned = true;
     setFocus(ring[(here + 1) % ring.length]);
@@ -271,6 +280,26 @@ stage.addEventListener("keydown", (event) => {
 });
 document.querySelectorAll(".tp-views button").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 
-window.__topo = { sim, setView, setFocus, toggle, get view() { return view; } };
+// Swap in another sim (a scrub re-simulates from 0) and bring every attribute up to date.
+function resetVisuals(next) {
+  sim = next;
+  for (const v of Object.values(views)) {
+    v.pool.forEach((slot) => {
+      slot.g.style.display = "none";
+      slot.shown = false;
+    });
+    v.cellState.clear();
+    v.cursors.forEach((cursor) => (cursor.at = -1));
+    for (const [id, el] of v.nodes) el.toggleAttribute("data-down", !sim.nodes.get(id).up);
+  }
+  for (const el of lit.keys()) el.removeAttribute("data-on");
+  lit.clear();
+  sim.events.length = 0;
+  drawLogs();
+  drawPackets();
+  say(true);
+}
+
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
 drawLogs();
 say(true);
