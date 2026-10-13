@@ -13,6 +13,8 @@ Requires Node.js 20.10+ to build, Node.js 22+ and Chrome/Chromium for browser ve
 
 This skill draws a distributed system as a small, working model of itself. You write a spec (nodes, edges, zones, rates); the build lays it out, routes the links, draws it both isometric (solid machines on a floor) and flat (2D glyphs on the same layout), and inlines a simulation that moves packets through it. The figure sits in a framed card with a title, a hint and a live readout. **Every number the readout shows comes from the same model that moves the packets.**
 
+Resolve every kit, script, example, and reference path relative to the directory containing this `SKILL.md`, including when installed by `npx skills add cbxss/topology` or from the npm package `@cbxss/topology`. The commands below assume that directory is the working directory. When working in a user project, invoke the builder by its absolute installed path and pass the project spec path; keep authored specs and generated outputs in the user project.
+
 Start with `references/spec.md` and the closest example. The minimal endpoint/table recipe there is executable and covered by tests.
 
 | Question | Start from |
@@ -56,7 +58,7 @@ those are part of the requested deliverable.
 1. **Name the question and collect the numbers.** Write down: the sources and their rates, each hop, what fans out, what is sync (request/response) and what is async (logs, queues), partitions, consumer groups and their throughput, caches and hit ratios, replicas, capacities.
 2. **Write the spec.** A `.spec.mjs` (or `.json`) with a default export; `references/spec.md` has every field and exactly what the simulation does with it. For the common shapes (a region, a Kafka topic with consumer groups, cache-aside, replicas, a job queue, a canary) use the patterns in `kit/patterns.mjs` and join them with `compose()` and `link()`; `examples/catalog/catalog.html` shows every node kind and pattern with the spec that makes it. Start without coordinates and let auto-layout rank it left to right; add `at: [col, row]` when you need control (zones, a particular reading order), or drag nodes on a `serve.mjs` `?edit` page.
 3. **Write the story when useful.** For an incident or behavior explanation, add a `scenario` with 3–5 named phases (steady → incident → recovery) and a `say` line for each step: what happened, and what to watch for on screen ("bright cells", "amber retries", "the red port"). Make it loop cleanly: recover what you break, and leave time for lag to drain.
-4. **Check the model.** `node scripts/build.mjs my.spec.mjs --check` runs the simulation headless. For each phase it prints the settled numbers (in/s, p50/p99, lag, failing) and the readout just before and 3 s after each step, then per-node stats and warnings:
+4. **Check the model.** `node scripts/build.mjs my.spec.mjs --check` runs the simulation headless. For each phase it prints the settled numbers (in/s, p50/p99, lag, failing, dropped traffic, and table metrics such as stale reads) and the readout just before and 3 s after each step, then per-node stats and warnings:
    - lag that keeps growing
    - drops (except onto nodes the story fails on purpose)
    - idle edges, overlapping nodes, edges under nodes, hidden labels
@@ -116,6 +118,7 @@ Reuse the shipped kit. Author a spec and build it; modifying the engine is neede
 | `scripts/serve.mjs` | The dev server: `node scripts/serve.mjs [dir] [--port 8765] [--host 127.0.0.1]`. Pages rebuild per request (kit edits apply too) and reload over SSE; `?theme=light`, `?view=flat`, `?features=-morph`, `?edit` (drag nodes in 2D, saved to `<name>.layout.json`). |
 | `scripts/page.mjs` | Shared by both: spec loading with the layout sidecar, the page build, `--check` and its story timeline. |
 | `kit/topo.mjs` | Normalising the spec, auto-layout, orthogonal routing with port spreading and channel lanes, the iso and flat renderers for every node kind, label placement, `TOPO_CSS`. Add a node kind here (`references/craft.md`, "Adding a kind"). |
+| `kit/components.mjs` | Reusable Redis, ElastiCache and DynamoDB component registry and drawings; product kinds reuse cache/database simulation behavior. |
 | `kit/topo-sim.mjs` | Stable simulation import path. Its implementation lives in `kit/sim/`; authors use the spec reference and examples. Maintainer boundaries and verification: `references/engine.md`. |
 | `kit/topo-live.js` | The page runtime: steps the sim, draws packets (with trails), blinks LEDs, fills record and queue cells, moves cursors and flag knobs, updates breakers and edge labels, handles hover, click, keys, the sparkline and the view morph. Writes attributes, never re-renders. Exposes `window.__topo` for checks. |
 | `kit/topo-records.js` | Saved-record details and record-specific write following, backed by actual stores and retained WAL. |

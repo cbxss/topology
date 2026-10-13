@@ -20,6 +20,22 @@ The story plays on its own with a timeline and narration. Click a node to inspec
 
 Recorded from the working example at 2× model speed. The same system switches from isometric to 2D after recovery begins. Rates and failures are illustrative.
 
+## Install the skill
+
+```sh
+npx skills add cbxss/topology
+```
+
+Choose your agent in the installer, or target one explicitly:
+
+```sh
+npx skills add cbxss/topology --skill topology --agent codex
+```
+
+Add `--global` to make it available across projects. This installs directly from
+GitHub and works independently of the npm release. The [skills CLI](https://github.com/vercel-labs/skills#readme)
+discovers the root `SKILL.md` and installs its supporting files with it.
+
 ## Quick start
 
 ```sh
