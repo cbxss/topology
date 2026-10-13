@@ -39,7 +39,7 @@
     const move = `translate(${(drag.cols * gx * k).toFixed(1)} ${(drag.rows * gy * k).toFixed(1)})`;
     drag.el.setAttribute("transform", move);
     drag.label?.setAttribute("transform", move);
-    if (readout) readout.textContent = `${drag.id} → [${(positions[drag.id][0] + drag.cols).toFixed(2)}, ${(positions[drag.id][1] + drag.rows).toFixed(2)}]`;
+    if (readoutText) readoutText.textContent = `${drag.id} → [${(positions[drag.id][0] + drag.cols).toFixed(2)}, ${(positions[drag.id][1] + drag.rows).toFixed(2)}]`;
   });
   const drop = async () => {
     if (!drag) return;
@@ -49,7 +49,7 @@
     if (!cols && !rows) return;
     positions[id] = [positions[id][0] + cols, positions[id][1] + rows];
     const reply = await fetch(location.pathname.replace(/^\/s\//, "/layout/"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ at: positions }) });
-    if (!reply.ok && readout) readout.textContent = `save failed: ${await reply.text()}`;
+    if (!reply.ok && readoutText) readoutText.textContent = `save failed: ${await reply.text()}`;
   };
   v.svg.addEventListener("pointerup", drop);
   v.svg.addEventListener("pointercancel", drop);

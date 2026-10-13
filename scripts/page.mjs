@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as k from "../kit/iso.mjs";
-import { hiddenBy, labelSpots, prepare, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
+import { applyHops, hiddenBy, labelSpots, prepare, projectionOf, renderView, simSpec, SLOTS, TOPO_CSS } from "../kit/topo.mjs";
 import { createSim, formatCount, formatMs, formatRate, normalizeScenario } from "../kit/topo-sim.mjs";
 import { describeFeatures, resolveFeatures } from "../kit/topo-features.mjs";
 
@@ -30,6 +30,7 @@ export function modelOf(spec, featureLayers = []) {
   const features = resolveFeatures(spec.features, ...featureLayers);
   const model = prepare(spec);
   model.features = features;
+  if (features.hops) applyHops(model);
   return model;
 }
 
@@ -68,11 +69,22 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
     caption: model.caption,
     body: stageHtml,
   });
-  let script = strip(readFileSync(join(KIT, "topo-sim.mjs"), "utf8")) + `\nconst DATA = ${JSON.stringify(data)};\n` + readFileSync(join(KIT, "topo-live.js"), "utf8");
+  if (features.morph) data.raw = spec;
+  let script = strip(readFileSync(join(KIT, "topo-sim.mjs"), "utf8")) + `\nconst DATA = ${JSON.stringify(data)};\n`;
+  // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
+  // each wrapped in its own scope so none of their names meet the live code's.
+  if (features.morph) script += scoped("iso.mjs", "k") + scoped("topo.mjs", "TOPO");
+  script += readFileSync(join(KIT, "topo-live.js"), "utf8");
   if (features.scenario && spec.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
   if (data.edit) script += "\n" + readFileSync(join(KIT, "topo-edit.js"), "utf8");
   const html = k.pageHtml({ title: model.title, theme, body, script, width: Math.max(rendered.iso.width, 650) + 48 });
   return { html, rendered, model };
+}
+
+function scoped(file, name) {
+  const source = readFileSync(join(KIT, file), "utf8").replace(/^import .*$/gm, "");
+  const names = [...source.matchAll(/^export (?:async )?(?:function|const|let|class) (\w+)/gm)].map((m) => m[1]);
+  return `const ${name} = (() => {\n${source.replace(/^export /gm, "")}\nreturn { ${names.join(", ")} };\n})();\n`;
 }
 
 export function svgOf(rendered, view, theme) {

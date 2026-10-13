@@ -72,6 +72,8 @@ body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sa
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
+.tp-morph{pointer-events:none}
+.tp-morph svg{display:block}
 .tp-node{cursor:pointer;transition:opacity .25s var(--tp-ease)}
 .tp-edge .k-line{transition:stroke .2s}
 .tp-edge-bed{fill:none;stroke:var(--tp-card);stroke-width:3.4px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
@@ -158,10 +160,15 @@ body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sa
 .tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
 .tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
 .tp-pk circle{fill:var(--pk)}
+.tp-pk .pk-trail{fill:none;stroke:var(--pk);stroke-width:1.6px;stroke-linecap:round;opacity:.28;vector-effect:non-scaling-stroke}
+.tp-spark{width:52px;height:10px;margin-right:9px;vertical-align:-1px;overflow:visible}
+.tp-spark polyline{fill:none;stroke:var(--tp-mid);stroke-width:1px;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+@media (max-width:560px){.tp-spark{display:none}}
 .tp-views{position:absolute;top:13px;left:50%;transform:translateX(-50%);display:flex;gap:0;z-index:2;font-family:var(--tp-mono);font-size:10px;letter-spacing:.08em}
 .tp-views button{all:unset;cursor:pointer;padding:3px 9px;color:var(--tp-muted);box-shadow:0 0 0 1px var(--tp-lo)}
 .tp-views button[aria-pressed="true"]{color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-mid);background:var(--tp-shade-2)}
 .tp-views button:focus-visible{outline:1px solid var(--tp-lit)}
+@media (max-width:560px){.k-card:has(.tp-views){padding-top:72px}.tp-views{top:40px}}
 </style><div class="tp-views" role="group" aria-label="View"><button type="button" data-view="iso" aria-pressed="true">ISO</button><button type="button" data-view="flat" aria-pressed="false">2D</button></div><div class="tp-stage" tabindex="0" role="application" aria-label="Brokers and ISR: hover or arrow keys pick a node, Enter fails or restores it, V switches between isometric and 2D"><svg xmlns="http://www.w3.org/2000/svg" class="k-svg tp-svg tp-iso" viewBox="0 0 640 319" role="img" aria-label="Brokers and ISR: payments-api (service), payments.v1 (kafka), ledger-a (worker), ledger-b (worker). Connections: payments-api to payments.v1; payments.v1 to ledger-a; payments.v1 to ledger-b."><g class="tp-edge" data-edge="0" data-kind="async"><path class="tp-edge-bed" d="M113.1 88.2L239.7 133.4"/><path class="k-line" data-tone="mid" data-dashed d="M113.1 88.2L239.7 133.4"/><path class="k-line" data-tone="mid" data-free="" d="M230.4 132.6L238.1 132.8L234.8 129.2"/><circle class="tp-port" cx="113.1" cy="88.2" r="1.4"/></g><g class="tp-edge" data-edge="1" data-kind="async"><path class="tp-edge-bed" d="M391.3 176.5L442.1 194.7L445.1 195.5L447.8 195.8L450.4 195.5L452.7 194.7L454.9 193.4L468.4 182.8L470.6 181.4L472.9 180.6L475.5 180.3L478.2 180.6L481.2 181.4L541.8 203.1"/><path class="k-line" data-tone="mid" data-dashed d="M391.3 176.5L442.1 194.7L445.1 195.5L447.8 195.8L450.4 195.5L452.7 194.7L454.9 193.4L468.4 182.8L470.6 181.4L472.9 180.6L475.5 180.3L478.2 180.6L481.2 181.4L541.8 203.1"/><path class="k-line" data-tone="mid" data-free="" d="M532.5 202.3L540.2 202.5L536.9 198.8"/></g><g class="tp-edge" data-edge="2" data-kind="async"><path class="tp-edge-bed" d="M372 191.8L432.6 213.4L435.1 214.6L436.6 215.8L437.1 217.2L436.6 218.6L435 220.2L421.5 230.8L420 232.4L419.5 233.9L420 235.2L421.5 236.5L424 237.6L474.8 255.7"/><path class="k-line" data-tone="mid" data-dashed d="M372 191.8L432.6 213.4L435.1 214.6L436.6 215.8L437.1 217.2L436.6 218.6L435 220.2L421.5 230.8L420 232.4L419.5 233.9L420 235.2L421.5 236.5L424 237.6L474.8 255.7"/><path class="k-line" data-tone="mid" data-free="" d="M465.5 254.9L473.1 255.2L469.9 251.5"/></g><g class="tp-label" data-label="api"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 63.0061 93.8332)" font-size="8" text-anchor="middle">payments-api</text></g><g class="tp-label" data-label="topic"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 286.0272 178.1781)" font-size="8" text-anchor="middle">payments.v1</text></g><g class="tp-label" data-label="ledger-a"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 550.6522 229.8374)" font-size="8" text-anchor="middle">ledger-a</text></g><g class="tp-label" data-label="ledger-b"><text class="k-text" data-tone="hi" transform="matrix(1.0917 0.3902 -0.7364 0.5785 483.6441 282.4815)" font-size="8" text-anchor="middle">ledger-b</text></g><g class="tp-elabel" data-elabel="0"><text class="k-text" data-tone="mid" transform="matrix(1.0917 0.3902 -0.7364 0.5785 180.8355 107.3316)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="1"><text class="k-text" data-tone="mid" transform="matrix(1.0917 0.3902 -0.7364 0.5785 512.0974 187.4386)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="2"><text class="k-text" data-tone="mid" transform="matrix(1.0917 0.3902 -0.7364 0.5785 410.4976 200.4977)" font-size="6.2" text-anchor="middle"></text></g><g class="tp-packets" data-packets=""></g><g class="tp-node" data-node="api" data-kind="service"><path class="k-halo" d="M45.1 65.8L45.1 65.6L45.2 65.5L45.3 65.4L67.4 48L67.5 47.9L67.7 47.8L68 47.8L68.2 47.7L68.5 47.7L68.7 47.7L69 47.8L69.2 47.8L121.6 66.6L121.8 66.7L122 66.8L122.1 66.9L122.2 67L122.2 67.2L122.2 78.3L122.2 78.5L122.1 78.6L122 78.7L99.9 96.1L99.7 96.2L99.5 96.3L99.3 96.3L99 96.4L98.8 96.4L98.5 96.4L98.3 96.3L98 96.3L45.6 77.5L45.4 77.4L45.3 77.3L45.2 77.2L45.1 77.1L45.1 76.9Z"/><g class="k-solid"><path class="k-fill" d="M42.4 67.9L43.1 66.8L65.2 49.5L66.7 48.8L68.7 48.6L70.7 48.9L123.1 67.7L124.4 68.5L124.8 69.5L124.8 78.5L124.1 79.5L102.1 96.8L100.5 97.6L98.5 97.8L96.6 97.4L44.2 78.7L42.8 77.9L42.4 76.8Z"/><path class="k-shade" data-shade="0" d="M124.8 69.5L124.1 70.6L124.1 79.5L124.8 78.5ZM124.1 70.6L102.1 87.9L102.1 96.8L124.1 79.5ZM102.1 87.9L100.5 88.6L100.5 97.6L102.1 96.8Z"/><path class="k-shade" data-shade="1" d="M100.5 88.6L98.5 88.8L98.5 97.8L100.5 97.6Z"/><path class="k-shade" data-shade="2" d="M98.5 88.8L96.6 88.5L96.6 97.4L98.5 97.8Z"/><path class="k-shade" data-shade="3" d="M96.6 88.5L44.2 69.7L44.2 78.7L96.6 97.4ZM44.2 69.7L42.8 68.9L42.8 77.9L44.2 78.7ZM42.8 68.9L42.4 67.9L42.4 76.8L42.8 77.9Z"/><path class="k-top" d="M123.1 67.7L124.4 68.5L124.8 69.5L124.1 70.6L102.1 87.9L100.5 88.6L98.5 88.8L96.6 88.5L44.2 69.7L42.8 68.9L42.4 67.9L43.1 66.8L65.2 49.5L66.7 48.8L68.7 48.6L70.7 48.9Z"/><path class="k-line k-crease" data-tone="faint" d="M124.8 69.5L124.1 70.6M124.1 70.6L102.1 87.9M102.1 87.9L100.5 88.6M100.5 88.6L98.5 88.8M98.5 88.8L96.6 88.5M96.6 88.5L44.2 69.7M44.2 69.7L42.8 68.9M42.8 68.9L42.4 67.9"/><path class="k-line k-bevel" data-tone="faint" d="M124 69.5L123.4 70.5M123.4 70.5L101.7 87.5M101.7 87.5L100.2 88.2M100.2 88.2L98.2 88.4M98.2 88.4L96.3 88.1M96.3 88.1L45 69.7M45 69.7L43.6 68.9M43.6 68.9L43.2 67.9"/><path class="k-line k-edge" data-tone="mid" d="M42.4 67.9L43.1 66.8L65.2 49.5L66.7 48.8L68.7 48.6L70.7 48.9L123.1 67.7L124.4 68.5L124.8 69.5L124.8 78.5L124.1 79.5L102.1 96.8L100.5 97.6L98.5 97.8L96.6 97.4L44.2 78.7L42.8 77.9L42.4 76.8Z"/></g><path class="k-line" data-tone="lo" d="M56.2 80.3L66 83.8L66 80.2L56.2 76.7Z"/><path class="k-line" data-tone="lo" d="M68.2 84.6L78 88.1L78 84.5L68.2 81Z"/><path class="k-line" data-tone="lo" d="M80.2 88.9L90 92.4L90 88.8L80.2 85.3Z"/><path class="k-line" data-tone="faint" d="M121.9 77.7L104.3 91.5L104.3 89.8L121.9 75.9Z"/><circle class="tp-led" data-led="api:0" cx="47.4" cy="75.4" r="1.3"/><g class="k-solid"><path class="k-fill" d="M42.4 58L43.1 57L65.2 39.7L66.7 38.9L68.7 38.7L70.7 39.1L123.1 57.8L124.4 58.6L124.8 59.7L124.8 68.6L124.1 69.7L102.1 87L100.5 87.7L98.5 87.9L96.6 87.6L44.2 68.9L42.8 68L42.4 67Z"/><path class="k-shade" data-shade="0" d="M124.8 59.7L124.1 60.7L124.1 69.7L124.8 68.6ZM124.1 60.7L102.1 78.1L102.1 87L124.1 69.7ZM102.1 78.1L100.5 78.8L100.5 87.7L102.1 87Z"/><path class="k-shade" data-shade="1" d="M100.5 78.8L98.5 79L98.5 87.9L100.5 87.7Z"/><path class="k-shade" data-shade="2" d="M98.5 79L96.6 78.7L96.6 87.6L98.5 87.9Z"/><path class="k-shade" data-shade="3" d="M96.6 78.7L44.2 59.9L44.2 68.9L96.6 87.6ZM44.2 59.9L42.8 59.1L42.8 68L44.2 68.9ZM42.8 59.1L42.4 58L42.4 67L42.8 68Z"/><path class="k-top" d="M123.1 57.8L124.4 58.6L124.8 59.7L124.1 60.7L102.1 78.1L100.5 78.8L98.5 79L96.6 78.7L44.2 59.9L42.8 59.1L42.4 58L43.1 57L65.2 39.7L66.7 38.9L68.7 38.7L70.7 39.1Z"/><path class="k-line k-crease" data-tone="faint" d="M124.8 59.7L124.1 60.7M124.1 60.7L102.1 78.1M102.1 78.1L100.5 78.8M100.5 78.8L98.5 79M98.5 79L96.6 78.7M96.6 78.7L44.2 59.9M44.2 59.9L42.8 59.1M42.8 59.1L42.4 58"/><path class="k-line k-bevel" data-tone="faint" d="M124 59.7L123.4 60.7M123.4 60.7L101.7 77.7M101.7 77.7L100.2 78.4M100.2 78.4L98.2 78.6M98.2 78.6L96.3 78.3M96.3 78.3L45 59.9M45 59.9L43.6 59.1M43.6 59.1L43.2 58.1"/><path class="k-line k-edge" data-tone="mid" d="M42.4 58L43.1 57L65.2 39.7L66.7 38.9L68.7 38.7L70.7 39.1L123.1 57.8L124.4 58.6L124.8 59.7L124.8 68.6L124.1 69.7L102.1 87L100.5 87.7L98.5 87.9L96.6 87.6L44.2 68.9L42.8 68L42.4 67Z"/></g><path class="k-line" data-tone="lo" d="M56.2 70.5L66 74L66 70.4L56.2 66.9Z"/><path class="k-line" data-tone="lo" d="M68.2 74.8L78 78.3L78 74.7L68.2 71.2Z"/><path class="k-line" data-tone="lo" d="M80.2 79.1L90 82.6L90 79L80.2 75.5Z"/><path class="k-line" data-tone="faint" d="M121.9 67.8L104.3 81.7L104.3 79.9L121.9 66Z"/><circle class="tp-led" data-led="api:1" cx="47.4" cy="65.6" r="1.3"/><g class="k-solid"><path class="k-fill" d="M42.4 48.2L43.1 47.2L65.2 29.8L66.7 29.1L68.7 28.9L70.7 29.3L123.1 48L124.4 48.8L124.8 49.9L124.8 58.8L124.1 59.8L102.1 77.2L100.5 77.9L98.5 78.1L96.6 77.8L44.2 59L42.8 58.2L42.4 57.1Z"/><path class="k-shade" data-shade="0" d="M124.8 49.9L124.1 50.9L124.1 59.8L124.8 58.8ZM124.1 50.9L102.1 68.3L102.1 77.2L124.1 59.8ZM102.1 68.3L100.5 69L100.5 77.9L102.1 77.2Z"/><path class="k-shade" data-shade="1" d="M100.5 69L98.5 69.2L98.5 78.1L100.5 77.9Z"/><path class="k-shade" data-shade="2" d="M98.5 69.2L96.6 68.8L96.6 77.8L98.5 78.1Z"/><path class="k-shade" data-shade="3" d="M96.6 68.8L44.2 50.1L44.2 59L96.6 77.8ZM44.2 50.1L42.8 49.3L42.8 58.2L44.2 59ZM42.8 49.3L42.4 48.2L42.4 57.1L42.8 58.2Z"/><path class="k-top" d="M123.1 48L124.4 48.8L124.8 49.9L124.1 50.9L102.1 68.3L100.5 69L98.5 69.2L96.6 68.8L44.2 50.1L42.8 49.3L42.4 48.2L43.1 47.2L65.2 29.8L66.7 29.1L68.7 28.9L70.7 29.3Z"/><path class="k-line k-crease" data-tone="faint" d="M124.8 49.9L124.1 50.9M124.1 50.9L102.1 68.3M102.1 68.3L100.5 69M100.5 69L98.5 69.2M98.5 69.2L96.6 68.8M96.6 68.8L44.2 50.1M44.2 50.1L42.8 49.3M42.8 49.3L42.4 48.2"/><path class="k-line k-bevel" data-tone="faint" d="M124 49.9L123.4 50.9M123.4 50.9L101.7 67.9M101.7 67.9L100.2 68.6M100.2 68.6L98.2 68.8M98.2 68.8L96.3 68.4M96.3 68.4L45 50.1M45 50.1L43.6 49.3M43.6 49.3L43.2 48.2"/><path class="k-line k-edge" data-tone="mid" d="M42.4 48.2L43.1 47.2L65.2 29.8L66.7 29.1L68.7 28.9L70.7 29.3L123.1 48L124.4 48.8L124.8 49.9L124.8 58.8L124.1 59.8L102.1 77.2L100.5 77.9L98.5 78.1L96.6 77.8L44.2 59L42.8 58.2L42.4 57.1Z"/></g><path class="k-line" data-tone="lo" d="M56.2 60.6L66 64.2L66 60.6L56.2 57.1Z"/><path class="k-line" data-tone="lo" d="M68.2 64.9L78 68.4L78 64.9L68.2 61.4Z"/><path class="k-line" data-tone="lo" d="M80.2 69.2L90 72.7L90 69.2L80.2 65.7Z"/><path class="k-line" data-tone="faint" d="M121.9 58L104.3 71.9L104.3 70.1L121.9 56.2Z"/><circle class="tp-led" data-led="api:2" cx="47.4" cy="55.7" r="1.3"/><path class="k-line" data-tone="faint" d="M119 49.9L98.4 66.1L48.2 48.2L68.8 32Z"/><g class="k-dots" data-tone="lo"><circle cx="68.2" cy="30.2" r="0.5"/><circle cx="122.3" cy="49.6" r="0.5"/><circle cx="44.9" cy="48.5" r="0.5"/><circle cx="99.1" cy="67.9" r="0.5"/></g></g><g class="tp-node" data-node="topic" data-kind="kafka"><path class="k-halo" d="M226.6 135.3L226.6 135.2L226.7 135L226.8 134.9L257 111.2L257.2 111.1L257.4 111L257.6 110.9L257.9 110.9L258.1 110.9L258.4 110.9L258.6 110.9L258.8 111L394.2 159.4L394.4 159.5L394.6 159.6L394.7 159.7L394.8 159.8L394.8 160L394.8 171.1L394.8 171.3L394.7 171.4L394.6 171.5L364.4 195.2L364.2 195.3L364 195.4L363.8 195.5L363.5 195.5L363.3 195.5L363 195.5L362.8 195.5L362.5 195.4L227.2 147L227 147L226.8 146.8L226.7 146.7L226.6 146.6L226.6 146.5Z"/><g class="k-solid"><path class="k-fill" d="M224 139.6L224.6 138.6L254.8 114.9L256.4 114.2L258.4 114L260.3 114.3L395.7 162.7L397 163.5L397.4 164.6L397.4 171.3L396.7 172.3L366.6 196L365 196.7L363 196.9L361.1 196.6L225.7 148.2L224.4 147.4L224 146.3Z"/><path class="k-shade" data-shade="0" d="M397.4 164.6L396.7 165.6L396.7 172.3L397.4 171.3ZM396.7 165.6L366.6 189.3L366.6 196L396.7 172.3ZM366.6 189.3L365 190L365 196.7L366.6 196Z"/><path class="k-shade" data-shade="1" d="M365 190L363 190.2L363 196.9L365 196.7Z"/><path class="k-shade" data-shade="2" d="M363 190.2L361.1 189.9L361.1 196.6L363 196.9Z"/><path class="k-shade" data-shade="3" d="M361.1 189.9L225.7 141.5L225.7 148.2L361.1 196.6ZM225.7 141.5L224.4 140.7L224.4 147.4L225.7 148.2ZM224.4 140.7L224 139.6L224 146.3L224.4 147.4Z"/><path class="k-top" d="M395.7 162.7L397 163.5L397.4 164.6L396.7 165.6L366.6 189.3L365 190L363 190.2L361.1 189.9L225.7 141.5L224.4 140.7L224 139.6L224.6 138.6L254.8 114.9L256.4 114.2L258.4 114L260.3 114.3Z"/><path class="k-line k-crease" data-tone="faint" d="M397.4 164.6L396.7 165.6M396.7 165.6L366.6 189.3M366.6 189.3L365 190M365 190L363 190.2M363 190.2L361.1 189.9M361.1 189.9L225.7 141.5M225.7 141.5L224.4 140.7M224.4 140.7L224 139.6"/><path class="k-line k-bevel" data-tone="faint" d="M396.4 164.4L395.7 165.4M395.7 165.4L365.9 188.9M365.9 188.9L364.4 189.6M364.4 189.6L362.4 189.8M362.4 189.8L360.5 189.4M360.5 189.4L226.7 141.6M226.7 141.6L225.4 140.8M225.4 140.8L225 139.8"/><path class="k-line k-edge" data-tone="mid" d="M224 139.6L224.6 138.6L254.8 114.9L256.4 114.2L258.4 114L260.3 114.3L395.7 162.7L397 163.5L397.4 164.6L397.4 171.3L396.7 172.3L366.6 196L365 196.7L363 196.9L361.1 196.6L225.7 148.2L224.4 147.4L224 146.3Z"/></g><g class="tp-broker" data-part="broker:2"><g class="k-solid"><path class="k-fill" d="M232 133.9L232.2 133.3L239.1 127.9L239.9 127.6L240.9 127.7L251.8 131.6L252.4 132.1L252.4 137.6L252.2 138.2L245.3 143.6L244.4 143.9L243.4 143.8L232.5 139.9L232 139.4Z"/><path class="k-shade" data-shade="0" d="M252.4 132.1L252.2 132.6L252.2 138.2L252.4 137.6ZM252.2 132.6L245.3 138L245.3 143.6L252.2 138.2ZM245.3 138L244.4 138.3L244.4 143.9L245.3 143.6Z"/><path class="k-shade" data-shade="2" d="M244.4 138.3L243.4 138.2L243.4 143.8L244.4 143.9Z"/><path class="k-shade" data-shade="3" d="M243.4 138.2L232.5 134.3L232.5 139.9L243.4 143.8ZM232.5 134.3L232 133.9L232 139.4L232.5 139.9Z"/><path class="k-top" d="M251.8 131.6L252.4 132.1L252.2 132.6L245.3 138L244.4 138.3L243.4 138.2L232.5 134.3L232 133.9L232.2 133.3L239.1 127.9L239.9 127.6L240.9 127.7Z"/><path class="k-line k-crease" data-tone="faint" d="M252.4 132.1L252.2 132.6M252.2 132.6L245.3 138M245.3 138L244.4 138.3M244.4 138.3L243.4 138.2M243.4 138.2L232.5 134.3M232.5 134.3L232 133.9"/><path class="k-line k-bevel" data-tone="faint" d="M251.9 132.1L251.7 132.6M251.7 132.6L245.1 137.8M245.1 137.8L244.3 138M244.3 138L243.4 137.9M243.4 137.9L233 134.2M233 134.2L232.5 133.8"/><path class="k-line k-edge" data-tone="mid" d="M232 133.9L232.2 133.3L239.1 127.9L239.9 127.6L240.9 127.7L251.8 131.6L252.4 132.1L252.4 137.6L252.2 138.2L245.3 143.6L244.4 143.9L243.4 143.8L232.5 139.9L232 139.4Z"/></g><circle class="tp-led" data-led="topic:b2" cx="248.7" cy="138.1" r="1"/></g><g class="tp-broker" data-part="broker:1"><g class="k-solid"><path class="k-fill" d="M241.5 126.3L241.7 125.8L248.7 120.4L249.5 120.1L250.5 120.2L261.4 124.1L262 124.5L262 130.1L261.8 130.6L254.8 136.1L254 136.4L253 136.3L242.1 132.4L241.5 131.9Z"/><path class="k-shade" data-shade="0" d="M262 124.5L261.8 125.1L261.8 130.6L262 130.1ZM261.8 125.1L254.8 130.5L254.8 136.1L261.8 130.6ZM254.8 130.5L254 130.8L254 136.4L254.8 136.1Z"/><path class="k-shade" data-shade="2" d="M254 130.8L253 130.7L253 136.3L254 136.4Z"/><path class="k-shade" data-shade="3" d="M253 130.7L242.1 126.8L242.1 132.4L253 136.3ZM242.1 126.8L241.5 126.3L241.5 131.9L242.1 132.4Z"/><path class="k-top" d="M261.4 124.1L262 124.5L261.8 125.1L254.8 130.5L254 130.8L253 130.7L242.1 126.8L241.5 126.3L241.7 125.8L248.7 120.4L249.5 120.1L250.5 120.2Z"/><path class="k-line k-crease" data-tone="faint" d="M262 124.5L261.8 125.1M261.8 125.1L254.8 130.5M254.8 130.5L254 130.8M254 130.8L253 130.7M253 130.7L242.1 126.8M242.1 126.8L241.5 126.3"/><path class="k-line k-bevel" data-tone="faint" d="M261.4 124.6L261.2 125.1M261.2 125.1L254.7 130.2M254.7 130.2L253.9 130.5M253.9 130.5L252.9 130.4M252.9 130.4L242.6 126.7M242.6 126.7L242.1 126.3"/><path class="k-line k-edge" data-tone="mid" d="M241.5 126.3L241.7 125.8L248.7 120.4L249.5 120.1L250.5 120.2L261.4 124.1L262 124.5L262 130.1L261.8 130.6L254.8 136.1L254 136.4L253 136.3L242.1 132.4L241.5 131.9Z"/></g><circle class="tp-led" data-led="topic:b1" cx="258.3" cy="130.6" r="1"/></g><g class="tp-broker" data-part="broker:0"><g class="k-solid"><path class="k-fill" d="M251.1 118.8L251.3 118.3L258.2 112.9L259.1 112.6L260.1 112.7L271 116.6L271.5 117L271.5 122.6L271.3 123.1L264.4 128.6L263.6 128.9L262.6 128.8L251.7 124.9L251.1 124.4Z"/><path class="k-shade" data-shade="0" d="M271.5 117L271.3 117.5L271.3 123.1L271.5 122.6ZM271.3 117.5L264.4 123L264.4 128.6L271.3 123.1ZM264.4 123L263.6 123.3L263.6 128.9L264.4 128.6Z"/><path class="k-shade" data-shade="2" d="M263.6 123.3L262.6 123.2L262.6 128.8L263.6 128.9Z"/><path class="k-shade" data-shade="3" d="M262.6 123.2L251.7 119.3L251.7 124.9L262.6 128.8ZM251.7 119.3L251.1 118.8L251.1 124.4L251.7 124.9Z"/><path class="k-top" d="M271 116.6L271.5 117L271.3 117.5L264.4 123L263.6 123.3L262.6 123.2L251.7 119.3L251.1 118.8L251.3 118.3L258.2 112.9L259.1 112.6L260.1 112.7Z"/><path class="k-line k-crease" data-tone="faint" d="M271.5 117L271.3 117.5M271.3 117.5L264.4 123M264.4 123L263.6 123.3M263.6 123.3L262.6 123.2M262.6 123.2L251.7 119.3M251.7 119.3L251.1 118.8"/><path class="k-line k-bevel" data-tone="faint" d="M271 117.1L270.8 117.6M270.8 117.6L264.2 122.7M264.2 122.7L263.5 123M263.5 123L262.5 122.9M262.5 122.9L252.2 119.2M252.2 119.2L251.6 118.8"/><path class="k-line k-edge" data-tone="mid" d="M251.1 118.8L251.3 118.3L258.2 112.9L259.1 112.6L260.1 112.7L271 116.6L271.5 117L271.5 122.6L271.3 123.1L264.4 128.6L263.6 128.9L262.6 128.8L251.7 124.9L251.1 124.4Z"/></g><circle class="tp-led" data-led="topic:b0" cx="267.9" cy="123.1" r="1"/></g><g class="tp-lane" data-lane="topic:0"><g class="k-solid"><path class="k-fill" d="M285.5 135.4L285.7 134.9L290.8 130.9L291.7 130.6L292.6 130.7L386.5 164.2L387.1 164.7L387.1 165.3L386.9 165.9L381.7 169.9L380.9 170.2L379.9 170.1L286 136.5L285.5 136.1Z"/><path class="k-shade" data-shade="0" d="M387.1 164.7L386.9 165.2L386.9 165.9L387.1 165.3ZM386.9 165.2L381.7 169.2L381.7 169.9L386.9 165.9ZM381.7 169.2L380.9 169.5L380.9 170.2L381.7 169.9Z"/><path class="k-shade" data-shade="2" d="M380.9 169.5L379.9 169.4L379.9 170.1L380.9 170.2Z"/><path class="k-shade" data-shade="3" d="M379.9 169.4L286 135.9L286 136.5L379.9 170.1ZM286 135.9L285.5 135.4L285.5 136.1L286 136.5Z"/><path class="k-top" d="M386.5 164.2L387.1 164.7L386.9 165.2L381.7 169.2L380.9 169.5L379.9 169.4L286 135.9L285.5 135.4L285.7 134.9L290.8 130.9L291.7 130.6L292.6 130.7Z"/><path class="k-line k-edge" data-tone="lo" d="M285.5 135.4L285.7 134.9L290.8 130.9L291.7 130.6L292.6 130.7L386.5 164.2L387.1 164.7L387.1 165.3L386.9 165.9L381.7 169.9L380.9 170.2L379.9 170.1L286 136.5L285.5 136.1Z"/></g><g class="tp-cell" data-cell="topic:0:0"><g class="k-solid"><path class="k-fill" d="M289.2 133.3L289.3 133L293.1 130L293.6 129.8L294.2 129.9L299 131.6L299.3 131.8L299.3 134.3L299.2 134.6L295.4 137.6L294.9 137.8L294.3 137.7L289.5 136L289.2 135.8Z"/><path class="k-shade" data-shade="0" d="M299.3 131.8L299.2 132.2L299.2 134.6L299.3 134.3ZM299.2 132.2L295.4 135.2L295.4 137.6L299.2 134.6ZM295.4 135.2L294.9 135.3L294.9 137.8L295.4 137.6Z"/><path class="k-shade" data-shade="2" d="M294.9 135.3L294.3 135.3L294.3 137.7L294.9 137.8Z"/><path class="k-shade" data-shade="3" d="M294.3 135.3L289.5 133.6L289.5 136L294.3 137.7ZM289.5 133.6L289.2 133.3L289.2 135.8L289.5 136Z"/><path class="k-top" d="M299 131.6L299.3 131.8L299.2 132.2L295.4 135.2L294.9 135.3L294.3 135.3L289.5 133.6L289.2 133.3L289.3 133L293.1 130L293.6 129.8L294.2 129.9Z"/><path class="k-line k-edge" data-tone="lo" d="M289.2 133.3L289.3 133L293.1 130L293.6 129.8L294.2 129.9L299 131.6L299.3 131.8L299.3 134.3L299.2 134.6L295.4 137.6L294.9 137.8L294.3 137.7L289.5 136L289.2 135.8Z"/></g></g><g class="tp-cell" data-cell="topic:0:1"><g class="k-solid"><path class="k-fill" d="M296.8 136L296.9 135.7L300.7 132.7L301.2 132.5L301.8 132.6L306.6 134.3L307 134.6L307 137L306.9 137.3L303 140.4L302.5 140.5L301.9 140.5L297.1 138.8L296.8 138.5Z"/><path class="k-shade" data-shade="0" d="M307 134.6L306.9 134.9L306.9 137.3L307 137ZM306.9 134.9L303 137.9L303 140.4L306.9 137.3ZM303 137.9L302.5 138.1L302.5 140.5L303 140.4Z"/><path class="k-shade" data-shade="2" d="M302.5 138.1L301.9 138L301.9 140.5L302.5 140.5Z"/><path class="k-shade" data-shade="3" d="M301.9 138L297.1 136.3L297.1 138.8L301.9 140.5ZM297.1 136.3L296.8 136L296.8 138.5L297.1 138.8Z"/><path class="k-top" d="M306.6 134.3L307 134.6L306.9 134.9L303 137.9L302.5 138.1L301.9 138L297.1 136.3L296.8 136L296.9 135.7L300.7 132.7L301.2 132.5L301.8 132.6Z"/><path class="k-line k-edge" data-tone="lo" d="M296.8 136L296.9 135.7L300.7 132.7L301.2 132.5L301.8 132.6L306.6 134.3L307 134.6L307 137L306.9 137.3L303 140.4L302.5 140.5L301.9 140.5L297.1 138.8L296.8 138.5Z"/></g></g><g class="tp-cell" data-cell="topic:0:2"><g class="k-solid"><path class="k-fill" d="M304.4 138.8L304.6 138.4L308.4 135.4L308.9 135.3L309.5 135.3L314.3 137L314.6 137.3L314.6 139.8L314.5 140.1L310.7 143.1L310.2 143.3L309.6 143.2L304.8 141.5L304.4 141.2Z"/><path class="k-shade" data-shade="0" d="M314.6 137.3L314.5 137.6L314.5 140.1L314.6 139.8ZM314.5 137.6L310.7 140.6L310.7 143.1L314.5 140.1ZM310.7 140.6L310.2 140.8L310.2 143.3L310.7 143.1Z"/><path class="k-shade" data-shade="2" d="M310.2 140.8L309.6 140.7L309.6 143.2L310.2 143.3Z"/><path class="k-shade" data-shade="3" d="M309.6 140.7L304.8 139L304.8 141.5L309.6 143.2ZM304.8 139L304.4 138.8L304.4 141.2L304.8 141.5Z"/><path class="k-top" d="M314.3 137L314.6 137.3L314.5 137.6L310.7 140.6L310.2 140.8L309.6 140.7L304.8 139L304.4 138.8L304.6 138.4L308.4 135.4L308.9 135.3L309.5 135.3Z"/><path class="k-line k-edge" data-tone="lo" d="M304.4 138.8L304.6 138.4L308.4 135.4L308.9 135.3L309.5 135.3L314.3 137L314.6 137.3L314.6 139.8L314.5 140.1L310.7 143.1L310.2 143.3L309.6 143.2L304.8 141.5L304.4 141.2Z"/></g></g><g class="tp-cell" data-cell="topic:0:3"><g class="k-solid"><path class="k-fill" d="M312.1 141.5L312.2 141.2L316 138.2L316.5 138L317.1 138.1L321.9 139.8L322.3 140L322.3 142.5L322.1 142.8L318.3 145.8L317.8 146L317.2 145.9L312.4 144.2L312.1 143.9Z"/><path class="k-shade" data-shade="0" d="M322.3 140L322.1 140.4L322.1 142.8L322.3 142.5ZM322.1 140.4L318.3 143.4L318.3 145.8L322.1 142.8ZM318.3 143.4L317.8 143.5L317.8 146L318.3 145.8Z"/><path class="k-shade" data-shade="2" d="M317.8 143.5L317.2 143.5L317.2 145.9L317.8 146Z"/><path class="k-shade" data-shade="3" d="M317.2 143.5L312.4 141.8L312.4 144.2L317.2 145.9ZM312.4 141.8L312.1 141.5L312.1 143.9L312.4 144.2Z"/><path class="k-top" d="M321.9 139.8L322.3 140L322.1 140.4L318.3 143.4L317.8 143.5L317.2 143.5L312.4 141.8L312.1 141.5L312.2 141.2L316 138.2L316.5 138L317.1 138.1Z"/><path class="k-line k-edge" data-tone="lo" d="M312.1 141.5L312.2 141.2L316 138.2L316.5 138L317.1 138.1L321.9 139.8L322.3 140L322.3 142.5L322.1 142.8L318.3 145.8L317.8 146L317.2 145.9L312.4 144.2L312.1 143.9Z"/></g></g><g class="tp-cell" data-cell="topic:0:4"><g class="k-solid"><path class="k-fill" d="M319.7 144.2L319.8 143.9L323.7 140.9L324.2 140.7L324.8 140.8L329.6 142.5L329.9 142.8L329.9 145.2L329.8 145.5L326 148.5L325.4 148.7L324.9 148.7L320.1 146.9L319.7 146.7Z"/><path class="k-shade" data-shade="0" d="M329.9 142.8L329.8 143.1L329.8 145.5L329.9 145.2ZM329.8 143.1L326 146.1L326 148.5L329.8 145.5ZM326 146.1L325.4 146.3L325.4 148.7L326 148.5Z"/><path class="k-shade" data-shade="2" d="M325.4 146.3L324.9 146.2L324.9 148.7L325.4 148.7Z"/><path class="k-shade" data-shade="3" d="M324.9 146.2L320.1 144.5L320.1 146.9L324.9 148.7ZM320.1 144.5L319.7 144.2L319.7 146.7L320.1 146.9Z"/><path class="k-top" d="M329.6 142.5L329.9 142.8L329.8 143.1L326 146.1L325.4 146.3L324.9 146.2L320.1 144.5L319.7 144.2L319.8 143.9L323.7 140.9L324.2 140.7L324.8 140.8Z"/><path class="k-line k-edge" data-tone="lo" d="M319.7 144.2L319.8 143.9L323.7 140.9L324.2 140.7L324.8 140.8L329.6 142.5L329.9 142.8L329.9 145.2L329.8 145.5L326 148.5L325.4 148.7L324.9 148.7L320.1 146.9L319.7 146.7Z"/></g></g><g class="tp-cell" data-cell="topic:0:5"><g class="k-solid"><path class="k-fill" d="M327.4 147L327.5 146.6L331.3 143.6L331.8 143.5L332.4 143.5L337.2 145.2L337.5 145.5L337.5 148L337.4 148.3L333.6 151.3L333.1 151.5L332.5 151.4L327.7 149.7L327.4 149.4Z"/><path class="k-shade" data-shade="0" d="M337.5 145.5L337.4 145.8L337.4 148.3L337.5 148ZM337.4 145.8L333.6 148.8L333.6 151.3L337.4 148.3ZM333.6 148.8L333.1 149L333.1 151.5L333.6 151.3Z"/><path class="k-shade" data-shade="2" d="M333.1 149L332.5 148.9L332.5 151.4L333.1 151.5Z"/><path class="k-shade" data-shade="3" d="M332.5 148.9L327.7 147.2L327.7 149.7L332.5 151.4ZM327.7 147.2L327.4 147L327.4 149.4L327.7 149.7Z"/><path class="k-top" d="M337.2 145.2L337.5 145.5L337.4 145.8L333.6 148.8L333.1 149L332.5 148.9L327.7 147.2L327.4 147L327.5 146.6L331.3 143.6L331.8 143.5L332.4 143.5Z"/><path class="k-line k-edge" data-tone="lo" d="M327.4 147L327.5 146.6L331.3 143.6L331.8 143.5L332.4 143.5L337.2 145.2L337.5 145.5L337.5 148L337.4 148.3L333.6 151.3L333.1 151.5L332.5 151.4L327.7 149.7L327.4 149.4Z"/></g></g><g class="tp-cell" data-cell="topic:0:6"><g class="k-solid"><path class="k-fill" d="M335 149.7L335.1 149.4L339 146.4L339.5 146.2L340.1 146.2L344.9 148L345.2 148.2L345.2 150.7L345.1 151L341.2 154L340.7 154.2L340.1 154.1L335.3 152.4L335 152.1Z"/><path class="k-shade" data-shade="0" d="M345.2 148.2L345.1 148.5L345.1 151L345.2 150.7ZM345.1 148.5L341.2 151.6L341.2 154L345.1 151ZM341.2 151.6L340.7 151.7L340.7 154.2L341.2 154Z"/><path class="k-shade" data-shade="2" d="M340.7 151.7L340.1 151.7L340.1 154.1L340.7 154.2Z"/><path class="k-shade" data-shade="3" d="M340.1 151.7L335.3 150L335.3 152.4L340.1 154.1ZM335.3 150L335 149.7L335 152.1L335.3 152.4Z"/><path class="k-top" d="M344.9 148L345.2 148.2L345.1 148.5L341.2 151.6L340.7 151.7L340.1 151.7L335.3 150L335 149.7L335.1 149.4L339 146.4L339.5 146.2L340.1 146.2Z"/><path class="k-line k-edge" data-tone="lo" d="M335 149.7L335.1 149.4L339 146.4L339.5 146.2L340.1 146.2L344.9 148L345.2 148.2L345.2 150.7L345.1 151L341.2 154L340.7 154.2L340.1 154.1L335.3 152.4L335 152.1Z"/></g></g><g class="tp-cell" data-cell="topic:0:7"><g class="k-solid"><path class="k-fill" d="M342.6 152.4L342.8 152.1L346.6 149.1L347.1 148.9L347.7 149L352.5 150.7L352.8 151L352.8 153.4L352.7 153.7L348.9 156.7L348.4 156.9L347.8 156.9L343 155.1L342.6 154.9Z"/><path class="k-shade" data-shade="0" d="M352.8 151L352.7 151.3L352.7 153.7L352.8 153.4ZM352.7 151.3L348.9 154.3L348.9 156.7L352.7 153.7ZM348.9 154.3L348.4 154.5L348.4 156.9L348.9 156.7Z"/><path class="k-shade" data-shade="2" d="M348.4 154.5L347.8 154.4L347.8 156.9L348.4 156.9Z"/><path class="k-shade" data-shade="3" d="M347.8 154.4L343 152.7L343 155.1L347.8 156.9ZM343 152.7L342.6 152.4L342.6 154.9L343 155.1Z"/><path class="k-top" d="M352.5 150.7L352.8 151L352.7 151.3L348.9 154.3L348.4 154.5L347.8 154.4L343 152.7L342.6 152.4L342.8 152.1L346.6 149.1L347.1 148.9L347.7 149Z"/><path class="k-line k-edge" data-tone="lo" d="M342.6 152.4L342.8 152.1L346.6 149.1L347.1 148.9L347.7 149L352.5 150.7L352.8 151L352.8 153.4L352.7 153.7L348.9 156.7L348.4 156.9L347.8 156.9L343 155.1L342.6 154.9Z"/></g></g><g class="tp-cell" data-cell="topic:0:8"><g class="k-solid"><path class="k-fill" d="M350.3 155.1L350.4 154.8L354.2 151.8L354.7 151.6L355.3 151.7L360.1 153.4L360.5 153.7L360.5 156.2L360.4 156.5L356.5 159.5L356 159.7L355.4 159.6L350.6 157.9L350.3 157.6Z"/><path class="k-shade" data-shade="0" d="M360.5 153.7L360.4 154L360.4 156.5L360.5 156.2ZM360.4 154L356.5 157L356.5 159.5L360.4 156.5ZM356.5 157L356 157.2L356 159.7L356.5 159.5Z"/><path class="k-shade" data-shade="2" d="M356 157.2L355.4 157.1L355.4 159.6L356 159.7Z"/><path class="k-shade" data-shade="3" d="M355.4 157.1L350.6 155.4L350.6 157.9L355.4 159.6ZM350.6 155.4L350.3 155.1L350.3 157.6L350.6 157.9Z"/><path class="k-top" d="M360.1 153.4L360.5 153.7L360.4 154L356.5 157L356 157.2L355.4 157.1L350.6 155.4L350.3 155.1L350.4 154.8L354.2 151.8L354.7 151.6L355.3 151.7Z"/><path class="k-line k-edge" data-tone="lo" d="M350.3 155.1L350.4 154.8L354.2 151.8L354.7 151.6L355.3 151.7L360.1 153.4L360.5 153.7L360.5 156.2L360.4 156.5L356.5 159.5L356 159.7L355.4 159.6L350.6 157.9L350.3 157.6Z"/></g></g><g class="tp-cell" data-cell="topic:0:9"><g class="k-solid"><path class="k-fill" d="M357.9 157.9L358 157.6L361.9 154.6L362.4 154.4L363 154.4L367.8 156.2L368.1 156.4L368.1 158.9L368 159.2L364.2 162.2L363.7 162.4L363.1 162.3L358.3 160.6L357.9 160.3Z"/><path class="k-shade" data-shade="0" d="M368.1 156.4L368 156.7L368 159.2L368.1 158.9ZM368 156.7L364.2 159.7L364.2 162.2L368 159.2ZM364.2 159.7L363.7 159.9L363.7 162.4L364.2 162.2Z"/><path class="k-shade" data-shade="2" d="M363.7 159.9L363.1 159.9L363.1 162.3L363.7 162.4Z"/><path class="k-shade" data-shade="3" d="M363.1 159.9L358.3 158.1L358.3 160.6L363.1 162.3ZM358.3 158.1L357.9 157.9L357.9 160.3L358.3 160.6Z"/><path class="k-top" d="M367.8 156.2L368.1 156.4L368 156.7L364.2 159.7L363.7 159.9L363.1 159.9L358.3 158.1L357.9 157.9L358 157.6L361.9 154.6L362.4 154.4L363 154.4Z"/><path class="k-line k-edge" data-tone="lo" d="M357.9 157.9L358 157.6L361.9 154.6L362.4 154.4L363 154.4L367.8 156.2L368.1 156.4L368.1 158.9L368 159.2L364.2 162.2L363.7 162.4L363.1 162.3L358.3 160.6L357.9 160.3Z"/></g></g><g class="tp-cell" data-cell="topic:0:10"><g class="k-solid"><path class="k-fill" d="M365.6 160.6L365.7 160.3L369.5 157.3L370 157.1L370.6 157.2L375.4 158.9L375.8 159.2L375.8 161.6L375.6 161.9L371.8 164.9L371.3 165.1L370.7 165.1L365.9 163.3L365.6 163.1Z"/><path class="k-shade" data-shade="0" d="M375.8 159.2L375.6 159.5L375.6 161.9L375.8 161.6ZM375.6 159.5L371.8 162.5L371.8 164.9L375.6 161.9ZM371.8 162.5L371.3 162.7L371.3 165.1L371.8 164.9Z"/><path class="k-shade" data-shade="2" d="M371.3 162.7L370.7 162.6L370.7 165.1L371.3 165.1Z"/><path class="k-shade" data-shade="3" d="M370.7 162.6L365.9 160.9L365.9 163.3L370.7 165.1ZM365.9 160.9L365.6 160.6L365.6 163.1L365.9 163.3Z"/><path class="k-top" d="M375.4 158.9L375.8 159.2L375.6 159.5L371.8 162.5L371.3 162.7L370.7 162.6L365.9 160.9L365.6 160.6L365.7 160.3L369.5 157.3L370 157.1L370.6 157.2Z"/><path class="k-line k-edge" data-tone="lo" d="M365.6 160.6L365.7 160.3L369.5 157.3L370 157.1L370.6 157.2L375.4 158.9L375.8 159.2L375.8 161.6L375.6 161.9L371.8 164.9L371.3 165.1L370.7 165.1L365.9 163.3L365.6 163.1Z"/></g></g><g class="tp-cell" data-cell="topic:0:11"><g class="k-solid"><path class="k-fill" d="M373.2 163.3L373.3 163L377.2 160L377.7 159.8L378.3 159.9L383.1 161.6L383.4 161.9L383.4 164.3L383.3 164.7L379.4 167.7L378.9 167.8L378.4 167.8L373.5 166.1L373.2 165.8Z"/><path class="k-shade" data-shade="0" d="M383.4 161.9L383.3 162.2L383.3 164.7L383.4 164.3ZM383.3 162.2L379.4 165.2L379.4 167.7L383.3 164.7ZM379.4 165.2L378.9 165.4L378.9 167.8L379.4 167.7Z"/><path class="k-shade" data-shade="2" d="M378.9 165.4L378.4 165.3L378.4 167.8L378.9 167.8Z"/><path class="k-shade" data-shade="3" d="M378.4 165.3L373.5 163.6L373.5 166.1L378.4 167.8ZM373.5 163.6L373.2 163.3L373.2 165.8L373.5 166.1Z"/><path class="k-top" d="M383.1 161.6L383.4 161.9L383.3 162.2L379.4 165.2L378.9 165.4L378.4 165.3L373.5 163.6L373.2 163.3L373.3 163L377.2 160L377.7 159.8L378.3 159.9Z"/><path class="k-line k-edge" data-tone="lo" d="M373.2 163.3L373.3 163L377.2 160L377.7 159.8L378.3 159.9L383.1 161.6L383.4 161.9L383.4 164.3L383.3 164.7L379.4 167.7L378.9 167.8L378.4 167.8L373.5 166.1L373.2 165.8Z"/></g></g><g class="tp-cursor" data-cursor="topic:0:0" data-g="0"><g class="k-solid" data-lit><path class="k-fill" d="M285.9 131.3L293.2 125.5L294 125.5L294.8 125.8L295 126.2L295 131.1L287.6 136.9L286.9 136.9L286 136.6L285.9 136.2Z"/><path class="k-shade" data-shade="0" d="M295 126.2L287.6 132L287.6 136.9L295 131.1Z"/><path class="k-shade" data-shade="1" d="M287.6 132L286.9 132L286.9 136.9L287.6 136.9Z"/><path class="k-shade" data-shade="3" d="M286.9 132L286 131.7L286 136.6L286.9 136.9ZM286 131.7L285.9 131.3L285.9 136.2L286 136.6Z"/><path class="k-top" d="M294.8 125.8L295 126.2L287.6 132L286.9 132L286 131.7L285.9 131.3L293.2 125.5L294 125.5Z"/><path class="k-line k-crease" data-tone="faint" d="M295 126.2L287.6 132M287.6 132L286.9 132M286.9 132L286 131.7M286 131.7L285.9 131.3"/><path class="k-line k-edge" data-tone="hi" d="M285.9 131.3L293.2 125.5L294 125.5L294.8 125.8L295 126.2L295 131.1L287.6 136.9L286.9 136.9L286 136.6L285.9 136.2Z"/></g></g></g><g class="tp-lane" data-lane="topic:1"><g class="k-solid"><path class="k-fill" d="M277.4 141.8L277.6 141.3L282.7 137.2L283.6 136.9L284.5 137L378.4 170.6L379 171L379 171.7L378.8 172.2L373.6 176.3L372.8 176.6L371.8 176.5L277.9 142.9L277.4 142.5Z"/><path class="k-shade" data-shade="0" d="M379 171L378.8 171.6L378.8 172.2L379 171.7ZM378.8 171.6L373.6 175.6L373.6 176.3L378.8 172.2ZM373.6 175.6L372.8 175.9L372.8 176.6L373.6 176.3Z"/><path class="k-shade" data-shade="2" d="M372.8 175.9L371.8 175.8L371.8 176.5L372.8 176.6Z"/><path class="k-shade" data-shade="3" d="M371.8 175.8L277.9 142.2L277.9 142.9L371.8 176.5ZM277.9 142.2L277.4 141.8L277.4 142.5L277.9 142.9Z"/><path class="k-top" d="M378.4 170.6L379 171L378.8 171.6L373.6 175.6L372.8 175.9L371.8 175.8L277.9 142.2L277.4 141.8L277.6 141.3L282.7 137.2L283.6 136.9L284.5 137Z"/><path class="k-line k-edge" data-tone="lo" d="M277.4 141.8L277.6 141.3L282.7 137.2L283.6 136.9L284.5 137L378.4 170.6L379 171L379 171.7L378.8 172.2L373.6 176.3L372.8 176.6L371.8 176.5L277.9 142.9L277.4 142.5Z"/></g><g class="tp-cell" data-cell="topic:1:0"><g class="k-solid"><path class="k-fill" d="M281.1 139.7L281.2 139.3L285 136.3L285.5 136.2L286.1 136.2L290.9 137.9L291.2 138.2L291.2 140.7L291.1 141L287.3 144L286.8 144.2L286.2 144.1L281.4 142.4L281.1 142.1Z"/><path class="k-shade" data-shade="0" d="M291.2 138.2L291.1 138.5L291.1 141L291.2 140.7ZM291.1 138.5L287.3 141.5L287.3 144L291.1 141ZM287.3 141.5L286.8 141.7L286.8 144.2L287.3 144Z"/><path class="k-shade" data-shade="2" d="M286.8 141.7L286.2 141.6L286.2 144.1L286.8 144.2Z"/><path class="k-shade" data-shade="3" d="M286.2 141.6L281.4 139.9L281.4 142.4L286.2 144.1ZM281.4 139.9L281.1 139.7L281.1 142.1L281.4 142.4Z"/><path class="k-top" d="M290.9 137.9L291.2 138.2L291.1 138.5L287.3 141.5L286.8 141.7L286.2 141.6L281.4 139.9L281.1 139.7L281.2 139.3L285 136.3L285.5 136.2L286.1 136.2Z"/><path class="k-line k-edge" data-tone="lo" d="M281.1 139.7L281.2 139.3L285 136.3L285.5 136.2L286.1 136.2L290.9 137.9L291.2 138.2L291.2 140.7L291.1 141L287.3 144L286.8 144.2L286.2 144.1L281.4 142.4L281.1 142.1Z"/></g></g><g class="tp-cell" data-cell="topic:1:1"><g class="k-solid"><path class="k-fill" d="M288.7 142.4L288.8 142.1L292.6 139.1L293.1 138.9L293.7 139L298.5 140.7L298.9 140.9L298.9 143.4L298.8 143.7L294.9 146.7L294.4 146.9L293.8 146.8L289 145.1L288.7 144.8Z"/><path class="k-shade" data-shade="0" d="M298.9 140.9L298.8 141.3L298.8 143.7L298.9 143.4ZM298.8 141.3L294.9 144.3L294.9 146.7L298.8 143.7ZM294.9 144.3L294.4 144.4L294.4 146.9L294.9 146.7Z"/><path class="k-shade" data-shade="2" d="M294.4 144.4L293.8 144.4L293.8 146.8L294.4 146.9Z"/><path class="k-shade" data-shade="3" d="M293.8 144.4L289 142.7L289 145.1L293.8 146.8ZM289 142.7L288.7 142.4L288.7 144.8L289 145.1Z"/><path class="k-top" d="M298.5 140.7L298.9 140.9L298.8 141.3L294.9 144.3L294.4 144.4L293.8 144.4L289 142.7L288.7 142.4L288.8 142.1L292.6 139.1L293.1 138.9L293.7 139Z"/><path class="k-line k-edge" data-tone="lo" d="M288.7 142.4L288.8 142.1L292.6 139.1L293.1 138.9L293.7 139L298.5 140.7L298.9 140.9L298.9 143.4L298.8 143.7L294.9 146.7L294.4 146.9L293.8 146.8L289 145.1L288.7 144.8Z"/></g></g><g class="tp-cell" data-cell="topic:1:2"><g class="k-solid"><path class="k-fill" d="M296.3 145.1L296.5 144.8L300.3 141.8L300.8 141.6L301.4 141.7L306.2 143.4L306.5 143.7L306.5 146.1L306.4 146.4L302.6 149.4L302.1 149.6L301.5 149.6L296.7 147.8L296.3 147.6Z"/><path class="k-shade" data-shade="0" d="M306.5 143.7L306.4 144L306.4 146.4L306.5 146.1ZM306.4 144L302.6 147L302.6 149.4L306.4 146.4ZM302.6 147L302.1 147.2L302.1 149.6L302.6 149.4Z"/><path class="k-shade" data-shade="2" d="M302.1 147.2L301.5 147.1L301.5 149.6L302.1 149.6Z"/><path class="k-shade" data-shade="3" d="M301.5 147.1L296.7 145.4L296.7 147.8L301.5 149.6ZM296.7 145.4L296.3 145.1L296.3 147.6L296.7 147.8Z"/><path class="k-top" d="M306.2 143.4L306.5 143.7L306.4 144L302.6 147L302.1 147.2L301.5 147.1L296.7 145.4L296.3 145.1L296.5 144.8L300.3 141.8L300.8 141.6L301.4 141.7Z"/><path class="k-line k-edge" data-tone="lo" d="M296.3 145.1L296.5 144.8L300.3 141.8L300.8 141.6L301.4 141.7L306.2 143.4L306.5 143.7L306.5 146.1L306.4 146.4L302.6 149.4L302.1 149.6L301.5 149.6L296.7 147.8L296.3 147.6Z"/></g></g><g class="tp-cell" data-cell="topic:1:3"><g class="k-solid"><path class="k-fill" d="M304 147.9L304.1 147.5L307.9 144.5L308.4 144.4L309 144.4L313.8 146.1L314.2 146.4L314.2 148.9L314 149.2L310.2 152.2L309.7 152.4L309.1 152.3L304.3 150.6L304 150.3Z"/><path class="k-shade" data-shade="0" d="M314.2 146.4L314 146.7L314 149.2L314.2 148.9ZM314 146.7L310.2 149.7L310.2 152.2L314 149.2ZM310.2 149.7L309.7 149.9L309.7 152.4L310.2 152.2Z"/><path class="k-shade" data-shade="2" d="M309.7 149.9L309.1 149.8L309.1 152.3L309.7 152.4Z"/><path class="k-shade" data-shade="3" d="M309.1 149.8L304.3 148.1L304.3 150.6L309.1 152.3ZM304.3 148.1L304 147.9L304 150.3L304.3 150.6Z"/><path class="k-top" d="M313.8 146.1L314.2 146.4L314 146.7L310.2 149.7L309.7 149.9L309.1 149.8L304.3 148.1L304 147.9L304.1 147.5L307.9 144.5L308.4 144.4L309 144.4Z"/><path class="k-line k-edge" data-tone="lo" d="M304 147.9L304.1 147.5L307.9 144.5L308.4 144.4L309 144.4L313.8 146.1L314.2 146.4L314.2 148.9L314 149.2L310.2 152.2L309.7 152.4L309.1 152.3L304.3 150.6L304 150.3Z"/></g></g><g class="tp-cell" data-cell="topic:1:4"><g class="k-solid"><path class="k-fill" d="M311.6 150.6L311.7 150.3L315.6 147.3L316.1 147.1L316.7 147.1L321.5 148.9L321.8 149.1L321.8 151.6L321.7 151.9L317.9 154.9L317.4 155.1L316.8 155L312 153.3L311.6 153Z"/><path class="k-shade" data-shade="0" d="M321.8 149.1L321.7 149.4L321.7 151.9L321.8 151.6ZM321.7 149.4L317.9 152.5L317.9 154.9L321.7 151.9ZM317.9 152.5L317.4 152.6L317.4 155.1L317.9 154.9Z"/><path class="k-shade" data-shade="2" d="M317.4 152.6L316.8 152.6L316.8 155L317.4 155.1Z"/><path class="k-shade" data-shade="3" d="M316.8 152.6L312 150.9L312 153.3L316.8 155ZM312 150.9L311.6 150.6L311.6 153L312 153.3Z"/><path class="k-top" d="M321.5 148.9L321.8 149.1L321.7 149.4L317.9 152.5L317.4 152.6L316.8 152.6L312 150.9L311.6 150.6L311.7 150.3L315.6 147.3L316.1 147.1L316.7 147.1Z"/><path class="k-line k-edge" data-tone="lo" d="M311.6 150.6L311.7 150.3L315.6 147.3L316.1 147.1L316.7 147.1L321.5 148.9L321.8 149.1L321.8 151.6L321.7 151.9L317.9 154.9L317.4 155.1L316.8 155L312 153.3L311.6 153Z"/></g></g><g class="tp-cell" data-cell="topic:1:5"><g class="k-solid"><path class="k-fill" d="M319.3 153.3L319.4 153L323.2 150L323.7 149.8L324.3 149.9L329.1 151.6L329.4 151.9L329.4 154.3L329.3 154.6L325.5 157.6L325 157.8L324.4 157.8L319.6 156L319.3 155.8Z"/><path class="k-shade" data-shade="0" d="M329.4 151.9L329.3 152.2L329.3 154.6L329.4 154.3ZM329.3 152.2L325.5 155.2L325.5 157.6L329.3 154.6ZM325.5 155.2L325 155.4L325 157.8L325.5 157.6Z"/><path class="k-shade" data-shade="2" d="M325 155.4L324.4 155.3L324.4 157.8L325 157.8Z"/><path class="k-shade" data-shade="3" d="M324.4 155.3L319.6 153.6L319.6 156L324.4 157.8ZM319.6 153.6L319.3 153.3L319.3 155.8L319.6 156Z"/><path class="k-top" d="M329.1 151.6L329.4 151.9L329.3 152.2L325.5 155.2L325 155.4L324.4 155.3L319.6 153.6L319.3 153.3L319.4 153L323.2 150L323.7 149.8L324.3 149.9Z"/><path class="k-line k-edge" data-tone="lo" d="M319.3 153.3L319.4 153L323.2 150L323.7 149.8L324.3 149.9L329.1 151.6L329.4 151.9L329.4 154.3L329.3 154.6L325.5 157.6L325 157.8L324.4 157.8L319.6 156L319.3 155.8Z"/></g></g><g class="tp-cell" data-cell="topic:1:6"><g class="k-solid"><path class="k-fill" d="M326.9 156L327 155.7L330.9 152.7L331.4 152.5L332 152.6L336.8 154.3L337.1 154.6L337.1 157.1L337 157.4L333.1 160.4L332.6 160.6L332 160.5L327.2 158.8L326.9 158.5Z"/><path class="k-shade" data-shade="0" d="M337.1 154.6L337 154.9L337 157.4L337.1 157.1ZM337 154.9L333.1 157.9L333.1 160.4L337 157.4ZM333.1 157.9L332.6 158.1L332.6 160.6L333.1 160.4Z"/><path class="k-shade" data-shade="2" d="M332.6 158.1L332 158L332 160.5L332.6 160.6Z"/><path class="k-shade" data-shade="3" d="M332 158L327.2 156.3L327.2 158.8L332 160.5ZM327.2 156.3L326.9 156L326.9 158.5L327.2 158.8Z"/><path class="k-top" d="M336.8 154.3L337.1 154.6L337 154.9L333.1 157.9L332.6 158.1L332 158L327.2 156.3L326.9 156L327 155.7L330.9 152.7L331.4 152.5L332 152.6Z"/><path class="k-line k-edge" data-tone="lo" d="M326.9 156L327 155.7L330.9 152.7L331.4 152.5L332 152.6L336.8 154.3L337.1 154.6L337.1 157.1L337 157.4L333.1 160.4L332.6 160.6L332 160.5L327.2 158.8L326.9 158.5Z"/></g></g><g class="tp-cell" data-cell="topic:1:7"><g class="k-solid"><path class="k-fill" d="M334.5 158.8L334.7 158.5L338.5 155.5L339 155.3L339.6 155.3L344.4 157.1L344.7 157.3L344.7 159.8L344.6 160.1L340.8 163.1L340.3 163.3L339.7 163.2L334.9 161.5L334.5 161.2Z"/><path class="k-shade" data-shade="0" d="M344.7 157.3L344.6 157.6L344.6 160.1L344.7 159.8ZM344.6 157.6L340.8 160.7L340.8 163.1L344.6 160.1ZM340.8 160.7L340.3 160.8L340.3 163.3L340.8 163.1Z"/><path class="k-shade" data-shade="2" d="M340.3 160.8L339.7 160.8L339.7 163.2L340.3 163.3Z"/><path class="k-shade" data-shade="3" d="M339.7 160.8L334.9 159L334.9 161.5L339.7 163.2ZM334.9 159L334.5 158.8L334.5 161.2L334.9 161.5Z"/><path class="k-top" d="M344.4 157.1L344.7 157.3L344.6 157.6L340.8 160.7L340.3 160.8L339.7 160.8L334.9 159L334.5 158.8L334.7 158.5L338.5 155.5L339 155.3L339.6 155.3Z"/><path class="k-line k-edge" data-tone="lo" d="M334.5 158.8L334.7 158.5L338.5 155.5L339 155.3L339.6 155.3L344.4 157.1L344.7 157.3L344.7 159.8L344.6 160.1L340.8 163.1L340.3 163.3L339.7 163.2L334.9 161.5L334.5 161.2Z"/></g></g><g class="tp-cell" data-cell="topic:1:8"><g class="k-solid"><path class="k-fill" d="M342.2 161.5L342.3 161.2L346.1 158.2L346.6 158L347.2 158.1L352 159.8L352.4 160.1L352.4 162.5L352.3 162.8L348.4 165.8L347.9 166L347.3 166L342.5 164.2L342.2 164Z"/><path class="k-shade" data-shade="0" d="M352.4 160.1L352.3 160.4L352.3 162.8L352.4 162.5ZM352.3 160.4L348.4 163.4L348.4 165.8L352.3 162.8ZM348.4 163.4L347.9 163.6L347.9 166L348.4 165.8Z"/><path class="k-shade" data-shade="2" d="M347.9 163.6L347.3 163.5L347.3 166L347.9 166Z"/><path class="k-shade" data-shade="3" d="M347.3 163.5L342.5 161.8L342.5 164.2L347.3 166ZM342.5 161.8L342.2 161.5L342.2 164L342.5 164.2Z"/><path class="k-top" d="M352 159.8L352.4 160.1L352.3 160.4L348.4 163.4L347.9 163.6L347.3 163.5L342.5 161.8L342.2 161.5L342.3 161.2L346.1 158.2L346.6 158L347.2 158.1Z"/><path class="k-line k-edge" data-tone="lo" d="M342.2 161.5L342.3 161.2L346.1 158.2L346.6 158L347.2 158.1L352 159.8L352.4 160.1L352.4 162.5L352.3 162.8L348.4 165.8L347.9 166L347.3 166L342.5 164.2L342.2 164Z"/></g></g><g class="tp-cell" data-cell="topic:1:9"><g class="k-solid"><path class="k-fill" d="M349.8 164.2L349.9 163.9L353.8 160.9L354.3 160.7L354.9 160.8L359.7 162.5L360 162.8L360 165.2L359.9 165.6L356.1 168.6L355.6 168.7L355 168.7L350.2 167L349.8 166.7Z"/><path class="k-shade" data-shade="0" d="M360 162.8L359.9 163.1L359.9 165.6L360 165.2ZM359.9 163.1L356.1 166.1L356.1 168.6L359.9 165.6ZM356.1 166.1L355.6 166.3L355.6 168.7L356.1 168.6Z"/><path class="k-shade" data-shade="2" d="M355.6 166.3L355 166.2L355 168.7L355.6 168.7Z"/><path class="k-shade" data-shade="3" d="M355 166.2L350.2 164.5L350.2 167L355 168.7ZM350.2 164.5L349.8 164.2L349.8 166.7L350.2 167Z"/><path class="k-top" d="M359.7 162.5L360 162.8L359.9 163.1L356.1 166.1L355.6 166.3L355 166.2L350.2 164.5L349.8 164.2L349.9 163.9L353.8 160.9L354.3 160.7L354.9 160.8Z"/><path class="k-line k-edge" data-tone="lo" d="M349.8 164.2L349.9 163.9L353.8 160.9L354.3 160.7L354.9 160.8L359.7 162.5L360 162.8L360 165.2L359.9 165.6L356.1 168.6L355.6 168.7L355 168.7L350.2 167L349.8 166.7Z"/></g></g><g class="tp-cell" data-cell="topic:1:10"><g class="k-solid"><path class="k-fill" d="M357.5 167L357.6 166.7L361.4 163.7L361.9 163.5L362.5 163.5L367.3 165.3L367.7 165.5L367.7 168L367.5 168.3L363.7 171.3L363.2 171.5L362.6 171.4L357.8 169.7L357.5 169.4Z"/><path class="k-shade" data-shade="0" d="M367.7 165.5L367.5 165.8L367.5 168.3L367.7 168ZM367.5 165.8L363.7 168.8L363.7 171.3L367.5 168.3ZM363.7 168.8L363.2 169L363.2 171.5L363.7 171.3Z"/><path class="k-shade" data-shade="2" d="M363.2 169L362.6 169L362.6 171.4L363.2 171.5Z"/><path class="k-shade" data-shade="3" d="M362.6 169L357.8 167.2L357.8 169.7L362.6 171.4ZM357.8 167.2L357.5 167L357.5 169.4L357.8 169.7Z"/><path class="k-top" d="M367.3 165.3L367.7 165.5L367.5 165.8L363.7 168.8L363.2 169L362.6 169L357.8 167.2L357.5 167L357.6 166.7L361.4 163.7L361.9 163.5L362.5 163.5Z"/><path class="k-line k-edge" data-tone="lo" d="M357.5 167L357.6 166.7L361.4 163.7L361.9 163.5L362.5 163.5L367.3 165.3L367.7 165.5L367.7 168L367.5 168.3L363.7 171.3L363.2 171.5L362.6 171.4L357.8 169.7L357.5 169.4Z"/></g></g><g class="tp-cell" data-cell="topic:1:11"><g class="k-solid"><path class="k-fill" d="M365.1 169.7L365.2 169.4L369.1 166.4L369.6 166.2L370.2 166.3L375 168L375.3 168.3L375.3 170.7L375.2 171L371.3 174L370.8 174.2L370.3 174.1L365.4 172.4L365.1 172.2Z"/><path class="k-shade" data-shade="0" d="M375.3 168.3L375.2 168.6L375.2 171L375.3 170.7ZM375.2 168.6L371.3 171.6L371.3 174L375.2 171ZM371.3 171.6L370.8 171.8L370.8 174.2L371.3 174Z"/><path class="k-shade" data-shade="2" d="M370.8 171.8L370.3 171.7L370.3 174.1L370.8 174.2Z"/><path class="k-shade" data-shade="3" d="M370.3 171.7L365.4 170L365.4 172.4L370.3 174.1ZM365.4 170L365.1 169.7L365.1 172.2L365.4 172.4Z"/><path class="k-top" d="M375 168L375.3 168.3L375.2 168.6L371.3 171.6L370.8 171.8L370.3 171.7L365.4 170L365.1 169.7L365.2 169.4L369.1 166.4L369.6 166.2L370.2 166.3Z"/><path class="k-line k-edge" data-tone="lo" d="M365.1 169.7L365.2 169.4L369.1 166.4L369.6 166.2L370.2 166.3L375 168L375.3 168.3L375.3 170.7L375.2 171L371.3 174L370.8 174.2L370.3 174.1L365.4 172.4L365.1 172.2Z"/></g></g><g class="tp-cursor" data-cursor="topic:0:1" data-g="0"><g class="k-solid" data-lit><path class="k-fill" d="M277.8 137.7L285.1 131.9L285.9 131.8L286.7 132.1L286.9 132.5L286.9 137.4L279.5 143.2L278.8 143.3L277.9 143L277.8 142.6Z"/><path class="k-shade" data-shade="0" d="M286.9 132.5L279.5 138.3L279.5 143.2L286.9 137.4Z"/><path class="k-shade" data-shade="1" d="M279.5 138.3L278.8 138.4L278.8 143.3L279.5 143.2Z"/><path class="k-shade" data-shade="3" d="M278.8 138.4L277.9 138.1L277.9 143L278.8 143.3ZM277.9 138.1L277.8 137.7L277.8 142.6L277.9 143Z"/><path class="k-top" d="M286.7 132.1L286.9 132.5L279.5 138.3L278.8 138.4L277.9 138.1L277.8 137.7L285.1 131.9L285.9 131.8Z"/><path class="k-line k-crease" data-tone="faint" d="M286.9 132.5L279.5 138.3M279.5 138.3L278.8 138.4M278.8 138.4L277.9 138.1M277.9 138.1L277.8 137.7"/><path class="k-line k-edge" data-tone="hi" d="M277.8 137.7L285.1 131.9L285.9 131.8L286.7 132.1L286.9 132.5L286.9 137.4L279.5 143.2L278.8 143.3L277.9 143L277.8 142.6Z"/></g></g></g><g class="tp-lane" data-lane="topic:2"><g class="k-solid"><path class="k-fill" d="M269.3 148.2L269.5 147.6L274.6 143.6L275.5 143.3L276.4 143.4L370.3 177L370.9 177.4L370.9 178.1L370.7 178.6L365.5 182.6L364.7 182.9L363.7 182.8L269.8 149.3L269.3 148.8Z"/><path class="k-shade" data-shade="0" d="M370.9 177.4L370.7 177.9L370.7 178.6L370.9 178.1ZM370.7 177.9L365.5 182L365.5 182.6L370.7 178.6ZM365.5 182L364.7 182.3L364.7 182.9L365.5 182.6Z"/><path class="k-shade" data-shade="2" d="M364.7 182.3L363.7 182.2L363.7 182.8L364.7 182.9Z"/><path class="k-shade" data-shade="3" d="M363.7 182.2L269.8 148.6L269.8 149.3L363.7 182.8ZM269.8 148.6L269.3 148.2L269.3 148.8L269.8 149.3Z"/><path class="k-top" d="M370.3 177L370.9 177.4L370.7 177.9L365.5 182L364.7 182.3L363.7 182.2L269.8 148.6L269.3 148.2L269.5 147.6L274.6 143.6L275.5 143.3L276.4 143.4Z"/><path class="k-line k-edge" data-tone="lo" d="M269.3 148.2L269.5 147.6L274.6 143.6L275.5 143.3L276.4 143.4L370.3 177L370.9 177.4L370.9 178.1L370.7 178.6L365.5 182.6L364.7 182.9L363.7 182.8L269.8 149.3L269.3 148.8Z"/></g><g class="tp-cell" data-cell="topic:2:0"><g class="k-solid"><path class="k-fill" d="M273 146L273.1 145.7L276.9 142.7L277.4 142.5L278 142.6L282.8 144.3L283.1 144.6L283.1 147L283 147.3L279.2 150.4L278.7 150.5L278.1 150.5L273.3 148.7L273 148.5Z"/><path class="k-shade" data-shade="0" d="M283.1 144.6L283 144.9L283 147.3L283.1 147ZM283 144.9L279.2 147.9L279.2 150.4L283 147.3ZM279.2 147.9L278.7 148.1L278.7 150.5L279.2 150.4Z"/><path class="k-shade" data-shade="2" d="M278.7 148.1L278.1 148L278.1 150.5L278.7 150.5Z"/><path class="k-shade" data-shade="3" d="M278.1 148L273.3 146.3L273.3 148.7L278.1 150.5ZM273.3 146.3L273 146L273 148.5L273.3 148.7Z"/><path class="k-top" d="M282.8 144.3L283.1 144.6L283 144.9L279.2 147.9L278.7 148.1L278.1 148L273.3 146.3L273 146L273.1 145.7L276.9 142.7L277.4 142.5L278 142.6Z"/><path class="k-line k-edge" data-tone="lo" d="M273 146L273.1 145.7L276.9 142.7L277.4 142.5L278 142.6L282.8 144.3L283.1 144.6L283.1 147L283 147.3L279.2 150.4L278.7 150.5L278.1 150.5L273.3 148.7L273 148.5Z"/></g></g><g class="tp-cell" data-cell="topic:2:1"><g class="k-solid"><path class="k-fill" d="M280.6 148.8L280.7 148.4L284.5 145.4L285 145.3L285.6 145.3L290.4 147L290.8 147.3L290.8 149.8L290.7 150.1L286.8 153.1L286.3 153.3L285.7 153.2L280.9 151.5L280.6 151.2Z"/><path class="k-shade" data-shade="0" d="M290.8 147.3L290.7 147.6L290.7 150.1L290.8 149.8ZM290.7 147.6L286.8 150.6L286.8 153.1L290.7 150.1ZM286.8 150.6L286.3 150.8L286.3 153.3L286.8 153.1Z"/><path class="k-shade" data-shade="2" d="M286.3 150.8L285.7 150.7L285.7 153.2L286.3 153.3Z"/><path class="k-shade" data-shade="3" d="M285.7 150.7L280.9 149L280.9 151.5L285.7 153.2ZM280.9 149L280.6 148.8L280.6 151.2L280.9 151.5Z"/><path class="k-top" d="M290.4 147L290.8 147.3L290.7 147.6L286.8 150.6L286.3 150.8L285.7 150.7L280.9 149L280.6 148.8L280.7 148.4L284.5 145.4L285 145.3L285.6 145.3Z"/><path class="k-line k-edge" data-tone="lo" d="M280.6 148.8L280.7 148.4L284.5 145.4L285 145.3L285.6 145.3L290.4 147L290.8 147.3L290.8 149.8L290.7 150.1L286.8 153.1L286.3 153.3L285.7 153.2L280.9 151.5L280.6 151.2Z"/></g></g><g class="tp-cell" data-cell="topic:2:2"><g class="k-solid"><path class="k-fill" d="M288.2 151.5L288.4 151.2L292.2 148.2L292.7 148L293.3 148.1L298.1 149.8L298.4 150L298.4 152.5L298.3 152.8L294.5 155.8L294 156L293.4 155.9L288.6 154.2L288.2 153.9Z"/><path class="k-shade" data-shade="0" d="M298.4 150L298.3 150.3L298.3 152.8L298.4 152.5ZM298.3 150.3L294.5 153.4L294.5 155.8L298.3 152.8ZM294.5 153.4L294 153.5L294 156L294.5 155.8Z"/><path class="k-shade" data-shade="2" d="M294 153.5L293.4 153.5L293.4 155.9L294 156Z"/><path class="k-shade" data-shade="3" d="M293.4 153.5L288.6 151.8L288.6 154.2L293.4 155.9ZM288.6 151.8L288.2 151.5L288.2 153.9L288.6 154.2Z"/><path class="k-top" d="M298.1 149.8L298.4 150L298.3 150.3L294.5 153.4L294 153.5L293.4 153.5L288.6 151.8L288.2 151.5L288.4 151.2L292.2 148.2L292.7 148L293.3 148.1Z"/><path class="k-line k-edge" data-tone="lo" d="M288.2 151.5L288.4 151.2L292.2 148.2L292.7 148L293.3 148.1L298.1 149.8L298.4 150L298.4 152.5L298.3 152.8L294.5 155.8L294 156L293.4 155.9L288.6 154.2L288.2 153.9Z"/></g></g><g class="tp-cell" data-cell="topic:2:3"><g class="k-solid"><path class="k-fill" d="M295.9 154.2L296 153.9L299.8 150.9L300.3 150.7L300.9 150.8L305.7 152.5L306.1 152.8L306.1 155.2L305.9 155.5L302.1 158.5L301.6 158.7L301 158.7L296.2 156.9L295.9 156.7Z"/><path class="k-shade" data-shade="0" d="M306.1 152.8L305.9 153.1L305.9 155.5L306.1 155.2ZM305.9 153.1L302.1 156.1L302.1 158.5L305.9 155.5ZM302.1 156.1L301.6 156.3L301.6 158.7L302.1 158.5Z"/><path class="k-shade" data-shade="2" d="M301.6 156.3L301 156.2L301 158.7L301.6 158.7Z"/><path class="k-shade" data-shade="3" d="M301 156.2L296.2 154.5L296.2 156.9L301 158.7ZM296.2 154.5L295.9 154.2L295.9 156.7L296.2 156.9Z"/><path class="k-top" d="M305.7 152.5L306.1 152.8L305.9 153.1L302.1 156.1L301.6 156.3L301 156.2L296.2 154.5L295.9 154.2L296 153.9L299.8 150.9L300.3 150.7L300.9 150.8Z"/><path class="k-line k-edge" data-tone="lo" d="M295.9 154.2L296 153.9L299.8 150.9L300.3 150.7L300.9 150.8L305.7 152.5L306.1 152.8L306.1 155.2L305.9 155.5L302.1 158.5L301.6 158.7L301 158.7L296.2 156.9L295.9 156.7Z"/></g></g><g class="tp-cell" data-cell="topic:2:4"><g class="k-solid"><path class="k-fill" d="M303.5 156.9L303.6 156.6L307.5 153.6L308 153.4L308.6 153.5L313.4 155.2L313.7 155.5L313.7 158L313.6 158.3L309.8 161.3L309.3 161.5L308.7 161.4L303.9 159.7L303.5 159.4Z"/><path class="k-shade" data-shade="0" d="M313.7 155.5L313.6 155.8L313.6 158.3L313.7 158ZM313.6 155.8L309.8 158.8L309.8 161.3L313.6 158.3ZM309.8 158.8L309.3 159L309.3 161.5L309.8 161.3Z"/><path class="k-shade" data-shade="2" d="M309.3 159L308.7 158.9L308.7 161.4L309.3 161.5Z"/><path class="k-shade" data-shade="3" d="M308.7 158.9L303.9 157.2L303.9 159.7L308.7 161.4ZM303.9 157.2L303.5 156.9L303.5 159.4L303.9 159.7Z"/><path class="k-top" d="M313.4 155.2L313.7 155.5L313.6 155.8L309.8 158.8L309.3 159L308.7 158.9L303.9 157.2L303.5 156.9L303.6 156.6L307.5 153.6L308 153.4L308.6 153.5Z"/><path class="k-line k-edge" data-tone="lo" d="M303.5 156.9L303.6 156.6L307.5 153.6L308 153.4L308.6 153.5L313.4 155.2L313.7 155.5L313.7 158L313.6 158.3L309.8 161.3L309.3 161.5L308.7 161.4L303.9 159.7L303.5 159.4Z"/></g></g><g class="tp-cell" data-cell="topic:2:5"><g class="k-solid"><path class="k-fill" d="M311.2 159.7L311.3 159.4L315.1 156.4L315.6 156.2L316.2 156.2L321 158L321.3 158.2L321.3 160.7L321.2 161L317.4 164L316.9 164.2L316.3 164.1L311.5 162.4L311.2 162.1Z"/><path class="k-shade" data-shade="0" d="M321.3 158.2L321.2 158.5L321.2 161L321.3 160.7ZM321.2 158.5L317.4 161.6L317.4 164L321.2 161ZM317.4 161.6L316.9 161.7L316.9 164.2L317.4 164Z"/><path class="k-shade" data-shade="2" d="M316.9 161.7L316.3 161.7L316.3 164.1L316.9 164.2Z"/><path class="k-shade" data-shade="3" d="M316.3 161.7L311.5 159.9L311.5 162.4L316.3 164.1ZM311.5 159.9L311.2 159.7L311.2 162.1L311.5 162.4Z"/><path class="k-top" d="M321 158L321.3 158.2L321.2 158.5L317.4 161.6L316.9 161.7L316.3 161.7L311.5 159.9L311.2 159.7L311.3 159.4L315.1 156.4L315.6 156.2L316.2 156.2Z"/><path class="k-line k-edge" data-tone="lo" d="M311.2 159.7L311.3 159.4L315.1 156.4L315.6 156.2L316.2 156.2L321 158L321.3 158.2L321.3 160.7L321.2 161L317.4 164L316.9 164.2L316.3 164.1L311.5 162.4L311.2 162.1Z"/></g></g><g class="tp-cell" data-cell="topic:2:6"><g class="k-solid"><path class="k-fill" d="M318.8 162.4L318.9 162.1L322.8 159.1L323.3 158.9L323.9 159L328.7 160.7L329 161L329 163.4L328.9 163.7L325 166.7L324.5 166.9L323.9 166.9L319.1 165.1L318.8 164.9Z"/><path class="k-shade" data-shade="0" d="M329 161L328.9 161.3L328.9 163.7L329 163.4ZM328.9 161.3L325 164.3L325 166.7L328.9 163.7ZM325 164.3L324.5 164.5L324.5 166.9L325 166.7Z"/><path class="k-shade" data-shade="2" d="M324.5 164.5L323.9 164.4L323.9 166.9L324.5 166.9Z"/><path class="k-shade" data-shade="3" d="M323.9 164.4L319.1 162.7L319.1 165.1L323.9 166.9ZM319.1 162.7L318.8 162.4L318.8 164.9L319.1 165.1Z"/><path class="k-top" d="M328.7 160.7L329 161L328.9 161.3L325 164.3L324.5 164.5L323.9 164.4L319.1 162.7L318.8 162.4L318.9 162.1L322.8 159.1L323.3 158.9L323.9 159Z"/><path class="k-line k-edge" data-tone="lo" d="M318.8 162.4L318.9 162.1L322.8 159.1L323.3 158.9L323.9 159L328.7 160.7L329 161L329 163.4L328.9 163.7L325 166.7L324.5 166.9L323.9 166.9L319.1 165.1L318.8 164.9Z"/></g></g><g class="tp-cell" data-cell="topic:2:7"><g class="k-solid"><path class="k-fill" d="M326.4 165.1L326.6 164.8L330.4 161.8L330.9 161.6L331.5 161.7L336.3 163.4L336.6 163.7L336.6 166.1L336.5 166.5L332.7 169.5L332.2 169.6L331.6 169.6L326.8 167.9L326.4 167.6Z"/><path class="k-shade" data-shade="0" d="M336.6 163.7L336.5 164L336.5 166.5L336.6 166.1ZM336.5 164L332.7 167L332.7 169.5L336.5 166.5ZM332.7 167L332.2 167.2L332.2 169.6L332.7 169.5Z"/><path class="k-shade" data-shade="2" d="M332.2 167.2L331.6 167.1L331.6 169.6L332.2 169.6Z"/><path class="k-shade" data-shade="3" d="M331.6 167.1L326.8 165.4L326.8 167.9L331.6 169.6ZM326.8 165.4L326.4 165.1L326.4 167.6L326.8 167.9Z"/><path class="k-top" d="M336.3 163.4L336.6 163.7L336.5 164L332.7 167L332.2 167.2L331.6 167.1L326.8 165.4L326.4 165.1L326.6 164.8L330.4 161.8L330.9 161.6L331.5 161.7Z"/><path class="k-line k-edge" data-tone="lo" d="M326.4 165.1L326.6 164.8L330.4 161.8L330.9 161.6L331.5 161.7L336.3 163.4L336.6 163.7L336.6 166.1L336.5 166.5L332.7 169.5L332.2 169.6L331.6 169.6L326.8 167.9L326.4 167.6Z"/></g></g><g class="tp-cell" data-cell="topic:2:8"><g class="k-solid"><path class="k-fill" d="M334.1 167.9L334.2 167.6L338 164.6L338.5 164.4L339.1 164.4L343.9 166.2L344.3 166.4L344.3 168.9L344.2 169.2L340.3 172.2L339.8 172.4L339.2 172.3L334.4 170.6L334.1 170.3Z"/><path class="k-shade" data-shade="0" d="M344.3 166.4L344.2 166.7L344.2 169.2L344.3 168.9ZM344.2 166.7L340.3 169.7L340.3 172.2L344.2 169.2ZM340.3 169.7L339.8 169.9L339.8 172.4L340.3 172.2Z"/><path class="k-shade" data-shade="2" d="M339.8 169.9L339.2 169.9L339.2 172.3L339.8 172.4Z"/><path class="k-shade" data-shade="3" d="M339.2 169.9L334.4 168.1L334.4 170.6L339.2 172.3ZM334.4 168.1L334.1 167.9L334.1 170.3L334.4 170.6Z"/><path class="k-top" d="M343.9 166.2L344.3 166.4L344.2 166.7L340.3 169.7L339.8 169.9L339.2 169.9L334.4 168.1L334.1 167.9L334.2 167.6L338 164.6L338.5 164.4L339.1 164.4Z"/><path class="k-line k-edge" data-tone="lo" d="M334.1 167.9L334.2 167.6L338 164.6L338.5 164.4L339.1 164.4L343.9 166.2L344.3 166.4L344.3 168.9L344.2 169.2L340.3 172.2L339.8 172.4L339.2 172.3L334.4 170.6L334.1 170.3Z"/></g></g><g class="tp-cell" data-cell="topic:2:9"><g class="k-solid"><path class="k-fill" d="M341.7 170.6L341.9 170.3L345.7 167.3L346.2 167.1L346.8 167.2L351.6 168.9L351.9 169.2L351.9 171.6L351.8 171.9L348 174.9L347.5 175.1L346.9 175L342.1 173.3L341.7 173.1Z"/><path class="k-shade" data-shade="0" d="M351.9 169.2L351.8 169.5L351.8 171.9L351.9 171.6ZM351.8 169.5L348 172.5L348 174.9L351.8 171.9ZM348 172.5L347.5 172.7L347.5 175.1L348 174.9Z"/><path class="k-shade" data-shade="2" d="M347.5 172.7L346.9 172.6L346.9 175L347.5 175.1Z"/><path class="k-shade" data-shade="3" d="M346.9 172.6L342.1 170.9L342.1 173.3L346.9 175ZM342.1 170.9L341.7 170.6L341.7 173.1L342.1 173.3Z"/><path class="k-top" d="M351.6 168.9L351.9 169.2L351.8 169.5L348 172.5L347.5 172.7L346.9 172.6L342.1 170.9L341.7 170.6L341.9 170.3L345.7 167.3L346.2 167.1L346.8 167.2Z"/><path class="k-line k-edge" data-tone="lo" d="M341.7 170.6L341.9 170.3L345.7 167.3L346.2 167.1L346.8 167.2L351.6 168.9L351.9 169.2L351.9 171.6L351.8 171.9L348 174.9L347.5 175.1L346.9 175L342.1 173.3L341.7 173.1Z"/></g></g><g class="tp-cell" data-cell="topic:2:10"><g class="k-solid"><path class="k-fill" d="M349.4 173.3L349.5 173L353.3 170L353.8 169.8L354.4 169.9L359.2 171.6L359.6 171.9L359.6 174.3L359.4 174.7L355.6 177.7L355.1 177.8L354.5 177.8L349.7 176.1L349.4 175.8Z"/><path class="k-shade" data-shade="0" d="M359.6 171.9L359.4 172.2L359.4 174.7L359.6 174.3ZM359.4 172.2L355.6 175.2L355.6 177.7L359.4 174.7ZM355.6 175.2L355.1 175.4L355.1 177.8L355.6 177.7Z"/><path class="k-shade" data-shade="2" d="M355.1 175.4L354.5 175.3L354.5 177.8L355.1 177.8Z"/><path class="k-shade" data-shade="3" d="M354.5 175.3L349.7 173.6L349.7 176.1L354.5 177.8ZM349.7 173.6L349.4 173.3L349.4 175.8L349.7 176.1Z"/><path class="k-top" d="M359.2 171.6L359.6 171.9L359.4 172.2L355.6 175.2L355.1 175.4L354.5 175.3L349.7 173.6L349.4 173.3L349.5 173L353.3 170L353.8 169.8L354.4 169.9Z"/><path class="k-line k-edge" data-tone="lo" d="M349.4 173.3L349.5 173L353.3 170L353.8 169.8L354.4 169.9L359.2 171.6L359.6 171.9L359.6 174.3L359.4 174.7L355.6 177.7L355.1 177.8L354.5 177.8L349.7 176.1L349.4 175.8Z"/></g></g><g class="tp-cell" data-cell="topic:2:11"><g class="k-solid"><path class="k-fill" d="M357 176.1L357.1 175.8L361 172.7L361.5 172.6L362.1 172.6L366.9 174.4L367.2 174.6L367.2 177.1L367.1 177.4L363.2 180.4L362.7 180.6L362.2 180.5L357.3 178.8L357 178.5Z"/><path class="k-shade" data-shade="0" d="M367.2 174.6L367.1 174.9L367.1 177.4L367.2 177.1ZM367.1 174.9L363.2 177.9L363.2 180.4L367.1 177.4ZM363.2 177.9L362.7 178.1L362.7 180.6L363.2 180.4Z"/><path class="k-shade" data-shade="2" d="M362.7 178.1L362.2 178.1L362.2 180.5L362.7 180.6Z"/><path class="k-shade" data-shade="3" d="M362.2 178.1L357.3 176.3L357.3 178.8L362.2 180.5ZM357.3 176.3L357 176.1L357 178.5L357.3 178.8Z"/><path class="k-top" d="M366.9 174.4L367.2 174.6L367.1 174.9L363.2 177.9L362.7 178.1L362.2 178.1L357.3 176.3L357 176.1L357.1 175.8L361 172.7L361.5 172.6L362.1 172.6Z"/><path class="k-line k-edge" data-tone="lo" d="M357 176.1L357.1 175.8L361 172.7L361.5 172.6L362.1 172.6L366.9 174.4L367.2 174.6L367.2 177.1L367.1 177.4L363.2 180.4L362.7 180.6L362.2 180.5L357.3 178.8L357 178.5Z"/></g></g><g class="tp-cursor" data-cursor="topic:0:2" data-g="0"><g class="k-solid" data-lit><path class="k-fill" d="M269.7 144.1L277 138.3L277.8 138.2L278.6 138.5L278.8 138.9L278.8 143.8L271.4 149.6L270.7 149.7L269.8 149.4L269.7 149Z"/><path class="k-shade" data-shade="0" d="M278.8 138.9L271.4 144.7L271.4 149.6L278.8 143.8Z"/><path class="k-shade" data-shade="1" d="M271.4 144.7L270.7 144.8L270.7 149.7L271.4 149.6Z"/><path class="k-shade" data-shade="3" d="M270.7 144.8L269.8 144.4L269.8 149.4L270.7 149.7ZM269.8 144.4L269.7 144.1L269.7 149L269.8 149.4Z"/><path class="k-top" d="M278.6 138.5L278.8 138.9L271.4 144.7L270.7 144.8L269.8 144.4L269.7 144.1L277 138.3L277.8 138.2Z"/><path class="k-line k-crease" data-tone="faint" d="M278.8 138.9L271.4 144.7M271.4 144.7L270.7 144.8M270.7 144.8L269.8 144.4M269.8 144.4L269.7 144.1"/><path class="k-line k-edge" data-tone="hi" d="M269.7 144.1L277 138.3L277.8 138.2L278.6 138.5L278.8 138.9L278.8 143.8L271.4 149.6L270.7 149.7L269.8 149.4L269.7 149Z"/></g></g></g></g><g class="tp-node" data-node="ledger-a" data-kind="worker"><path class="k-halo" d="M532.7 202L532.7 201.9L532.8 201.7L532.9 201.6L555 184.3L555.2 184.2L555.4 184.1L555.6 184L555.9 184L556.1 184L556.4 184L556.6 184L556.9 184.1L609.3 202.8L609.5 202.9L609.6 203L609.7 203.1L609.8 203.2L609.8 203.4L609.8 214.3L609.8 214.5L609.7 214.6L609.6 214.7L587.5 232.1L587.4 232.2L587.2 232.3L586.9 232.3L586.7 232.4L586.4 232.4L586.2 232.4L585.9 232.3L585.7 232.3L533.3 213.5L533.1 213.4L532.9 213.3L532.8 213.2L532.7 213.1L532.7 212.9Z"/><g class="k-solid"><path class="k-fill" d="M530.1 203.9L530.7 202.8L552.8 185.5L554.4 184.8L556.4 184.6L558.3 184.9L610.7 203.7L612.1 204.5L612.5 205.5L612.5 214.5L611.8 215.5L589.7 232.9L588.2 233.6L586.1 233.8L584.2 233.4L531.8 214.7L530.5 213.9L530.1 212.8Z"/><path class="k-shade" data-shade="0" d="M612.5 205.5L611.8 206.6L611.8 215.5L612.5 214.5ZM611.8 206.6L589.7 223.9L589.7 232.9L611.8 215.5ZM589.7 223.9L588.2 224.6L588.2 233.6L589.7 232.9Z"/><path class="k-shade" data-shade="1" d="M588.2 224.6L586.1 224.8L586.1 233.8L588.2 233.6Z"/><path class="k-shade" data-shade="2" d="M586.1 224.8L584.2 224.5L584.2 233.4L586.1 233.8Z"/><path class="k-shade" data-shade="3" d="M584.2 224.5L531.8 205.8L531.8 214.7L584.2 233.4ZM531.8 205.8L530.5 204.9L530.5 213.9L531.8 214.7ZM530.5 204.9L530.1 203.9L530.1 212.8L530.5 213.9Z"/><path class="k-top" d="M610.7 203.7L612.1 204.5L612.5 205.5L611.8 206.6L589.7 223.9L588.2 224.6L586.1 224.8L584.2 224.5L531.8 205.8L530.5 204.9L530.1 203.9L530.7 202.8L552.8 185.5L554.4 184.8L556.4 184.6L558.3 184.9Z"/><path class="k-line k-crease" data-tone="faint" d="M612.5 205.5L611.8 206.6M611.8 206.6L589.7 223.9M589.7 223.9L588.2 224.6M588.2 224.6L586.1 224.8M586.1 224.8L584.2 224.5M584.2 224.5L531.8 205.8M531.8 205.8L530.5 204.9M530.5 204.9L530.1 203.9"/><path class="k-line k-bevel" data-tone="faint" d="M611.7 205.5L611 206.5M611 206.5L589.3 223.5M589.3 223.5L587.8 224.2M587.8 224.2L585.9 224.4M585.9 224.4L584 224.1M584 224.1L532.6 205.7M532.6 205.7L531.3 204.9M531.3 204.9L530.9 203.9"/><path class="k-line k-edge" data-tone="mid" d="M530.1 203.9L530.7 202.8L552.8 185.5L554.4 184.8L556.4 184.6L558.3 184.9L610.7 203.7L612.1 204.5L612.5 205.5L612.5 214.5L611.8 215.5L589.7 232.9L588.2 233.6L586.1 233.8L584.2 233.4L531.8 214.7L530.5 213.9L530.1 212.8Z"/></g><path class="k-line" data-tone="lo" d="M543.8 216.3L553.6 219.8L553.6 216.2L543.8 212.7Z"/><path class="k-line" data-tone="lo" d="M555.8 220.6L565.7 224.1L565.7 220.5L555.8 217Z"/><path class="k-line" data-tone="lo" d="M567.8 224.9L577.7 228.4L577.7 224.8L567.8 221.3Z"/><path class="k-line" data-tone="faint" d="M609.6 213.7L591.9 227.5L591.9 225.8L609.6 211.9Z"/><circle class="tp-led" data-led="ledger-a:0" cx="535.1" cy="211.4" r="1.3"/><path class="k-line" data-tone="faint" d="M606.7 205.6L586.1 221.8L535.9 203.8L556.5 187.6Z"/><g class="k-dots" data-tone="lo"><circle cx="555.8" cy="185.9" r="0.5"/><circle cx="610" cy="205.2" r="0.5"/><circle cx="532.6" cy="204.2" r="0.5"/><circle cx="586.7" cy="223.5" r="0.5"/></g><path class="k-line" data-tone="lo" d="M577.8 207L576.5 207.9L574.7 208.5L572.8 208.8L570.7 208.9L568.7 208.7L566.9 208.2L565.3 207.5L564.2 206.5L563.5 205.5L563.4 204.4L563.8 203.3L564.7 202.4L566.1 201.5L567.8 200.9L569.8 200.6L571.8 200.5L573.8 200.7L575.7 201.2L577.2 202L578.4 202.9L579 203.9L579.2 205L578.7 206.1ZM573.9 205.6L573 206.1L571.9 206.3L570.6 206.3L569.5 206.1L568.6 205.6L568.2 205L568.2 204.4L568.7 203.8L569.5 203.3L570.7 203.1L571.9 203.1L573 203.3L573.9 203.8L574.4 204.4L574.4 205Z"/></g><g class="tp-node" data-node="ledger-b" data-kind="worker"><path class="k-halo" d="M465.7 254.6L465.7 254.5L465.8 254.4L465.9 254.3L488 236.9L488.2 236.8L488.4 236.7L488.6 236.7L488.9 236.6L489.1 236.6L489.4 236.6L489.6 236.7L489.8 236.7L542.2 255.4L542.4 255.5L542.6 255.6L542.7 255.8L542.8 255.9L542.8 256L542.8 267L542.8 267.1L542.7 267.2L542.6 267.4L520.5 284.7L520.3 284.8L520.1 284.9L519.9 285L519.7 285L519.4 285L519.2 285L518.9 285L518.7 284.9L466.3 266.2L466.1 266.1L465.9 266L465.8 265.9L465.7 265.7L465.7 265.6Z"/><g class="k-solid"><path class="k-fill" d="M463.1 256.5L463.7 255.5L485.8 238.1L487.4 237.4L489.4 237.2L491.3 237.6L543.7 256.3L545.1 257.1L545.4 258.2L545.4 267.1L544.8 268.1L522.7 285.5L521.1 286.2L519.1 286.4L517.2 286.1L464.8 267.3L463.5 266.5L463.1 265.4Z"/><path class="k-shade" data-shade="0" d="M545.4 258.2L544.8 259.2L544.8 268.1L545.4 267.1ZM544.8 259.2L522.7 276.6L522.7 285.5L544.8 268.1ZM522.7 276.6L521.1 277.3L521.1 286.2L522.7 285.5Z"/><path class="k-shade" data-shade="1" d="M521.1 277.3L519.1 277.5L519.1 286.4L521.1 286.2Z"/><path class="k-shade" data-shade="2" d="M519.1 277.5L517.2 277.1L517.2 286.1L519.1 286.4Z"/><path class="k-shade" data-shade="3" d="M517.2 277.1L464.8 258.4L464.8 267.3L517.2 286.1ZM464.8 258.4L463.5 257.6L463.5 266.5L464.8 267.3ZM463.5 257.6L463.1 256.5L463.1 265.4L463.5 266.5Z"/><path class="k-top" d="M543.7 256.3L545.1 257.1L545.4 258.2L544.8 259.2L522.7 276.6L521.1 277.3L519.1 277.5L517.2 277.1L464.8 258.4L463.5 257.6L463.1 256.5L463.7 255.5L485.8 238.1L487.4 237.4L489.4 237.2L491.3 237.6Z"/><path class="k-line k-crease" data-tone="faint" d="M545.4 258.2L544.8 259.2M544.8 259.2L522.7 276.6M522.7 276.6L521.1 277.3M521.1 277.3L519.1 277.5M519.1 277.5L517.2 277.1M517.2 277.1L464.8 258.4M464.8 258.4L463.5 257.6M463.5 257.6L463.1 256.5"/><path class="k-line k-bevel" data-tone="faint" d="M544.7 258.2L544 259.2M544 259.2L522.3 276.2M522.3 276.2L520.8 276.9M520.8 276.9L518.9 277.1M518.9 277.1L516.9 276.7M516.9 276.7L465.6 258.4M465.6 258.4L464.3 257.6M464.3 257.6L463.9 256.5"/><path class="k-line k-edge" data-tone="mid" d="M463.1 256.5L463.7 255.5L485.8 238.1L487.4 237.4L489.4 237.2L491.3 237.6L543.7 256.3L545.1 257.1L545.4 258.2L545.4 267.1L544.8 268.1L522.7 285.5L521.1 286.2L519.1 286.4L517.2 286.1L464.8 267.3L463.5 266.5L463.1 265.4Z"/></g><path class="k-line" data-tone="lo" d="M476.8 268.9L486.6 272.5L486.6 268.9L476.8 265.4Z"/><path class="k-line" data-tone="lo" d="M488.8 273.2L498.6 276.7L498.6 273.2L488.8 269.7Z"/><path class="k-line" data-tone="lo" d="M500.8 277.5L510.7 281L510.7 277.5L500.8 274Z"/><path class="k-line" data-tone="faint" d="M542.6 266.3L524.9 280.2L524.9 278.4L542.6 264.5Z"/><circle class="tp-led" data-led="ledger-b:0" cx="468.1" cy="264" r="1.3"/><path class="k-line" data-tone="faint" d="M539.7 258.2L519.1 274.4L468.8 256.5L489.5 240.3Z"/><g class="k-dots" data-tone="lo"><circle cx="488.8" cy="238.5" r="0.5"/><circle cx="543" cy="257.9" r="0.5"/><circle cx="465.6" cy="256.8" r="0.5"/><circle cx="519.7" cy="276.2" r="0.5"/></g><path class="k-line" data-tone="lo" d="M510.8 259.7L509.4 260.5L507.7 261.1L505.8 261.5L503.7 261.5L501.7 261.3L499.8 260.8L498.3 260.1L497.2 259.2L496.5 258.1L496.4 257.1L496.8 256L497.7 255L499.1 254.2L500.8 253.6L502.8 253.2L504.8 253.2L506.8 253.4L508.7 253.9L510.2 254.6L511.4 255.5L512 256.6L512.1 257.6L511.7 258.7ZM506.9 258.3L506 258.7L504.9 259L503.6 259L502.5 258.7L501.6 258.3L501.2 257.7L501.2 257L501.6 256.4L502.5 256L503.7 255.7L504.9 255.7L506 256L506.9 256.4L507.4 257L507.4 257.7Z"/></g></svg><svg hidden xmlns="http://www.w3.org/2000/svg" class="k-svg tp-svg tp-flat" viewBox="0 0 640 240" role="img" aria-label="Brokers and ISR: payments-api (service), payments.v1 (kafka), ledger-a (worker), ledger-b (worker). Connections: payments-api to payments.v1; payments.v1 to ledger-a; payments.v1 to ledger-b."><g class="tp-edge" data-edge="0" data-kind="async"><path class="tp-edge-bed" d="M98.2 111.3L242 111.3"/><path class="k-line" data-tone="mid" data-dashed d="M98.2 111.3L242 111.3"/><path class="k-line" data-tone="mid" data-free="" d="M233.9 115L240.1 111.3L233.9 107.6"/><circle class="tp-port" cx="98.2" cy="111.3" r="1.4"/></g><g class="tp-edge" data-edge="1" data-kind="async"><path class="tp-edge-bed" d="M403.2 95L460.9 95L464 94.7L466.4 93.6L468.2 91.9L469.2 89.4L469.5 86.3L469.5 63.6L469.9 60.5L470.9 58L472.7 56.3L475.1 55.2L478.2 54.9L547 54.9"/><path class="k-line" data-tone="mid" data-dashed d="M403.2 95L460.9 95L464 94.7L466.4 93.6L468.2 91.9L469.2 89.4L469.5 86.3L469.5 63.6L469.9 60.5L470.9 58L472.7 56.3L475.1 55.2L478.2 54.9L547 54.9"/><path class="k-line" data-tone="mid" data-free="" d="M539 58.6L545.2 54.9L539 51.2"/></g><g class="tp-edge" data-edge="2" data-kind="async"><path class="tp-edge-bed" d="M403.2 127.6L472 127.6L475.1 128L477.6 129L479.3 130.8L480.4 133.2L480.7 136.3L480.7 159.1L481 162.2L482.1 164.6L483.8 166.4L486.3 167.4L489.4 167.7L547 167.7"/><path class="k-line" data-tone="mid" data-dashed d="M403.2 127.6L472 127.6L475.1 128L477.6 129L479.3 130.8L480.4 133.2L480.7 136.3L480.7 159.1L481 162.2L482.1 164.6L483.8 166.4L486.3 167.4L489.4 167.7L547 167.7"/><path class="k-line" data-tone="mid" data-free="" d="M539 171.5L545.2 167.7L539 164"/></g><g class="tp-label" data-label="api"><text class="tp-ft" x="64.7" y="143.6" font-size="8" text-anchor="middle">payments-api</text></g><g class="tp-label" data-label="topic"><text class="tp-ft" x="322.6" y="150.5" font-size="8" text-anchor="middle">payments.v1</text></g><g class="tp-label" data-label="ledger-a"><text class="tp-ft" x="580.5" y="87.2" font-size="8" text-anchor="middle">ledger-a</text></g><g class="tp-label" data-label="ledger-b"><text class="tp-ft" x="580.5" y="200.1" font-size="8" text-anchor="middle">ledger-b</text></g><g class="tp-elabel" data-elabel="0"><text class="tp-ft tp-elabel-text" x="170.1" y="107.8" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="1"><text class="tp-ft tp-elabel-text" x="508.3" y="51.4" font-size="6.2" text-anchor="middle"></text></g><g class="tp-elabel" data-elabel="2"><text class="tp-ft tp-elabel-text" x="442" y="124.1" font-size="6.2" text-anchor="middle"></text></g><g class="tp-packets" data-packets=""></g><g class="tp-node" data-node="ledger-a" data-kind="worker"><rect class="tp-f" x="547" y="32.6" width="67" height="44.6" rx="4"/><path class="k-line" data-tone="faint" d="M547 43.6L614 43.6"/><circle class="tp-led" data-led="ledger-a:0" cx="553" cy="38.1" r="1.7"/><circle class="tp-f-mark" cx="607" cy="38.1" r="2.6"/></g><g class="tp-node" data-node="api" data-kind="service"><rect class="tp-f tp-f-back" x="36.2" y="84" width="67" height="44.6" rx="4"/><rect class="tp-f tp-f-back" x="33.7" y="86.5" width="67" height="44.6" rx="4"/><rect class="tp-f" x="31.2" y="89" width="67" height="44.6" rx="4"/><path class="k-line" data-tone="faint" d="M31.2 100L98.2 100"/><circle class="tp-led" data-led="api:0" cx="37.2" cy="94.5" r="1.7"/><circle class="tp-led" data-led="api:1" cx="43.2" cy="94.5" r="1.7"/><circle class="tp-led" data-led="api:2" cx="49.2" cy="94.5" r="1.7"/></g><g class="tp-node" data-node="topic" data-kind="kafka"><rect class="tp-f" x="242" y="82.2" width="161.2" height="58.3" rx="4"/><g class="tp-lane" data-lane="topic:0"><rect class="tp-cell tp-fcell" data-cell="topic:0:0" x="289.9" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:1" x="298.6" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:2" x="307.3" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:3" x="316" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:4" x="324.6" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:5" x="333.3" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:6" x="342" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:7" x="350.7" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:8" x="359.4" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:9" x="368" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:10" x="376.7" y="91.7" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:0:11" x="385.4" y="91.7" width="7.1" height="8.3" rx="1"/><path class="tp-cursor tp-fcursor" data-cursor="topic:0:0" data-g="0" d="M289.1 88.9V102.8"/></g><g class="tp-lane" data-lane="topic:1"><rect class="tp-cell tp-fcell" data-cell="topic:1:0" x="289.9" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:1" x="298.6" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:2" x="307.3" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:3" x="316" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:4" x="324.6" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:5" x="333.3" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:6" x="342" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:7" x="350.7" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:8" x="359.4" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:9" x="368" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:10" x="376.7" y="105.3" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:1:11" x="385.4" y="105.3" width="7.1" height="8.3" rx="1"/><path class="tp-cursor tp-fcursor" data-cursor="topic:0:1" data-g="0" d="M289.1 102.5V116.4"/></g><g class="tp-lane" data-lane="topic:2"><rect class="tp-cell tp-fcell" data-cell="topic:2:0" x="289.9" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:1" x="298.6" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:2" x="307.3" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:3" x="316" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:4" x="324.6" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:5" x="333.3" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:6" x="342" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:7" x="350.7" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:8" x="359.4" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:9" x="368" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:10" x="376.7" y="118.9" width="7.1" height="8.3" rx="1"/><rect class="tp-cell tp-fcell" data-cell="topic:2:11" x="385.4" y="118.9" width="7.1" height="8.3" rx="1"/><path class="tp-cursor tp-fcursor" data-cursor="topic:0:2" data-g="0" d="M289.1 116.1V130.1"/></g><g class="tp-broker" data-part="broker:0"><rect class="tp-f tp-f-chip" x="248.2" y="87.7" width="14.9" height="15.6" rx="1"/><circle class="tp-led" data-led="topic:b0" cx="260.1" cy="95.5" r="1.2"/></g><g class="tp-broker" data-part="broker:1"><rect class="tp-f tp-f-chip" x="248.2" y="104.5" width="14.9" height="15.6" rx="1"/><circle class="tp-led" data-led="topic:b1" cx="260.1" cy="112.3" r="1.2"/></g><g class="tp-broker" data-part="broker:2"><rect class="tp-f tp-f-chip" x="248.2" y="121.3" width="14.9" height="15.6" rx="1"/><circle class="tp-led" data-led="topic:b2" cx="260.1" cy="129" r="1.2"/></g></g><g class="tp-node" data-node="ledger-b" data-kind="worker"><rect class="tp-f" x="547" y="145.4" width="67" height="44.6" rx="4"/><path class="k-line" data-tone="faint" d="M547 156.4L614 156.4"/><circle class="tp-led" data-led="ledger-b:0" cx="553" cy="150.9" r="1.7"/><circle class="tp-f-mark" cx="607" cy="150.9" r="2.6"/></g></svg></div></div><figcaption class="k-legend"><span class="k-keys"><span class="k-key"><svg class="k-swatch" data-mark="lit" viewBox="0 0 16 10" aria-hidden="true"><path d="M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z"/></svg>Request</span><span class="k-key"><svg class="k-swatch" data-mark="raised" viewBox="0 0 16 10" aria-hidden="true"><path d="M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z"/></svg>Response</span><span class="k-key"><svg class="k-swatch" data-mark="blue" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Record pulled by a consumer</span><span class="k-key"><svg class="k-swatch" data-mark="amber" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Retry</span><span class="k-key"><svg class="k-swatch" data-mark="dashed" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Async link</span><span class="k-key"><svg class="k-swatch" data-mark="red" viewBox="0 0 16 10" aria-hidden="true"><path d="M1.5 5h13"/></svg>Error, refused or dropped</span></span><span class="k-caption">payments.v1 has 3 partitions on 3 brokers (RF 3, min ISR 2) and producers wait for acks=all. Partition 0 is hot: it gets half the writes. Click a broker unit on the plinth to fail it yourself; a dimmed lane is a partition with no leader.</span></figcaption></figure></main><script type="module">// The model behind every figure: a small, seeded, tick-based simulation of requests moving
 // through a system. The page inlines this file (exports stripped) and draws `sim.packets`;
 // `scripts/build.mjs --check` runs the same code in Node and prints what the readout will say.
@@ -976,7 +983,1486 @@ function summaryOf(sim) {
   return bits.join(" · ");
 }
 
-const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[208,91],"positions":{"api":[0,0],"topic":[1,0],"ledger-a":[2,-0.5],"ledger-b":[2,0.5]},"spec":{"nodes":[{"id":"api","kind":"service","replicas":3,"label":"payments-api","emit":12,"partitions":0},{"id":"topic","kind":"kafka","partitions":3,"brokers":3,"rf":3,"minIsr":2,"acks":"all","election":2.5,"skew":[0.5,0.25,0.25],"label":"payments.v1","replicas":1},{"id":"ledger-a","kind":"worker","rate":11,"label":"ledger-a","partitions":0,"replicas":1},{"id":"ledger-b","kind":"worker","rate":11,"label":"ledger-b","partitions":0,"replicas":1}],"edges":[{"from":"api","to":"topic","sync":true,"retries":1,"backoff":0.2,"kind":"async","len":116},{"from":"topic","to":"ledger-a","group":"ledger","kind":"async","sync":false,"len":142.97149520792613},{"from":"topic","to":"ledger-b","group":"ledger","kind":"async","sync":false,"len":142.97149520792613}],"sim":{"per":30,"seed":2},"scenario":{"length":38,"phases":[{"name":"healthy","at":0},{"name":"one broker down","at":8},{"name":"two down","at":18},{"name":"restored","at":27}],"steps":[{"at":1,"say":"Every write waits for all in-sync replicas. Partition 0 takes half the traffic, so ledger-a (which owns it) works hardest."},{"phase":"one broker down","fail":"topic:b0","say":"Broker 0 dies. Partition 0 loses its leader and pauses for an election (dim lane); writes to it fail and are retried."},{"phase":"one broker down","after":4,"say":"A new leader is elected. With 2 of 3 replicas in sync, min ISR is still met: writes flow again."},{"phase":"two down","fail":"topic:b1","say":"Broker 1 dies too. Every partition is down to 1 in-sync replica, under min ISR 2: with acks=all every write is refused."},{"phase":"restored","recover":["topic:b0","topic:b1"],"say":"Both brokers return and rejoin the ISR; writes resume and the consumers catch up."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,116],[0,46.5,49.04,51.17,53.15,55.28,57.82,76.16,78.69,80.82,82.8,84.94,87.47,142.97],[0,55.5,58.04,60.17,62.15,64.28,66.82,85.16,87.69,89.82,91.8,93.94,96.47,142.97]],"views":{"iso":{"edges":[[[113.1,86.5],[239.7,131.8]],[[391.3,174.9],[442.1,193],[445.1,193.8],[447.8,194.1],[450.4,193.9],[452.7,193],[454.9,191.7],[468.4,181.1],[470.6,179.7],[472.9,178.9],[475.5,178.7],[478.2,179],[481.2,179.8],[541.8,201.4]],[[372,190.1],[432.6,211.8],[435.1,212.9],[436.6,214.2],[437.1,215.5],[436.6,217],[435,218.5],[421.5,229.1],[420,230.7],[419.5,232.2],[420,233.5],[421.5,234.8],[424,235.9],[474.8,254.1]]],"step":[7.641814087835371,2.7314522537950268],"flagStep":[0,0],"packet":{"top":"M4 -4.3L0.8 -1.8L-4 -3.5L-0.8 -6.1Z","sides":"M4 -4.3L0.8 -1.8L0.8 2.1L4 -0.4ZM0.8 -1.8L-4 -3.5L-4 0.4L0.8 2.1Z","outline":"M-4 -3.5L-0.8 -6.1L4 -4.3L4 -0.4L0.8 2.1L-4 0.4Z"}},"flat":{"edges":[[[98.2,111.3],[242,111.3]],[[403.2,95],[460.9,95],[464,94.7],[466.4,93.6],[468.2,91.9],[469.2,89.4],[469.5,86.3],[469.5,63.6],[469.9,60.5],[470.9,58],[472.7,56.3],[475.1,55.2],[478.2,54.9],[547,54.9]],[[403.2,127.6],[472,127.6],[475.1,128],[477.6,129],[479.3,130.8],[480.4,133.2],[480.7,136.3],[480.7,159.1],[481,162.2],[482.1,164.6],[483.8,166.4],[486.3,167.4],[489.4,167.7],[547,167.7]]],"step":[8.679881906368621,0],"flagStep":[0,0],"packet":null,"k":1.2399831294812316}}};
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[208,91],"positions":{"api":[0,0],"topic":[1,0],"ledger-a":[2,-0.5],"ledger-b":[2,0.5]},"spec":{"nodes":[{"id":"api","kind":"service","replicas":3,"label":"payments-api","emit":12,"partitions":0},{"id":"topic","kind":"kafka","partitions":3,"brokers":3,"rf":3,"minIsr":2,"acks":"all","election":2.5,"skew":[0.5,0.25,0.25],"label":"payments.v1","replicas":1},{"id":"ledger-a","kind":"worker","rate":11,"label":"ledger-a","partitions":0,"replicas":1},{"id":"ledger-b","kind":"worker","rate":11,"label":"ledger-b","partitions":0,"replicas":1}],"edges":[{"from":"api","to":"topic","sync":true,"retries":1,"backoff":0.2,"kind":"async","len":116},{"from":"topic","to":"ledger-a","group":"ledger","kind":"async","sync":false,"len":142.97149520792613},{"from":"topic","to":"ledger-b","group":"ledger","kind":"async","sync":false,"len":142.97149520792613}],"sim":{"per":30,"seed":2},"scenario":{"length":38,"phases":[{"name":"healthy","at":0},{"name":"one broker down","at":8},{"name":"two down","at":18},{"name":"restored","at":27}],"steps":[{"at":1,"say":"Every write waits for all in-sync replicas. Partition 0 takes half the traffic, so ledger-a (which owns it) works hardest."},{"phase":"one broker down","fail":"topic:b0","say":"Broker 0 dies. Partition 0 loses its leader and pauses for an election (dim lane); writes to it fail and are retried."},{"phase":"one broker down","after":4,"say":"A new leader is elected. With 2 of 3 replicas in sync, min ISR is still met: writes flow again."},{"phase":"two down","fail":"topic:b1","say":"Broker 1 dies too. Every partition is down to 1 in-sync replica, under min ISR 2: with acks=all every write is refused."},{"phase":"restored","recover":["topic:b0","topic:b1"],"say":"Both brokers return and rejoin the ISR; writes resume and the consumers catch up."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,116],[0,46.5,49.04,51.17,53.15,55.28,57.82,76.16,78.69,80.82,82.8,84.94,87.47,142.97],[0,55.5,58.04,60.17,62.15,64.28,66.82,85.16,87.69,89.82,91.8,93.94,96.47,142.97]],"views":{"iso":{"edges":[[[113.1,86.5],[239.7,131.8]],[[391.3,174.9],[442.1,193],[445.1,193.8],[447.8,194.1],[450.4,193.9],[452.7,193],[454.9,191.7],[468.4,181.1],[470.6,179.7],[472.9,178.9],[475.5,178.7],[478.2,179],[481.2,179.8],[541.8,201.4]],[[372,190.1],[432.6,211.8],[435.1,212.9],[436.6,214.2],[437.1,215.5],[436.6,217],[435,218.5],[421.5,229.1],[420,230.7],[419.5,232.2],[420,233.5],[421.5,234.8],[424,235.9],[474.8,254.1]]],"step":[7.641814087835371,2.7314522537950268],"flagStep":[0,0],"packet":{"top":"M4 -4.3L0.8 -1.8L-4 -3.5L-0.8 -6.1Z","sides":"M4 -4.3L0.8 -1.8L0.8 2.1L4 -0.4ZM0.8 -1.8L-4 -3.5L-4 0.4L0.8 2.1Z","outline":"M-4 -3.5L-0.8 -6.1L4 -4.3L4 -0.4L0.8 2.1L-4 0.4Z"}},"flat":{"edges":[[[98.2,111.3],[242,111.3]],[[403.2,95],[460.9,95],[464,94.7],[466.4,93.6],[468.2,91.9],[469.2,89.4],[469.5,86.3],[469.5,63.6],[469.9,60.5],[470.9,58],[472.7,56.3],[475.1,55.2],[478.2,54.9],[547,54.9]],[[403.2,127.6],[472,127.6],[475.1,128],[477.6,129],[479.3,130.8],[480.4,133.2],[480.7,136.3],[480.7,159.1],[481,162.2],[482.1,164.6],[483.8,166.4],[486.3,167.4],[489.4,167.7],[547,167.7]]],"step":[8.679881906368621,0],"flagStep":[0,0],"packet":null,"k":1.2399831294812316}},"raw":{"title":"Brokers and ISR","fig":"Fig 5","caption":"payments.v1 has 3 partitions on 3 brokers (RF 3, min ISR 2) and producers wait for acks=all. Partition 0 is hot: it gets half the writes. Click a broker unit on the plinth to fail it yourself; a dimmed lane is a partition with no leader.","sim":{"per":30,"seed":2},"labels":"rate","nodes":[{"id":"api","kind":"service","replicas":3,"label":"payments-api","emit":12},{"id":"topic","kind":"kafka","partitions":3,"brokers":3,"rf":3,"minIsr":2,"acks":"all","election":2.5,"skew":[0.5,0.25,0.25],"label":"payments.v1"},{"id":"ledger-a","kind":"worker","rate":11,"label":"ledger-a"},{"id":"ledger-b","kind":"worker","rate":11,"label":"ledger-b"}],"edges":[{"from":"api","to":"topic","sync":true,"retries":1,"backoff":0.2},{"from":"topic","to":"ledger-a","group":"ledger"},{"from":"topic","to":"ledger-b","group":"ledger"}],"scenario":{"length":38,"phases":[{"name":"healthy","at":0},{"name":"one broker down","at":8},{"name":"two down","at":18},{"name":"restored","at":27}],"steps":[{"at":1,"say":"Every write waits for all in-sync replicas. Partition 0 takes half the traffic, so ledger-a (which owns it) works hardest."},{"phase":"one broker down","fail":"topic:b0","say":"Broker 0 dies. Partition 0 loses its leader and pauses for an election (dim lane); writes to it fail and are retried."},{"phase":"one broker down","after":4,"say":"A new leader is elected. With 2 of 3 replicas in sync, min ISR is still met: writes flow again."},{"phase":"two down","fail":"topic:b1","say":"Broker 1 dies too. Every partition is down to 1 in-sync replica, under min ISR 2: with acks=all every write is refused."},{"phase":"restored","recover":["topic:b0","topic:b1"],"say":"Both brokers return and rejoin the ISR; writes resume and the consumers catch up."}]}}};
+const k = (() => {
+// The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
+// lines laid on faces, SVG string emitters, and the framed card a figure sits in.
+// World units are about one pixel of the real thing; the camera is fitted to the scene.
+
+const DEG = Math.PI / 180;
+
+// --- camera -------------------------------------------------------------------------------------
+
+// P = { origin: [sx, sy], scale, azimuth, elevation } (degrees). Azimuth turns the floor;
+// elevation tilts it toward the viewer: 90 looks straight down.
+function cameraOf(P) {
+  const a = (P.azimuth ?? 45) * DEG;
+  const e = (P.elevation ?? 30) * DEG;
+  return { sa: Math.sin(a), ca: Math.cos(a), se: Math.sin(e), ce: Math.cos(e), k: P.scale };
+}
+
+function iso([x, y, z], P) {
+  const c = cameraOf(P);
+  const across = x * c.sa - y * c.ca;
+  const away = x * c.ca + y * c.sa;
+  return [P.origin[0] + across * c.k, P.origin[1] + (away * c.se - z * c.ce) * c.k];
+}
+
+// Larger is nearer the viewer: sort ascending to paint back to front.
+function depthOf([x, y, z], P) {
+  const c = cameraOf(P);
+  return (x * c.ca + y * c.sa) * c.ce + z * c.se;
+}
+
+// The floor direction that points at the viewer: faces whose normal has a positive dot
+// product with it are visible.
+const viewerOf = (P) => {
+  const c = cameraOf(P);
+  return [c.ca, c.sa];
+};
+
+// Fit these world points into a width × height box with `pad` to spare.
+function fitProjection(points, width, height, { pad = 24, azimuth = 45, elevation = 30 } = {}) {
+  const unit = { origin: [0, 0], scale: 1, azimuth, elevation };
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const point of points) {
+    const [x, y] = iso(point, unit);
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  const scale = Math.min((width - 2 * pad) / Math.max(x1 - x0, 1e-6), (height - 2 * pad) / Math.max(y1 - y0, 1e-6));
+  return { origin: [width / 2 - ((x0 + x1) / 2) * scale, height / 2 - ((y0 + y1) / 2) * scale], scale, azimuth, elevation };
+}
+
+const pointsAt = (points, P) => points.map((point) => iso(point, P));
+
+// --- paths --------------------------------------------------------------------------------------
+
+const num = (n) => {
+  const r = Math.round(n * 10) / 10;
+  return Object.is(r, -0) ? "0" : String(r);
+};
+function pathOf(points, closed = false) {
+  if (!points.length) return "";
+  let d = "";
+  points.forEach(([x, y], i) => (d += `${i ? "L" : "M"}${num(x)} ${num(y)}`));
+  return closed ? d + "Z" : d;
+}
+
+// Monotone-chain convex hull of screen points.
+function convexHull(points) {
+  if (points.length < 3) return points.slice();
+  const sorted = points.slice().sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const turn = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  const half = (list) => {
+    const out = [];
+    for (const p of list) {
+      while (out.length > 1 && turn(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  return [...half(sorted), ...half(sorted.slice().reverse())];
+}
+
+// --- plans on the floor ---------------------------------------------------------------------------
+
+// A plan is a rounded rectangle { x, y, w, d, r } on the floor.
+const insetPlan = ({ x, y, w, d, r }, by) => ({ x: x + by, y: y + by, w: w - 2 * by, d: d - 2 * by, r: Math.max(0, r - by) });
+
+// The plan's outline as floor points, counter-clockwise seen from above (x right, y down).
+function roundedPlan({ x, y, w, d, r }, steps = 8) {
+  const rr = Math.max(0, Math.min(r, w / 2, d / 2));
+  const centres = [
+    [x + w - rr, y + rr, -90],
+    [x + w - rr, y + d - rr, 0],
+    [x + rr, y + d - rr, 90],
+    [x + rr, y + rr, 180],
+  ];
+  const out = [];
+  for (const [cx, cy, from] of centres) {
+    const n = rr > 0 ? steps : 0;
+    for (let i = 0; i <= n; i++) {
+      const t = (from + (n ? (90 * i) / n : 45)) * DEG;
+      out.push([cx + rr * Math.cos(t), cy + rr * Math.sin(t)]);
+    }
+  }
+  return out;
+}
+
+function circleRing(cx, cy, r, steps = 40) {
+  return Array.from({ length: steps }, (_, i) => [cx + r * Math.cos((2 * Math.PI * i) / steps), cy + r * Math.sin((2 * Math.PI * i) / steps)]);
+}
+
+const corners = ({ x, y, w, d }, inset = 0) => [
+  [x + inset, y + inset],
+  [x + w - inset, y + inset],
+  [x + inset, y + d - inset],
+  [x + w - inset, y + d - inset],
+];
+
+function boxCorners({ x, y, w, d }, z0, z1) {
+  const out = [];
+  for (const px of [x, x + w]) for (const py of [y, y + d]) for (const z of [z0, z1]) out.push([px, py, z]);
+  return out;
+}
+
+// --- solids -------------------------------------------------------------------------------------
+
+// A convex floor outline extruded from z to z + height. Each visible side gets one of four
+// tones by how squarely it faces the light (from the viewer's left); the top is lightest.
+// Returns paths: fill (hides what's behind), shades[4], top, crease (top meets sides),
+// bevel (a highlight just inside the visible top edges) and outline (the silhouette).
+function extrude(ring, z, height, P, { bevel = 0 } = {}) {
+  const n = ring.length;
+  let area = 0;
+  for (let i = 0; i < n; i++) area += ring[i][0] * ring[(i + 1) % n][1] - ring[(i + 1) % n][0] * ring[i][1];
+  const outward = area > 0 ? 1 : -1;
+  const view = viewerOf(P);
+  const c = cameraOf(P);
+  const light = [-c.sa, c.ca];
+  const top = ring.map(([x, y]) => iso([x, y, z + height], P));
+  const base = ring.map(([x, y]) => iso([x, y, z], P));
+  const shades = [[], [], [], []];
+  const crease = [];
+  const bevels = [];
+  const centre = ring.reduce((sum, p) => [sum[0] + p[0] / n, sum[1] + p[1] / n], [0, 0]);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const [ax, ay] = ring[i];
+    const [bx, by] = ring[j];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const normal = [(outward * (by - ay)) / len, (-outward * (bx - ax)) / len];
+    if (normal[0] * view[0] + normal[1] * view[1] <= 1e-9) continue;
+    if (height > 0) {
+      const lit = (normal[0] * light[0] + normal[1] * light[1] + 1) / 2;
+      shades[Math.min(3, Math.floor(lit * 4))].push(pathOf([top[i], top[j], base[j], base[i]], true));
+    }
+    crease.push(pathOf([top[i], top[j]]));
+    if (bevel > 0) {
+      const inset = (p) => {
+        const dx = centre[0] - p[0];
+        const dy = centre[1] - p[1];
+        const l = Math.hypot(dx, dy) || 1;
+        return iso([p[0] + (dx / l) * bevel, p[1] + (dy / l) * bevel, z + height], P);
+      };
+      bevels.push(pathOf([inset(ring[i]), inset(ring[j])]));
+    }
+  }
+  const hull = convexHull([...top, ...base]);
+  return {
+    fill: pathOf(hull, true),
+    shades: shades.map((list) => list.join("")),
+    top: pathOf(top, true),
+    crease: crease.join(""),
+    bevel: bevels.join(""),
+    outline: pathOf(hull, true),
+  };
+}
+
+const slabOf = (plan, z, height, P, steps = 8, bevel = 0) => extrude(roundedPlan(plan, steps), z, height, P, { bevel });
+const cylinder = (cx, cy, r, z, height, P, steps = 32, bevel = 0) => extrude(circleRing(cx, cy, r, steps), z, height, P, { bevel });
+// A soft shadow under something: the slab's fill, blurred by CSS.
+const haloOf = (plan, z, height, P) => slabOf(plan, z, height, P).fill;
+
+// --- lines on faces -----------------------------------------------------------------------------
+
+const onTop = (points, z, P, closed = false) => pathOf(points.map(([x, y]) => iso([x, y, z], P)), closed);
+const lineOnTop = (a, b, z, P) => onTop([a, b], z, P);
+const segment = (a, b, P) => pathOf([iso(a, P), iso(b, P)]);
+const planOutline = (plan, z, P, steps = 8) => onTop(roundedPlan(plan, steps), z, P, true);
+const ring = (cx, cy, r, z, P, steps = 40) => onTop(circleRing(cx, cy, r, steps), z, P, true);
+
+// The half of a horizontal circle at height z that faces the viewer: a band on a cylinder.
+function sideArc(cx, cy, r, z, P, steps = 24) {
+  const [vx, vy] = viewerOf(P);
+  const mid = Math.atan2(vy, vx);
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = mid - Math.PI / 2 + (Math.PI * i) / steps;
+    pts.push([cx + r * Math.cos(t), cy + r * Math.sin(t), z]);
+  }
+  return pathOf(pointsAt(pts, P));
+}
+
+// The visible near side of a plan at height z: a seam that wraps a box's corners.
+function sideSeam(plan, z, P, steps = 8) {
+  const pts = roundedPlan(plan, steps);
+  const [vx, vy] = viewerOf(P);
+  const cx = plan.x + plan.w / 2;
+  const cy = plan.y + plan.d / 2;
+  const facing = pts.map(([x, y]) => (x - cx) * vx + (y - cy) * vy > 0);
+  // Start just after a hidden point so the visible run is contiguous.
+  const start = facing.findIndex((f, i) => !f && facing[(i + 1) % pts.length]);
+  if (start < 0) return "";
+  const run = [];
+  for (let k = 1; k <= pts.length; k++) {
+    const i = (start + k) % pts.length;
+    if (!facing[i]) break;
+    run.push([...pts[i], z]);
+  }
+  return pathOf(pointsAt(run, P));
+}
+
+// Ticks pointing inward from radius r on a horizontal face: every `every`th is major.
+// Angle 0 points to −y and runs clockwise seen from above.
+function radialTicks(cx, cy, r, count, every, z, [minor, major], P) {
+  const out = { minor: "", major: "" };
+  for (let i = 0; i < count; i++) {
+    const t = (2 * Math.PI * i) / count;
+    const big = i % every === 0;
+    const len = big ? major : minor;
+    const ux = Math.sin(t);
+    const uy = -Math.cos(t);
+    const d = lineOnTop([cx + ux * r, cy + uy * r], [cx + ux * (r - len), cy + uy * (r - len)], z, P);
+    if (big) out.major += d;
+    else out.minor += d;
+  }
+  return out;
+}
+
+// An SVG transform that lays text flat on the floor at `at`, reading along x or y.
+function topMatrix(at, z, P, along = "x") {
+  const o = iso([at[0], at[1], z], P);
+  const vec = (dx, dy) => {
+    const p = iso([at[0] + dx, at[1] + dy, z], P);
+    return [p[0] - o[0], p[1] - o[1]];
+  };
+  const [u, v] = along === "y" ? [vec(0, -1), vec(1, 0)] : [vec(1, 0), vec(0, 1)];
+  return `matrix(${[u[0], u[1], v[0], v[1], o[0], o[1]].map((n) => n.toFixed(4)).join(" ")})`;
+}
+
+// --- SVG strings --------------------------------------------------------------------------------
+
+const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// tone: hi | mid | lo | faint (the outline); crease: tone of the top edges, or "none";
+// lit: the one accent part.
+function solidSvg(paths, { tone = "hi", crease = "faint", lit = false } = {}) {
+  let out = `<g class="k-solid"${lit ? " data-lit" : ""}><path class="k-fill" d="${paths.fill}"/>`;
+  paths.shades.forEach((d, i) => d && (out += `<path class="k-shade" data-shade="${i}" d="${d}"/>`));
+  out += `<path class="k-top" d="${paths.top}"/>`;
+  if (crease !== "none" && paths.crease) out += `<path class="k-line k-crease" data-tone="${crease}" d="${paths.crease}"/>`;
+  if (crease !== "none" && paths.bevel) out += `<path class="k-line k-bevel" data-tone="${crease}" d="${paths.bevel}"/>`;
+  return out + `<path class="k-line k-edge" data-tone="${tone}" d="${paths.outline}"/></g>`;
+}
+
+// free: true | "start" | "end" marks a line end that is meant to stop on a bare face
+// (printed text, a pointer tip, an arrowhead) for scripts/lines.mjs.
+function lineSvg(d, { tone = "lo", dashed = false, free } = {}) {
+  if (!d) return "";
+  const freeAttr = free === true ? ' data-free=""' : free ? ` data-free="${free}"` : "";
+  return `<path class="k-line" data-tone="${tone}"${dashed ? " data-dashed" : ""}${freeAttr} d="${d}"/>`;
+}
+
+function dotsSvg(points, { size = 0.5, tone = "mid" } = {}) {
+  return `<g class="k-dots" data-tone="${tone}">${points.map(([x, y]) => `<circle cx="${num(x)}" cy="${num(y)}" r="${size}"/>`).join("")}</g>`;
+}
+
+function faceTextSvg(transform, text, { size = 3, tone = "mid", anchor = "start" } = {}) {
+  return `<text class="k-text" data-tone="${tone}" transform="${transform}" font-size="${size}" text-anchor="${anchor}">${escape(text)}</text>`;
+}
+
+function figureSvg({ width, height, label, body, className = "" }) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="k-svg${className ? " " + className : ""}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escape(label)}">${[].concat(body).join("")}</svg>`;
+}
+
+// --- the card and the page ----------------------------------------------------------------------
+
+const SWATCH = {
+  lit: "M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z",
+  raised: "M2 4.5 8 1.5 14 4.5 14 6 8 9 2 6Z",
+};
+function swatch(mark) {
+  const d = SWATCH[mark] || "M1.5 5h13";
+  return `<svg class="k-swatch" data-mark="${mark}" viewBox="0 0 16 10" aria-hidden="true"><path d="${d}"/></svg>`;
+}
+
+// A framed card: Fig n top left, title top right, hint bottom left, live readout bottom
+// right ([data-readout]), then the legend keys and a caption under it.
+function plateHtml({ fig, title, hint, readout = "", keys = [], caption, body }) {
+  const corner = (name, text, extra = "") => `<span class="k-corner" data-corner="${name}"${extra}>${escape(text ?? "")}</span>`;
+  const legend = keys.length || caption ? `<figcaption class="k-legend">${keys.length ? `<span class="k-keys">${keys.map((key) => `<span class="k-key">${swatch(key.mark)}${escape(key.label)}</span>`).join("")}</span>` : ""}${caption ? `<span class="k-caption">${escape(caption)}</span>` : ""}</figcaption>` : "";
+  return `<figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true">${corner("fig", fig)}${title ? corner("title", title) : ""}${hint ? corner("hint", hint) : ""}${corner("readout", readout, " data-readout")}</div>${body}</div>${legend}</figure>`;
+}
+
+function pageHtml({ title, theme = "dark", body, script = "", width = 650 }) {
+  const code = script ? `<script type="module">${script.replace(/<\/(script)/gi, "<\\/$1")}<\/script>` : "";
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)}</title><style>${KIT_CSS}
+*{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
+body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.k-page{width:min(${width}px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="${theme}"><main class="k-page">${body}</main>${code}</body></html>`;
+}
+
+// Palette tokens (--tp-*) for both themes, the solids and lines, and the card.
+const KIT_CSS = `
+.tp{
+  --tp-page:#0a0a0b;--tp-card:#121214;--tp-text:#a4a4a8;--tp-strong:#e8e8ea;--tp-muted:#6c6c72;
+  --tp-face:#1a1a1d;--tp-top:#1d1d20;--tp-lit-top:#28282c;--tp-lit-shade:#1e1e21;
+  --tp-shade-0:#0e0e10;--tp-shade-1:#111113;--tp-shade-2:#151517;--tp-shade-3:#18181b;
+  --tp-hi:#d6d6da;--tp-mid:#6b6b71;--tp-lo:#3d3d42;--tp-faint:#29292d;--tp-lit:#ffffff;
+  --tp-halo:#040405;--tp-halo-opacity:.9;--tp-dot:#e8e8ea;
+  --tp-red:#ff6b6b;--tp-green:#6be0a0;--tp-blue:#6b9bff;--tp-amber:#f0b64a;
+  --tp-weight:.6px;--tp-ease:cubic-bezier(.32,.72,0,1);
+  --tp-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+.tp[data-theme="light"]{
+  --tp-page:#f1f1ee;--tp-card:#fafaf8;--tp-text:#56565a;--tp-strong:#18181a;--tp-muted:#8b8b90;
+  --tp-face:#ffffff;--tp-top:#ffffff;--tp-lit-top:#ffffff;--tp-lit-shade:#ededea;
+  --tp-shade-0:#dbdbd8;--tp-shade-1:#e4e4e1;--tp-shade-2:#ecece9;--tp-shade-3:#f3f3f0;
+  --tp-hi:#25252a;--tp-mid:#89898e;--tp-lo:#b3b3b7;--tp-faint:#d3d3d5;--tp-lit:#000000;
+  --tp-halo:#88887e;--tp-halo-opacity:.3;--tp-dot:#39393d;
+  --tp-red:#e5484d;--tp-green:#30a46c;--tp-blue:#3e63dd;--tp-amber:#c27c0e;
+}
+.k-svg{display:block;width:100%;height:auto;overflow:visible;margin:0 auto}
+.k-svg path,.k-svg circle{vector-effect:non-scaling-stroke}
+.k-fill{fill:var(--tp-card);stroke:none}
+.k-solid[data-lit]>.k-fill{fill:var(--tp-face)}
+.k-shade,.k-top{stroke:none}
+.k-shade[data-shade="0"]{fill:var(--tp-shade-0)}
+.k-shade[data-shade="1"]{fill:var(--tp-shade-1)}
+.k-shade[data-shade="2"]{fill:var(--tp-shade-2)}
+.k-shade[data-shade="3"]{fill:var(--tp-shade-3)}
+.k-top{fill:var(--tp-top)}
+.k-solid[data-lit]>.k-top{fill:var(--tp-lit-top)}
+.k-solid[data-lit]>.k-shade{fill:var(--tp-lit-shade)}
+.k-solid[data-lit]>.k-edge{stroke:var(--tp-lit)}
+.k-halo{fill:var(--tp-halo);stroke:none;filter:blur(9px);opacity:var(--tp-halo-opacity);transform:translateY(3px)}
+.k-line{fill:none;stroke:var(--tp-lo);stroke-width:var(--tp-weight);stroke-linecap:round;stroke-linejoin:round}
+.k-line[data-tone="hi"]{stroke:var(--tp-hi)}
+.k-line[data-tone="mid"]{stroke:var(--tp-mid)}
+.k-line[data-tone="faint"]{stroke:var(--tp-faint)}
+.k-line[data-tone="lit"]{stroke:var(--tp-lit)}
+.k-line[data-dashed]{stroke-dasharray:3 3}
+.k-dots circle{fill:var(--tp-dot);stroke:none;opacity:.32}
+.k-dots[data-tone="hi"] circle{opacity:.85}
+.k-dots[data-tone="mid"] circle{opacity:.45}
+.k-dots[data-tone="lo"] circle{opacity:.22}
+.k-text{fill:var(--tp-mid);font-family:var(--tp-mono);letter-spacing:.04em}
+.k-text[data-tone="hi"]{fill:var(--tp-hi)}
+.k-text[data-tone="lo"]{fill:var(--tp-lo)}
+.k-figure{margin:32px 0 36px}
+.k-card{position:relative;padding:52px 24px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid)}
+.k-corners{position:absolute;inset:18px 20px;pointer-events:none}
+.k-corner{position:absolute;color:var(--tp-muted);font-family:var(--tp-mono);font-size:10.5px;line-height:1;letter-spacing:.04em;white-space:nowrap}
+.k-corner[data-corner="fig"]{top:0;left:0;color:var(--tp-text)}
+.k-corner[data-corner="title"]{top:0;right:0;text-transform:uppercase;letter-spacing:.1em}
+.k-corner[data-corner="hint"]{bottom:0;left:0;text-transform:uppercase;letter-spacing:.1em}
+.k-corner[data-corner="readout"]{right:0;bottom:0;color:var(--tp-text);font-variant-numeric:tabular-nums}
+.k-legend{display:grid;gap:8px;margin-top:12px;color:var(--tp-muted);font-size:13px;line-height:1.55}
+.k-keys{display:flex;flex-wrap:wrap;gap:6px 18px}
+.k-key{display:inline-flex;align-items:center;gap:7px}
+.k-swatch{width:16px;height:10px;flex:none;overflow:visible}
+.k-swatch path{fill:none;stroke:var(--tp-hi);stroke-width:1;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.k-swatch[data-mark="raised"] path{stroke:var(--tp-mid)}
+.k-swatch[data-mark="lit"] path{stroke:var(--tp-lit)}
+.k-swatch[data-mark="dashed"] path{stroke-dasharray:3 2.5}
+.k-swatch[data-mark="red"] path{stroke:var(--tp-red)}
+.k-swatch[data-mark="green"] path{stroke:var(--tp-green)}
+.k-swatch[data-mark="blue"] path{stroke:var(--tp-blue)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+@media (max-width:560px){.k-card{padding:48px 12px 70px}.k-corner[data-corner="hint"]{bottom:18px}}
+`;
+
+return { cameraOf, iso, depthOf, fitProjection, pointsAt, pathOf, convexHull, insetPlan, roundedPlan, circleRing, corners, boxCorners, extrude, slabOf, cylinder, haloOf, onTop, lineOnTop, segment, planOutline, ring, sideArc, sideSeam, radialTicks, topMatrix, escape, solidSvg, lineSvg, dotsSvg, faceTextSvg, figureSvg, plateHtml, pageHtml, KIT_CSS };
+})();
+const TOPO = (() => {
+// Topology: turn a declarative system spec into an interactive figure, drawn either
+// isometric (solids on a floor, built with kit/iso.mjs) or flat (2D glyphs on the same layout).
+// One world layout feeds both views, so edges, packets and ports line up in each.
+
+
+
+
+// Footprints in world units (x along the flow, y across it).
+const KINDS = {
+  client: { w: 40, d: 30, h: 22 },
+  lb: { w: 42, d: 42, h: 10 },
+  gateway: { w: 48, d: 34, h: 16 },
+  service: { w: 54, d: 36, h: 8 },
+  worker: { w: 54, d: 36, h: 8 },
+  cache: { w: 52, d: 36, h: 8 },
+  db: { w: 42, d: 42, h: 30 },
+  storage: { w: 42, d: 42, h: 26 },
+  kafka: { w: 104, d: 0, h: 6 },
+  queue: { w: 104, d: 26, h: 6 },
+  box: { w: 52, d: 36, h: 14 },
+  cdn: { w: 50, d: 36, h: 10 },
+  dns: { w: 34, d: 34, h: 26 },
+  external: { w: 54, d: 36, h: 14 },
+  scheduler: { w: 40, d: 34, h: 12 },
+  flags: { w: 48, d: 34, h: 8 },
+};
+const SLOTS = 12;
+const PITCH = 7;
+const LANE = 11;
+
+const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const r1 = (n) => Math.round(n * 10) / 10;
+
+// ---------------------------------------------------------------------------------------------
+// Spec → model
+
+function prepare(spec) {
+  const nodes = spec.nodes.map((raw, index) => {
+    const kind = KINDS[raw.kind] ? raw.kind : "box";
+    const base = KINDS[kind];
+    const partitions = kind === "kafka" ? raw.partitions || 3 : kind === "queue" ? 1 : 0;
+    const d = raw.d ?? (kind === "kafka" ? partitions * LANE + 14 : base.d);
+    const replicas = Math.max(1, Math.min(raw.replicas || 1, kind === "service" || kind === "worker" ? 4 : 1));
+    const w = raw.w ?? (kind === "kafka" && raw.brokers ? base.w + 26 : base.w);
+    return { ...raw, kind, index, w, d, h: base.h, partitions, replicas, label: raw.label ?? raw.id };
+  });
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const edges = (spec.edges || []).map((raw, index) => {
+    const [from, to] = raw.from ? [raw.from, raw.to] : raw;
+    if (!byId.has(from) || !byId.has(to)) throw new Error(`edge ${index}: unknown node ${byId.has(from) ? to : from}`);
+    const sync = raw.sync ?? (raw.kind ? false : !isLog(byId.get(to)) && !isLog(byId.get(from)));
+    return { ...(Array.isArray(raw) ? {} : raw), from, to, index, kind: raw.kind || (isLog(byId.get(to)) || isLog(byId.get(from)) ? "async" : "sync"), sync };
+  });
+  const grid = layout(nodes, edges, spec);
+  const groups = groupsOf(spec.groups || [], byId);
+  route(nodes, edges, byId);
+  for (const node of nodes) if (node.kind === "flags") node.flagNames = Object.keys(spec.flags || {});
+  for (const node of nodes) {
+    if (!isLog(node)) continue;
+    const names = [];
+    for (const edge of edges) if (edge.from === node.id) {
+      const name = node.kind === "queue" ? "queue" : edge.group || "default";
+      if (!names.includes(name)) names.push(name);
+    }
+    node.groups = names.length ? names : ["default"];
+  }
+  return { labels: spec.labels, title: spec.title || "System", fig: spec.fig || "Fig 1", caption: spec.caption, hint: spec.hint, nodes, edges, groups, byId, sim: spec.sim || {}, keys: spec.keys, grid, scenario: spec.scenario, flags: spec.flags, features: spec.features };
+}
+
+function layout(nodes, edges, spec) {
+  const maxW = Math.max(...nodes.map((node) => node.w));
+  const maxD = Math.max(...nodes.map((node) => node.d));
+  const [gx, gy] = spec.grid || [maxW + 78, maxD + 44];
+  const placed = nodes.filter((node) => node.at);
+  if (placed.length !== nodes.length) autoRank(nodes, edges);
+  for (const node of nodes) {
+    const [col, row] = node.at || node.auto;
+    node.cx = col * gx;
+    node.cy = row * gy;
+    node.plan = { x: node.cx - node.w / 2, y: node.cy - node.d / 2, w: node.w, d: node.d, r: 3 };
+  }
+  return [gx, gy];
+}
+
+// Longest-path ranks left to right; replicas sit under their primary; rows by barycentre.
+function autoRank(nodes, edges) {
+  const flow = edges.filter((edge) => edge.kind !== "replication");
+  const rank = new Map(nodes.map((node) => [node.id, 0]));
+  for (let pass = 0; pass < nodes.length; pass++) {
+    let moved = false;
+    for (const edge of flow) {
+      if (edge.back) continue;
+      const want = rank.get(edge.from) + 1;
+      if (want > rank.get(edge.to) && want < nodes.length) {
+        rank.set(edge.to, want);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  const replicaOf = new Map();
+  for (const edge of edges) if (edge.kind === "replication") replicaOf.set(edge.to, edge.from);
+  for (const [replica, primary] of replicaOf) rank.set(replica, rank.get(primary));
+  const columns = new Map();
+  for (const node of nodes) {
+    if (node.at) continue;
+    const r = rank.get(node.id);
+    if (!columns.has(r)) columns.set(r, []);
+    columns.get(r).push(node);
+  }
+  const rowOf = new Map();
+  for (const r of [...columns.keys()].sort((a, b) => a - b)) {
+    const column = columns.get(r).filter((node) => !replicaOf.has(node.id));
+    const bary = (node) => {
+      const ins = flow.filter((edge) => edge.to === node.id && rowOf.has(edge.from));
+      return ins.length ? ins.reduce((sum, edge) => sum + rowOf.get(edge.from), 0) / ins.length : node.index * 1e-3;
+    };
+    column.sort((a, b) => bary(a) - bary(b) || a.index - b.index);
+    // Replicas sit right after their primary, on the side away from the column's centre.
+    const ordered = [];
+    const attach = (node) => {
+      ordered.push(node);
+      for (const replica of columns.get(r)) if (replicaOf.get(replica.id) === node.id) attach(replica);
+    };
+    column.forEach(attach);
+    for (const replica of columns.get(r)) if (!ordered.includes(replica)) ordered.push(replica);
+    ordered.forEach((node, index) => {
+      rowOf.set(node.id, index - (ordered.length - 1) / 2);
+      node.auto = [r, rowOf.get(node.id)];
+    });
+  }
+}
+
+function groupsOf(list, byId) {
+  const groups = list.map((group) => ({ ...group, label: group.label ?? group.id }));
+  const byGroup = new Map(groups.map((group) => [group.id, group]));
+  const boxOf = (group, seen = new Set()) => {
+    if (group.box) return group.box;
+    if (seen.has(group.id)) throw new Error(`group ${group.id} contains itself`);
+    seen.add(group.id);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let depth = 0;
+    for (const id of group.nodes) {
+      const inner = byGroup.get(id);
+      const box = inner ? boxOf(inner, seen) : byId.get(id)?.plan;
+      if (!box) throw new Error(`group ${group.id}: unknown member ${id}`);
+      if (inner) depth = Math.max(depth, inner.depth + 1);
+      x0 = Math.min(x0, box.x); y0 = Math.min(y0, box.y);
+      x1 = Math.max(x1, box.x + box.w); y1 = Math.max(y1, box.y + box.d);
+    }
+    const pad = group.pad ?? 16;
+    group.depth = depth;
+    group.box = { x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, d: y1 - y0 + pad * 2 + 10, r: 6 };
+    return group.box;
+  };
+  groups.forEach((group) => boxOf(group));
+  return groups.sort((a, b) => b.depth - a.depth || b.box.w * b.box.d - a.box.w * a.box.d);
+}
+
+// Orthogonal routes on the floor: leave the face that looks at the target, one elbow pair
+// in the middle, ports spread along each face so parallel edges don't sit on each other.
+function route(nodes, edges, byId) {
+  const faces = new Map();
+  const faceOf = (node, side) => {
+    const key = `${node.id}:${side}`;
+    if (!faces.has(key)) faces.set(key, []);
+    return faces.get(key);
+  };
+  for (const edge of edges) {
+    const a = byId.get(edge.from);
+    const b = byId.get(edge.to);
+    const dx = b.cx - a.cx;
+    const dy = b.cy - a.cy;
+    const across = edge.axis ? edge.axis === "y" : Math.abs(dy) > Math.abs(dx) * 1.2;
+    edge.axisOf = across ? "y" : "x";
+    const sign = across ? Math.sign(dy) || 1 : Math.sign(dx) || 1;
+    edge.ends = [
+      { node: a, side: across ? (sign > 0 ? "+y" : "-y") : sign > 0 ? "+x" : "-x", other: b },
+      { node: b, side: across ? (sign > 0 ? "-y" : "+y") : sign > 0 ? "-x" : "+x", other: a },
+    ];
+    edge.ends.forEach((end, which) => faceOf(end.node, end.side).push({ edge, which, end }));
+  }
+  for (const list of faces.values()) {
+    const along = list[0].end.side.endsWith("x") ? "cy" : "cx";
+    list.sort((p, q) => p.end.other[along] - q.end.other[along] || p.edge.index - q.edge.index);
+    list.forEach((entry, index) => {
+      const node = entry.end.node;
+      const span = (along === "cy" ? node.d : node.w) * 0.56;
+      entry.end.offset = list.length === 1 ? 0 : -span / 2 + (span * index) / (list.length - 1);
+    });
+  }
+  for (const edge of edges) {
+    edge.ports = edge.ends.map(({ node, side, offset }) => {
+      const sx = side === "+x" ? 1 : side === "-x" ? -1 : 0;
+      const sy = side === "+y" ? 1 : side === "-y" ? -1 : 0;
+      return [node.cx + (sx * node.w) / 2 + (sx ? 0 : offset), node.cy + (sy * node.d) / 2 + (sy ? 0 : offset)];
+    });
+  }
+  // Edges whose elbows fall in the same channel get their own lane in it, so their
+  // middle legs run side by side instead of on top of each other.
+  const channels = new Map();
+  for (const edge of edges) {
+    if (edge.via || edge.bend != null) continue;
+    const [p, q] = edge.ports;
+    const i = edge.axisOf === "x" ? 0 : 1;
+    const j = 1 - i;
+    if (Math.abs(p[j] - q[j]) < 0.5) continue;
+    const key = `${edge.axisOf}:${Math.round(((p[i] + q[i]) / 2) / 24)}`;
+    if (!channels.has(key)) channels.set(key, []);
+    channels.get(key).push(edge);
+  }
+  for (const list of channels.values()) {
+    if (list.length < 2) continue;
+    const i = list[0].axisOf === "x" ? 0 : 1;
+    const j = 1 - i;
+    const room = Math.min(...list.map((edge) => Math.abs(edge.ports[1][i] - edge.ports[0][i]))) * 0.6;
+    const gap = Math.min(9, room / (list.length - 1));
+    // Rising legs nearest the source turn first: fewer crossings for a fan in or out.
+    list.sort((a, b) => (a.ports[0][j] - b.ports[0][j]) * Math.sign(a.ports[1][i] - a.ports[0][i]) || a.ports[1][j] - b.ports[1][j]);
+    const mid = list.reduce((sum, edge) => sum + (edge.ports[0][i] + edge.ports[1][i]) / 2, 0) / list.length;
+    list.forEach((edge, index) => {
+      edge.channel = mid + (index - (list.length - 1) / 2) * gap * Math.sign(edge.ports[1][i] - edge.ports[0][i] || 1);
+    });
+  }
+  for (const edge of edges) {
+    const [p, q] = edge.ends.map(({ node, side, offset }) => {
+      const sx = side === "+x" ? 1 : side === "-x" ? -1 : 0;
+      const sy = side === "+y" ? 1 : side === "-y" ? -1 : 0;
+      return [node.cx + (sx * node.w) / 2 + (sx ? 0 : offset), node.cy + (sy * node.d) / 2 + (sy ? 0 : offset)];
+    });
+    let corners;
+    if (edge.axisOf === "x") {
+      const mx = edge.bend != null ? p[0] + (q[0] - p[0]) * edge.bend : edge.channel ?? (p[0] + q[0]) / 2;
+      corners = Math.abs(p[1] - q[1]) < 0.5 ? [p, q] : [p, [mx, p[1]], [mx, q[1]], q];
+    } else {
+      const my = edge.bend != null ? p[1] + (q[1] - p[1]) * edge.bend : edge.channel ?? (p[1] + q[1]) / 2;
+      corners = Math.abs(p[0] - q[0]) < 0.5 ? [p, q] : [p, [p[0], my], [q[0], my], q];
+    }
+    if (edge.via) corners = [p, ...edge.via, q];
+    edge.corners = corners;
+    edge.points = rounded(corners, 7);
+    edge.lens = [0];
+    for (let i = 1; i < edge.points.length; i++) edge.lens.push(edge.lens[i - 1] + Math.hypot(edge.points[i][0] - edge.points[i - 1][0], edge.points[i][1] - edge.points[i - 1][1]));
+    edge.len = edge.lens[edge.lens.length - 1];
+  }
+}
+
+// Where two edges cross at right angles, the later one hops over the earlier with a small
+// arc, so a crossing never reads as a junction. Works on the routed points, so packets follow.
+function applyHops(model, radius = 4.2) {
+  const legsOf = (edge) => {
+    const legs = [];
+    for (let i = 1; i < edge.points.length; i++) {
+      const [a, b] = [edge.points[i - 1], edge.points[i]];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < radius * 3) continue;
+      if (Math.abs(a[1] - b[1]) < 0.01) legs.push({ i, axis: "x", at: a[1], from: Math.min(a[0], b[0]), to: Math.max(a[0], b[0]) });
+      else if (Math.abs(a[0] - b[0]) < 0.01) legs.push({ i, axis: "y", at: a[0], from: Math.min(a[1], b[1]), to: Math.max(a[1], b[1]) });
+    }
+    return legs;
+  };
+  const margin = radius * 1.6;
+  const fits = (leg, c) => c > leg.from + margin && c < leg.to - margin;
+  const legs = new Map(model.edges.map((edge) => [edge.index, legsOf(edge)]));
+  const hopsOf = new Map(model.edges.map((edge) => [edge.index, []]));
+  for (const edge of model.edges) {
+    for (const other of model.edges) {
+      if (other.index >= edge.index) continue;
+      for (const leg of legs.get(edge.index)) for (const cross of legs.get(other.index)) {
+        if (leg.axis === cross.axis) continue;
+        if (!(cross.at > leg.from - 0.5 && cross.at < leg.to + 0.5 && leg.at > cross.from - 0.5 && leg.at < cross.to + 0.5)) continue;
+        // The later edge hops if its leg has room around the crossing, else the earlier one does.
+        if (fits(leg, cross.at)) hopsOf.get(edge.index).push({ i: leg.i, axis: leg.axis, c: cross.at, line: leg.at });
+        else if (fits(cross, leg.at)) hopsOf.get(other.index).push({ i: cross.i, axis: cross.axis, c: leg.at, line: cross.at });
+      }
+    }
+  }
+  for (const edge of model.edges) {
+    const hops = hopsOf.get(edge.index);
+    if (!hops.length) continue;
+    // Insert from the last leg backwards so earlier indices stay valid.
+    const byLeg = new Map();
+    for (const hop of hops) byLeg.set(hop.i, [...(byLeg.get(hop.i) || []), hop]);
+    for (const [i, list] of [...byLeg].sort((p, q) => q[0] - p[0])) {
+      const [a, b] = [edge.points[i - 1], edge.points[i]];
+      const axis = list[0].axis;
+      const dir = axis === "x" ? Math.sign(b[0] - a[0]) : Math.sign(b[1] - a[1]);
+      list.sort((p, q) => (p.c - q.c) * dir);
+      const inserted = [];
+      for (const hop of list) {
+        for (let s = 0; s <= 6; s++) {
+          const angle = (Math.PI * s) / 6;
+          const along = hop.c - dir * radius * Math.cos(angle);
+          const offset = -radius * Math.sin(angle);
+          inserted.push(axis === "x" ? [along, hop.line + offset] : [hop.line + offset, along]);
+        }
+      }
+      edge.points.splice(i, 0, ...inserted);
+    }
+    edge.lens = [0];
+    for (let i = 1; i < edge.points.length; i++) edge.lens.push(edge.lens[i - 1] + Math.hypot(edge.points[i][0] - edge.points[i - 1][0], edge.points[i][1] - edge.points[i - 1][1]));
+    edge.len = edge.lens[edge.lens.length - 1];
+    edge.hops = hops.length;
+  }
+}
+
+function rounded(points, radius, steps = 5) {
+  if (points.length < 3) return points.map((p) => [...p]);
+  const out = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const [a, b, c] = [points[i - 1], points[i], points[i + 1]];
+    const l1 = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const l2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+    const r = Math.min(radius, l1 / 2, l2 / 2);
+    if (r < 0.5) {
+      out.push(b);
+      continue;
+    }
+    const u = [(a[0] - b[0]) / l1, (a[1] - b[1]) / l1];
+    const v = [(c[0] - b[0]) / l2, (c[1] - b[1]) / l2];
+    const s = [b[0] + u[0] * r, b[1] + u[1] * r];
+    const e = [b[0] + v[0] * r, b[1] + v[1] * r];
+    for (let t = 0; t <= steps; t++) {
+      const f = t / steps;
+      // quadratic Bézier through the corner: close to a quarter circle for right angles
+      const m = (1 - f) * (1 - f);
+      const n = 2 * (1 - f) * f;
+      const o = f * f;
+      out.push([m * s[0] + n * b[0] + o * e[0], m * s[1] + n * b[1] + o * e[1]]);
+    }
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Views
+
+const VIEWS = {
+  iso: { azimuth: 56, elevation: 32 },
+  flat: { azimuth: 90, elevation: 90 },
+};
+
+function extentOf(model, view) {
+  const pts = [];
+  for (const node of model.nodes) pts.push(...k.boxCorners(node.plan, 0, view === "iso" ? heightOf(node) : 0));
+  for (const group of model.groups) pts.push(...k.boxCorners(group.box, -2, 0));
+  for (const node of model.nodes) pts.push([node.cx - node.label.length * 2.6, node.plan.y + node.plan.d + 14, 0], [node.cx + node.label.length * 2.6, node.plan.y + node.plan.d + 14, 0]);
+  return pts;
+}
+
+function heightOf(node) {
+  if (node.kind === "service" || node.kind === "worker") return node.replicas * 8.8 + 1;
+  if (node.kind === "kafka" || node.kind === "queue") return 10;
+  return node.h;
+}
+
+function projectionOf(model, view, width = 640, camera) {
+  const { azimuth, elevation } = camera || VIEWS[view];
+  const pts = extentOf(model, view);
+  const unit = { origin: [0, 0], scale: 1, azimuth, elevation };
+  const flat = pts.map((p) => k.iso(p, unit));
+  const xs = flat.map(([x]) => x);
+  const ys = flat.map(([, y]) => y);
+  const aspect = (Math.max(...ys) - Math.min(...ys)) / (Math.max(...xs) - Math.min(...xs));
+  const pad = 26;
+  const height = Math.round(Math.min(760, Math.max(240, (width - pad * 2) * aspect + pad * 2)));
+  return { P: k.fitProjection(pts, width, height, { pad, azimuth, elevation }), width, height };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Isometric renderers. Each returns markup for one node at rest; the live page only toggles
+// attributes (LEDs, record cells, down) and moves cursors and packets.
+
+function isoKit(P) {
+  const at = (p) => k.iso(p, P);
+  const S = (paths, style) => k.solidSvg(paths, style);
+  const L = (d, style) => k.lineSvg(d, style);
+  const led = (id, p, r = 1.3) => {
+    const [x, y] = at(p);
+    return `<circle class="tp-led" data-led="${escape(id)}" cx="${r1(x)}" cy="${r1(y)}" r="${r}"/>`;
+  };
+  const dots = (pts, style) => k.dotsSvg(pts.map(at), style);
+  // A closed rectangle on the +y face (the face toward the lower left).
+  const faceY = (x0, x1, y, z0, z1) => k.pathOf([at([x0, y, z0]), at([x1, y, z0]), at([x1, y, z1]), at([x0, y, z1])], true);
+  const faceX = (x, y0, y1, z0, z1) => k.pathOf([at([x, y0, z0]), at([x, y1, z0]), at([x, y1, z1]), at([x, y0, z1])], true);
+  return { at, S, L, led, dots, faceY, faceX, P };
+}
+
+const ISO = {
+  service(node, c) {
+    const { plan } = node;
+    const out = [];
+    for (let r = 0; r < node.replicas; r++) {
+      const z = r * 8.8;
+      const top = r === node.replicas - 1;
+      out.push(c.S(k.slabOf(plan, z, 8, c.P, 3, 0.6), { tone: "mid", crease: "faint" }));
+      const fy = plan.y + plan.d;
+      for (let b = 0; b < 3; b++) out.push(c.L(c.faceY(plan.x + 14 + b * 11, plan.x + 23 + b * 11, fy, z + 2.4, z + 5.6), { tone: "lo" }));
+      out.push(c.L(c.faceX(plan.x + plan.w, plan.y + 6, plan.y + plan.d - 6, z + 3.2, z + 4.8), { tone: "faint" }));
+      out.push(c.led(`${node.id}:${r}`, [plan.x + 6, fy, z + 4]));
+      if (top) {
+        out.push(c.L(k.planOutline(k.insetPlan(plan, 4), z + 8, c.P, 3), { tone: "faint" }));
+        out.push(c.dots(k.corners(plan, 2.2).map(([x, y]) => [x, y, z + 8]), { size: 0.5, tone: "lo" }));
+        if (node.kind === "worker") out.push(c.L(k.ring(node.cx, node.cy, 6, z + 8, c.P, 24) + k.ring(node.cx, node.cy, 2.4, z + 8, c.P, 16), { tone: "lo" }));
+      }
+    }
+    return out.join("");
+  },
+  worker(node, c) {
+    return ISO.service(node, c);
+  },
+  cache(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 5, c.P, 3, 0.6), { tone: "mid" })];
+    out.push(c.L(k.planOutline(k.insetPlan(plan, 3), 5, c.P, 3), { tone: "faint" }));
+    const chips = [];
+    for (let row = 0; row < 2; row++)
+      for (let col = 0; col < 4; col++) chips.push({ x: plan.x + 6 + col * 11.4, y: plan.y + 6 + row * 13, w: 8.6, d: 10, r: 0.8 });
+    chips.sort((a, b) => a.x + a.y - (b.x + b.y));
+    for (const chip of chips) out.push(c.S(k.slabOf(chip, 5, 2.6, c.P, 2), { tone: "hi", crease: "lo" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, 2.5]));
+    out.push(c.dots([[plan.x + 11, plan.y + plan.d, 2.5], [plan.x + 15, plan.y + plan.d, 2.5]], { size: 0.6, tone: "lo" }));
+    return out.join("");
+  },
+  db(node, c) {
+    const r = Math.min(node.w, node.d) / 2 - 1;
+    const out = [];
+    const toward = [Math.cos(Math.PI / 4), Math.sin(Math.PI / 4)];
+    for (let s = 0; s < 3; s++) {
+      const z = s * 10;
+      out.push(c.S(k.cylinder(node.cx, node.cy, r, z, 9, c.P, 48, s === 2 ? 0.8 : 0), { tone: "mid" }));
+      out.push(c.L(k.sideArc(node.cx, node.cy, r, z + 4.5, c.P, 32), { tone: "faint" }));
+      out.push(c.led(`${node.id}:${s === 2 ? 0 : "x" + s}`, [node.cx + r * toward[0], node.cy + r * toward[1], z + 4.5], 1.1));
+    }
+    out.push(c.L(k.ring(node.cx, node.cy, r - 4, 29, c.P, 40), { tone: "lo" }));
+    out.push(c.dots([[node.cx, node.cy, 29]], { size: 0.8, tone: "mid" }));
+    if (node.role) out.push(k.faceTextSvg(k.topMatrix([node.cx, node.cy + 4], 29, c.P, "x"), node.role.toUpperCase(), { size: 4, tone: "lo", anchor: "middle" }));
+    return out.join("");
+  },
+  storage(node, c) {
+    const r = Math.min(node.w, node.d) / 2 - 1;
+    const out = [];
+    [r - 5, r - 2.5, r].forEach((radius, s) => {
+      out.push(c.S(k.cylinder(node.cx, node.cy, radius, s * 8, s === 2 ? 10 : 8, c.P, 48, s === 2 ? 0.8 : 0), { tone: "mid" }));
+    });
+    out.push(c.L(k.ring(node.cx, node.cy, r - 3, 26, c.P, 40), { tone: "lo" }));
+    out.push(c.L(k.ring(node.cx, node.cy, r - 7, 26, c.P, 40), { tone: "faint" }));
+    out.push(c.led(`${node.id}:0`, [node.cx + r * 0.707, node.cy + r * 0.707, 21], 1.1));
+    return out.join("");
+  },
+  lb(node, c) {
+    const r = Math.min(node.w, node.d) / 2;
+    const ring = k.circleRing(node.cx, node.cy, r, 8).map(([x, y]) => [x, y]);
+    const rot = ring.map((_, i) => {
+      const a = ((i + 0.5) / 8) * Math.PI * 2;
+      return [node.cx + r * Math.cos(a), node.cy + r * Math.sin(a)];
+    });
+    const out = [c.S(k.extrude(rot, 0, 10, c.P, { bevel: 0.8 }), { tone: "mid" })];
+    out.push(c.L(k.ring(node.cx, node.cy, r - 6, 10, c.P, 40), { tone: "faint" }));
+    const fan = [-0.6, 0, 0.6].map((a) => k.lineOnTop([node.cx - 9, node.cy], [node.cx + 11 * Math.cos(a), node.cy + 11 * Math.sin(a)], 10, c.P)).join("");
+    out.push(c.L(fan, { tone: "mid", free: "end" }));
+    out.push(c.dots([[node.cx - 9, node.cy, 10]], { size: 0.9, tone: "hi" }));
+    out.push(c.led(`${node.id}:0`, [node.cx + r * 0.92 * 0.707, node.cy + r * 0.92 * 0.707, 5], 1.2));
+    return out.join("");
+  },
+  gateway(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 4, c.P, 3, 0.6), { tone: "mid" })];
+    const posts = [
+      { x: plan.x + 4, y: plan.y + 4, w: 9, d: plan.d - 8, r: 1 },
+      { x: plan.x + plan.w - 13, y: plan.y + 4, w: 9, d: plan.d - 8, r: 1 },
+    ];
+    for (const post of posts) out.push(c.S(k.slabOf(post, 4, 9, c.P, 2, 0.4), { tone: "mid" }));
+    const beam = { x: plan.x + 2, y: plan.y + 3, w: plan.w - 4, d: plan.d - 6, r: 1.5 };
+    out.push(c.S(k.slabOf(beam, 13, 3, c.P, 3, 0.6), { tone: "hi", crease: "lo" }));
+    out.push(c.L(k.planOutline(k.insetPlan(beam, 3), 16, c.P, 3), { tone: "faint" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + plan.w / 2, plan.y + plan.d - 3, 14.5]));
+    return out.join("");
+  },
+  client(node, c) {
+    const { plan } = node;
+    const out = [];
+    const deck = { x: plan.x, y: plan.y + 8, w: plan.w, d: plan.d - 8, r: 2 };
+    out.push(c.S(k.slabOf(deck, 0, 2.4, c.P, 3, 0.4), { tone: "mid" }));
+    out.push(c.L(k.planOutline(k.insetPlan({ ...deck, y: deck.y + 3, d: deck.d - 9 }, 3), 2.4, c.P, 2), { tone: "faint" }));
+    out.push(c.L(k.planOutline({ x: node.cx - 6, y: deck.y + deck.d - 6, w: 12, d: 4, r: 1 }, 2.4, c.P, 2), { tone: "faint" }));
+    const lid = { x: plan.x, y: plan.y + 4, w: plan.w, d: 3, r: 1 };
+    out.push(c.S(k.slabOf(lid, 2.4, 22, c.P, 2, 0.4), { tone: "mid" }));
+    const fy = lid.y + lid.d;
+    out.push(`<path class="tp-screen" d="${c.faceY(plan.x + 3, plan.x + plan.w - 3, fy, 5, 22)}"/>`);
+    for (let i = 0; i < 3; i++) out.push(c.L(k.segment([plan.x + 7, fy, 18 - i * 4], [plan.x + 7 + [22, 16, 19][i], fy, 18 - i * 4], c.P), { tone: "lo", free: true }));
+    out.push(c.led(`${node.id}:0`, [plan.x + plan.w - 7, fy, 8]));
+    return out.join("");
+  },
+  box(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 14, c.P, 3, 0.6), { tone: "mid" })];
+    out.push(c.L(k.planOutline(k.insetPlan(plan, 4), 14, c.P, 3), { tone: "faint" }));
+    out.push(c.L(k.sideSeam(plan, 4, c.P, 3), { tone: "faint" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 6, plan.y + plan.d, 9]));
+    return out.join("");
+  },
+  kafka(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 6, c.P, 3, 0.8), { tone: "mid" })];
+    const fy = plan.y + plan.d;
+    if (node.brokers) {
+      // One small broker unit per broker down the left end; click one to fail it.
+      const n = node.brokers;
+      const span = (plan.d - 8) / n;
+      for (let i = n - 1; i >= 0; i--) {
+        const unit = { x: plan.x + 5, y: plan.y + 4 + i * span + 0.8, w: 12, d: span - 1.6, r: 1 };
+        out.push(`<g class="tp-broker" data-part="broker:${i}">${c.S(k.slabOf(unit, 6, 5, c.P, 2, 0.4), { tone: "mid" })}${c.led(`${node.id}:b${i}`, [unit.x + unit.w, unit.y + unit.d / 2, 8.5], 1)}</g>`);
+      }
+    } else {
+      for (let b = 0; b < 3; b++) out.push(c.led(`${node.id}:b${b}`, [plan.x + 6 + b * 5, fy, 3], 1.1));
+      out.push(c.L(c.faceY(plan.x + 24, plan.x + plan.w - 6, fy, 2, 4), { tone: "faint" }));
+    }
+    for (let p = 0; p < node.partitions; p++) {
+      const lane = laneOf(node, p);
+      out.push(`<g class="tp-lane" data-lane="${escape(node.id)}:${p}">`);
+      out.push(c.S(k.slabOf({ ...lane, x: lane.x - 2, w: lane.w + 4, y: lane.y - 0.5, d: lane.d + 1, r: 1 }, 6, 0.6, c.P, 2), { tone: "lo", crease: "none" }));
+      for (let i = 0; i < SLOTS; i++) {
+        const cell = { x: lane.x + i * PITCH + 0.7, y: lane.y + 0.8, w: PITCH - 1.4, d: lane.d - 1.6, r: 0.6 };
+        out.push(`<g class="tp-cell" data-cell="${escape(node.id)}:${p}:${i}">${c.S(k.slabOf(cell, 6.6, 2.2, c.P, 2), { tone: "lo", crease: "none" })}</g>`);
+      }
+      (node.groups || ["default"]).slice(0, 3).forEach((_, g) => {
+        const post = { x: lane.x - 0.8, y: lane.y - 1.4, w: 1.6, d: lane.d + 2.8, r: 0.4 };
+        out.push(`<g class="tp-cursor" data-cursor="${escape(node.id)}:${g}:${p}" data-g="${g}">${c.S(k.slabOf(post, 6.6, 4.4 + g * 1.6, c.P, 1), { tone: "hi", lit: g === 0 })}</g>`);
+      });
+      out.push(`</g>`);
+    }
+    return out.join("");
+  },
+  cdn(node, c) {
+    const { plan } = node;
+    const r = Math.min(plan.w, plan.d) / 2 - 5;
+    const out = [c.S(k.slabOf(plan, 0, 4, c.P, 3, 0.6), { tone: "mid" })];
+    out.push(c.S(k.cylinder(node.cx, node.cy, r, 4, 6, c.P, 48, 0.6), { tone: "hi", crease: "lo" }));
+    out.push(c.L(k.sideArc(node.cx, node.cy, r, 7, c.P, 32), { tone: "faint" }));
+    out.push(c.L(k.ring(node.cx, node.cy, r * 0.62, 10, c.P, 40) + k.ring(node.cx, node.cy, r * 0.25, 10, c.P, 24), { tone: "lo" }));
+    out.push(c.L(k.lineOnTop([node.cx - r, node.cy], [node.cx + r, node.cy], 10, c.P) + k.lineOnTop([node.cx, node.cy - r], [node.cx, node.cy + r], 10, c.P), { tone: "faint" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, 2]));
+    return out.join("");
+  },
+  dns(node, c) {
+    const out = [c.S(k.slabOf(k.insetPlan(node.plan, 4), 0, 3, c.P, 3, 0.5), { tone: "mid" })];
+    out.push(c.S(k.cylinder(node.cx, node.cy, 3, 3, 17, c.P, 20), { tone: "mid", crease: "none" }));
+    out.push(c.L([8, 13].map((z) => k.sideArc(node.cx, node.cy, 3, z, c.P, 12)).join(""), { tone: "faint" }));
+    out.push(c.S(k.cylinder(node.cx, node.cy, 10, 20, 2.4, c.P, 40, 0.5), { tone: "hi", crease: "lo" }));
+    out.push(c.L(k.ring(node.cx, node.cy, 6, 22.4, c.P, 32), { tone: "lo" }));
+    out.push(c.led(`${node.id}:0`, [node.cx, node.cy, 22.4], 1.3));
+    return out.join("");
+  },
+  external(node, c) {
+    const { plan } = node;
+    const out = [`<g class="tp-ext">${c.S(k.slabOf(plan, 0, 14, c.P, 3, 0.6), { tone: "mid" })}</g>`];
+    out.push(c.L(k.planOutline(k.insetPlan(plan, 4), 14, c.P, 3), { tone: "faint", dashed: true }));
+    out.push(c.dots([0, 1, 2].map((i) => [node.cx - 5 + i * 5, node.cy, 14]), { size: 0.9, tone: "mid" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 6, plan.y + plan.d, 9]));
+    return out.join("");
+  },
+  scheduler(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 6, c.P, 3, 0.6), { tone: "mid" })];
+    const r = Math.min(plan.w, plan.d) / 2 - 4;
+    out.push(c.S(k.cylinder(node.cx, node.cy, r, 6, 2, c.P, 48, 0.5), { tone: "hi", crease: "lo" }));
+    const ticks = k.radialTicks(node.cx, node.cy, r - 1.5, 12, 3, 8, [1.2, 2.4], c.P);
+    out.push(c.L(ticks.minor, { tone: "lo" }), c.L(ticks.major, { tone: "mid" }));
+    out.push(c.L(k.lineOnTop([node.cx, node.cy], [node.cx, node.cy - r * 0.62], 8, c.P) + k.lineOnTop([node.cx, node.cy], [node.cx + r * 0.42, node.cy + r * 0.2], 8, c.P), { tone: "hi", free: "end" }));
+    out.push(c.dots([[node.cx, node.cy, 8]], { size: 0.8, tone: "hi" }));
+    out.push(c.led(`${node.id}:0`, [plan.x + 5, plan.y + plan.d, 3]));
+    return out.join("");
+  },
+  flags(node, c) {
+    const { plan } = node;
+    const out = [c.S(k.slabOf(plan, 0, 6, c.P, 3, 0.6), { tone: "mid" })];
+    flagRows(node).forEach(({ name, slot, knob }) => {
+      out.push(c.S(k.slabOf(slot, 6, 0.6, c.P, 2), { tone: "lo", crease: "none" }));
+      out.push(`<g class="tp-knob" data-flag="${escape(name)}">${c.S(k.slabOf(knob, 6.6, 2.2, c.P, 2), { tone: "hi", lit: true })}</g>`);
+      out.push(k.faceTextSvg(k.topMatrix([plan.x + 4, slot.y + slot.d - 0.6], 6, c.P, "x"), name.slice(0, 7), { size: 3.4, tone: "lo" }));
+    });
+    out.push(c.led(`${node.id}:0`, [plan.x + plan.w - 5, plan.y + plan.d, 3]));
+    return out.join("");
+  },
+  queue(node, c) {
+    return ISO.kafka(node, c);
+  },
+};
+
+// Rows of switches on a flags panel: a slot and a knob that slides with the rollout.
+function flagRows(node) {
+  const names = node.flagNames || [];
+  const { plan } = node;
+  return names.slice(0, 4).map((name, i) => {
+    const y = plan.y + 4 + i * ((plan.d - 8) / Math.max(1, Math.min(4, names.length)));
+    const slot = { x: plan.x + plan.w - 26, y, w: 22, d: 5, r: 1 };
+    return { name, slot, knob: { x: slot.x + 0.5, y: y + 0.5, w: 8, d: 4, r: 0.8 }, travel: slot.w - 9 };
+  });
+}
+
+function laneOf(node, p) {
+  const top = node.plan.y + 7;
+  return { x: node.plan.x + node.plan.w - 8 - SLOTS * PITCH, y: top + p * LANE, w: SLOTS * PITCH, d: LANE - 3, r: 1 };
+}
+
+// Where a node's label lies on the floor in iso: in front of it, else along its right side,
+// whichever no nearer node hides. `labelSpots` is shared with `build.mjs --check`.
+function labelSpots(node) {
+  const half = node.label.length * 2.4;
+  const front = { at: [node.cx, node.plan.y + node.plan.d + 10], along: "x" };
+  front.marks = [[node.cx - half, front.at[1]], front.at, [node.cx + half, front.at[1]]];
+  const side = { at: [node.plan.x + node.plan.w + 9, node.cy], along: "y" };
+  side.marks = [[side.at[0], node.cy - half], side.at, [side.at[0], node.cy + half]];
+  return [front, side];
+}
+
+function hiddenBy(model, node, spot, P) {
+  const marks = spot.marks.map((m) => ({ s: k.iso([m[0], m[1], 0], P), depth: k.depthOf([m[0], m[1], 0], P) }));
+  const blockers = [];
+  for (const other of model.nodes) {
+    if (other === node) continue;
+    const hull = hullOf(k.boxCorners(other.plan, 0, heightOf(other)).map((c) => k.iso(c, P)));
+    const front = k.depthOf([other.cx, other.cy, 0], P);
+    const hidden = marks.filter((m) => front > m.depth - 20 && inside(hull, m.s)).length;
+    if (hidden >= 1) blockers.push(other.id);
+  }
+    return blockers;
+}
+
+function hullOf(points) {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+function inside(hull, [x, y]) {
+  for (let i = 0; i < hull.length; i++) {
+    const [ax, ay] = hull[i];
+    const [bx, by] = hull[(i + 1) % hull.length];
+    if ((bx - ax) * (y - ay) - (by - ay) * (x - ax) < 0) return false;
+  }
+  return hull.length > 2;
+}
+
+function isoLabel(node, c, model) {
+  // Morph frames reuse the spot chosen for the resting view.
+  if (model.fastLabels && node.labelSpot) return k.faceTextSvg(k.topMatrix(node.labelSpot.at, 0, c.P, node.labelSpot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
+  const spots = labelSpots(node);
+  const spot = (node.labelAt === "side" ? [spots[1]] : node.labelAt === "front" ? [spots[0]] : spots).find((s) => !hiddenBy(model, node, s, c.P).length) || spots[0];
+  node.labelSpot = spot;
+  return k.faceTextSvg(k.topMatrix(spot.at, 0, c.P, spot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Flat renderers: 2D glyphs that fill each footprint, in screen space.
+
+function flatKit(P) {
+  const at = (p) => k.iso([p[0], p[1], 0], P);
+  const box = (plan) => {
+    const [x0, y0] = at([plan.x, plan.y]);
+    const [x1, y1] = at([plan.x + plan.w, plan.y + plan.d]);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  };
+  const rect = (b, cls = "tp-f", rx = 3, extra = "") => `<rect class="${cls}" x="${r1(b.x)}" y="${r1(b.y)}" width="${r1(b.w)}" height="${r1(b.h)}" rx="${rx}"${extra}/>`;
+  const line = (pts, tone = "lo") => k.lineSvg(k.pathOf(pts), { tone });
+  const text = (x, y, s, size = 8, cls = "tp-ft") => `<text class="${cls}" x="${r1(x)}" y="${r1(y)}" font-size="${size}" text-anchor="middle">${escape(s)}</text>`;
+  const led = (id, x, y, r = 1.6) => `<circle class="tp-led" data-led="${escape(id)}" cx="${r1(x)}" cy="${r1(y)}" r="${r}"/>`;
+  return { at, box, rect, line, text, led, P, scale: k.cameraOf(P).k };
+}
+
+const FLAT = {
+  service(node, f) {
+    const b = f.box(node.plan);
+    const out = [];
+    const stack = Math.min(node.replicas - 1, 3);
+    for (let r = stack; r > 0; r--) out.push(f.rect({ ...b, x: b.x + r * 2.5, y: b.y - r * 2.5 }, "tp-f tp-f-back", 4));
+    out.push(f.rect(b, "tp-f", 4));
+    out.push(f.line([[b.x, b.y + 11], [b.x + b.w, b.y + 11]], "faint"));
+    for (let r = 0; r < node.replicas; r++) out.push(f.led(`${node.id}:${r}`, b.x + 6 + r * 6, b.y + 5.5, 1.7));
+    if (node.kind === "worker") out.push(`<circle class="tp-f-mark" cx="${r1(b.x + b.w - 7)}" cy="${r1(b.y + 5.5)}" r="2.6"/>`);
+    return out.join("");
+  },
+  worker(node, f) {
+    return FLAT.service(node, f);
+  },
+  cache(node, f) {
+    const b = f.box(node.plan);
+    const out = [f.rect(b, "tp-f", 4)];
+    for (let i = 0; i < 4; i++) out.push(f.rect({ x: b.x + 7 + i * ((b.w - 14) / 4), y: b.y + 6, w: (b.w - 14) / 4 - 3, h: 7 }, "tp-f tp-f-chip", 1));
+    out.push(f.led(`${node.id}:0`, b.x + b.w - 6, b.y + b.h - 10, 1.6));
+    return out.join("");
+  },
+  db(node, f) {
+    const b = f.box(node.plan);
+    const rx = b.w / 2 - 2;
+    const ry = Math.min(5, b.h / 6);
+    const cx = b.x + b.w / 2;
+    const top = b.y + ry + 1;
+    const bot = b.y + b.h - ry - 1;
+    const out = [`<path class="tp-f" d="M${r1(cx - rx)} ${r1(top)}V${r1(bot)}A${r1(rx)} ${r1(ry)} 0 0 0 ${r1(cx + rx)} ${r1(bot)}V${r1(top)}A${r1(rx)} ${r1(ry)} 0 0 0 ${r1(cx - rx)} ${r1(top)}Z"/>`];
+    out.push(`<ellipse class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(top)}" rx="${r1(rx)}" ry="${r1(ry)}"/>`);
+    out.push(`<path class="k-line" data-tone="faint" d="M${r1(cx - rx)} ${r1(top + 9)}A${r1(rx)} ${r1(ry)} 0 0 0 ${r1(cx + rx)} ${r1(top + 9)}"/>`);
+    out.push(f.led(`${node.id}:0`, cx + rx - 5, top + 14, 1.6));
+    if (node.role) out.push(f.text(cx, top + 2.6, node.role.toUpperCase(), 5.5, "tp-ft tp-ft-dim"));
+    return out.join("");
+  },
+  storage(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    const out = [`<path class="tp-f" d="M${r1(b.x + 2)} ${r1(b.y + 6)}L${r1(b.x + 7)} ${r1(b.y + b.h - 2)}H${r1(b.x + b.w - 7)}L${r1(b.x + b.w - 2)} ${r1(b.y + 6)}Z"/>`];
+    out.push(`<ellipse class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(b.y + 6)}" rx="${r1(b.w / 2 - 2)}" ry="4"/>`);
+    out.push(f.led(`${node.id}:0`, cx, b.y + 16, 1.6));
+    return out.join("");
+  },
+  lb(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const r = Math.min(b.w, b.h) / 2;
+    const oct = Array.from({ length: 8 }, (_, i) => {
+      const a = ((i + 0.5) / 8) * Math.PI * 2;
+      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    });
+    const out = [`<path class="tp-f" d="${k.pathOf(oct, true)}"/>`];
+    for (const a of [-0.6, 0, 0.6]) out.push(k.lineSvg(k.pathOf([[cx - r * 0.45, cy - 3], [cx + r * 0.5 * Math.cos(a), cy - 3 + r * 0.5 * Math.sin(a)]]), { tone: "mid", free: "end" }));
+    out.push(f.led(`${node.id}:0`, cx - r * 0.45, cy - 3, 1.8));
+    return out.join("");
+  },
+  gateway(node, f) {
+    const b = f.box(node.plan);
+    const out = [f.rect(b, "tp-f", 4)];
+    out.push(`<path class="k-line" data-tone="lo" d="M${r1(b.x + 8)} ${r1(b.y + b.h)}V${r1(b.y + 12)}Q${r1(b.x + b.w / 2)} ${r1(b.y + 2)} ${r1(b.x + b.w - 8)} ${r1(b.y + 12)}V${r1(b.y + b.h)}"/>`);
+    out.push(f.led(`${node.id}:0`, b.x + b.w / 2, b.y + 9, 1.6));
+    return out.join("");
+  },
+  client(node, f) {
+    const b = f.box(node.plan);
+    const out = [f.rect({ x: b.x, y: b.y, w: b.w, h: b.h - 7 }, "tp-f", 3)];
+    out.push(f.rect({ x: b.x + 3, y: b.y + 3, w: b.w - 6, h: b.h - 13 }, "tp-screen", 1));
+    out.push(f.line([[b.x + b.w / 2, b.y + b.h - 7], [b.x + b.w / 2, b.y + b.h - 1]], "lo"));
+    out.push(f.rect({ x: b.x + b.w / 2 - 8, y: b.y + b.h - 2, w: 16, h: 2 }, "tp-f", 1));
+    out.push(f.led(`${node.id}:0`, b.x + b.w - 7, b.y + b.h - 10.5, 1.4));
+    return out.join("");
+  },
+  box(node, f) {
+    const b = f.box(node.plan);
+    return [f.rect(b, "tp-f", 4), f.led(`${node.id}:0`, b.x + 6, b.y + 6, 1.6)].join("");
+  },
+  kafka(node, f) {
+    const b = f.box(node.plan);
+    const out = [f.rect(b, "tp-f", 4)];
+    const s = f.scale;
+    for (let p = 0; p < node.partitions; p++) {
+      const lb = f.box(laneOf(node, p));
+      out.push(`<g class="tp-lane" data-lane="${escape(node.id)}:${p}">`);
+      for (let i = 0; i < SLOTS; i++) out.push(`<rect class="tp-cell tp-fcell" data-cell="${escape(node.id)}:${p}:${i}" x="${r1(lb.x + i * PITCH * s + 0.8)}" y="${r1(lb.y + 0.8)}" width="${r1(PITCH * s - 1.6)}" height="${r1(lb.h - 1.6)}" rx="1"/>`);
+      (node.groups || ["default"]).slice(0, 3).forEach((_, g) => {
+        out.push(`<path class="tp-cursor tp-fcursor" data-cursor="${escape(node.id)}:${g}:${p}" data-g="${g}" d="M${r1(lb.x)} ${r1(lb.y - 2 - g)}V${r1(lb.y + lb.h + 2 + g)}"/>`);
+      });
+      out.push(`</g>`);
+    }
+    if (node.brokers) {
+      const n = node.brokers;
+      const span = (b.h - 8) / n;
+      for (let i = 0; i < n; i++) {
+        const unit = { x: b.x + 5 * s, y: b.y + 4 * s + i * span + 0.6, w: 12 * s, h: span - 1.2 };
+        out.push(`<g class="tp-broker" data-part="broker:${i}">${f.rect(unit, "tp-f tp-f-chip", 1)}${f.led(`${node.id}:b${i}`, unit.x + unit.w - 3, unit.y + unit.h / 2, 1.2)}</g>`);
+      }
+    } else for (let b2 = 0; b2 < 3; b2++) out.push(f.led(`${node.id}:b${b2}`, b.x + b.w - 4, b.y + 6 + b2 * 4, 1.1));
+    return out.join("");
+  },
+  cdn(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const r = Math.min(b.w, b.h) / 2 - 4;
+    return [f.rect(b, "tp-f", 4), `<circle class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`, `<ellipse class="tp-f-mark" cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(r * 0.45)}" ry="${r1(r)}"/>`, k.lineSvg(`M${r1(cx - r)} ${r1(cy)}H${r1(cx + r)}`, { tone: "faint" }), f.led(`${node.id}:0`, b.x + 5, b.y + b.h - 5, 1.5)].join("");
+  },
+  dns(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    return [`<path class="tp-f" d="M${r1(cx - 9)} ${r1(b.y + b.h - 1)}L${r1(cx - 2)} ${r1(b.y + 8)}H${r1(cx + 2)}L${r1(cx + 9)} ${r1(b.y + b.h - 1)}Z"/>`, `<circle class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(b.y + 7)}" r="5"/>`, f.led(`${node.id}:0`, cx, b.y + 7, 1.6)].join("");
+  },
+  external(node, f) {
+    const b = f.box(node.plan);
+    return [f.rect(b, "tp-f tp-f-ext", 4), ...[0, 1, 2].map((i) => `<circle class="tp-f-dot" cx="${r1(b.x + b.w / 2 - 6 + i * 6)}" cy="${r1(b.y + b.h / 2)}" r="1.3"/>`), f.led(`${node.id}:0`, b.x + 6, b.y + 6, 1.5)].join("");
+  },
+  scheduler(node, f) {
+    const b = f.box(node.plan);
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const r = Math.min(b.w, b.h) / 2 - 3;
+    return [f.rect(b, "tp-f", 4), `<circle class="tp-f tp-f-top" cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`, k.lineSvg(`M${r1(cx)} ${r1(cy)}V${r1(cy - r * 0.65)}M${r1(cx)} ${r1(cy)}L${r1(cx + r * 0.45)} ${r1(cy + r * 0.2)}`, { tone: "hi", free: "end" }), f.led(`${node.id}:0`, b.x + 5, b.y + b.h - 5, 1.5)].join("");
+  },
+  flags(node, f) {
+    const b = f.box(node.plan);
+    const out = [f.rect(b, "tp-f", 4)];
+    flagRows(node).forEach(({ name, slot, knob }) => {
+      out.push(f.rect(f.box(slot), "tp-f tp-f-chip", 2));
+      out.push(`<g class="tp-knob" data-flag="${escape(name)}">${f.rect(f.box(knob), "tp-f-knob", 1.5)}</g>`);
+      const sb = f.box(slot);
+      out.push(`<text class="tp-ft tp-ft-dim" x="${r1(b.x + 4)}" y="${r1(sb.y + sb.h - 0.5)}" font-size="5.5" text-anchor="start">${escape(name.slice(0, 6))}</text>`);
+    });
+    out.push(f.led(`${node.id}:0`, b.x + b.w - 5, b.y + b.h - 4, 1.4));
+    return out.join("");
+  },
+  queue(node, f) {
+    return FLAT.kafka(node, f);
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
+// One view: markup plus what the live page needs to move things in it.
+
+// `camera` ({ azimuth, elevation }) overrides the iso camera: the page uses it to morph between views.
+function renderView(model, view, width = 640, camera) {
+  const { P, width: W, height: H } = projectionOf(model, view, width, camera);
+  const features = model.features || {};
+  const out = [];
+  const iso = view === "iso" ? isoKit(P) : null;
+  const flat = view === "flat" ? flatKit(P) : null;
+
+  // Zones and regions: floor plates (iso) or dashed regions (flat). A region is heavier.
+  for (const group of model.groups) {
+    if (iso) {
+      const z0 = -(group.depth + 1);
+      const h = group.region ? 1.6 : 1;
+      out.push(`<path class="k-halo" d="${k.haloOf(group.box, z0, h, P)}" style="opacity:calc(var(--tp-halo-opacity) * .5)"/>`);
+      out.push(`<g class="tp-zone" data-depth="${group.depth}"${group.region ? ' data-region=""' : ""}>${iso.S(k.slabOf(group.box, z0, h, P, 6, 0.6), { tone: group.region ? "mid" : "lo", crease: "faint" })}`);
+      out.push(iso.L(k.planOutline(k.insetPlan(group.box, 4), z0 + h, P, 5), { tone: "faint", dashed: !group.region }));
+      // Along the plate's left edge, where node labels never sit.
+      out.push(k.faceTextSvg(k.topMatrix([group.box.x + 6.5, group.box.y + 10], z0 + h, P, "y"), String(group.label).toUpperCase(), { size: group.region ? 7 : 6, tone: group.region ? "hi" : "mid" }));
+      out.push(`</g>`);
+    } else {
+      const b = flat.box(group.box);
+      out.push(`<g class="tp-zone" data-depth="${group.depth}"${group.region ? ' data-region=""' : ""}>${flat.rect(b, "tp-fzone", 8)}<text class="tp-ft tp-ft-dim" x="${r1(b.x + 8)}" y="${r1(b.y + b.h - 7)}" font-size="${group.region ? 8 : 7}" text-anchor="start">${escape(String(group.label).toUpperCase())}</text></g>`);
+    }
+  }
+
+  // Edges on the floor, with a chevron where they arrive and a port ring (or a breaker) at the caller.
+  const labels = [];
+  for (const edge of model.edges) {
+    const screen = edge.points.map((p) => k.iso([p[0], p[1], 0], P));
+    const dashed = edge.kind === "async" || edge.kind === "replication" || edge.kind === "config";
+    const [a, b] = [edge.points[edge.points.length - 2], edge.points[edge.points.length - 1]];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const u = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+    const v = [-u[1], u[0]];
+    const tip = [b[0] - u[0] * 1.5, b[1] - u[1] * 1.5];
+    const head = [
+      [tip[0] - u[0] * 5 + v[0] * 3, tip[1] - u[1] * 5 + v[1] * 3],
+      tip,
+      [tip[0] - u[0] * 5 - v[0] * 3, tip[1] - u[1] * 5 - v[1] * 3],
+    ];
+    const tone = edge.kind === "config" ? "lo" : "mid";
+    const port = edge.breaker && features.breakers !== false
+      ? `<circle class="tp-breaker" data-breaker="${edge.index}" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="2.4"/>`
+      : edge.sync ? `<circle class="tp-port" cx="${r1(screen[0][0])}" cy="${r1(screen[0][1])}" r="1.4"/>` : "";
+    out.push(`<g class="tp-edge" data-edge="${edge.index}" data-kind="${edge.kind}"><path class="tp-edge-bed" d="${k.pathOf(screen)}"/>${k.lineSvg(k.pathOf(screen), { tone, dashed })}${k.lineSvg(k.pathOf(head.map((p) => k.iso([p[0], p[1], 0], P))), { tone, free: true })}${port}</g>`);
+    if (features.labels !== false && edge.kind !== "config" && (edge.label || model.labels === "rate" || edge.flag || edge.unless)) labels.push(edgeLabel(edge, P, view));
+  }
+  if (iso) for (const node of model.nodes) out.push(`<g class="tp-label" data-label="${escape(node.id)}">${isoLabel(node, iso, model)}</g>`);
+  else for (const node of model.nodes) {
+    const b = flat.box(node.plan);
+    out.push(`<g class="tp-label" data-label="${escape(node.id)}">${flat.text(b.x + b.w / 2, b.y + b.h + 10, node.label, 8)}</g>`);
+  }
+  out.push(...labels);
+  out.push(`<g class="tp-packets" data-packets=""></g>`);
+
+  // Nodes, back to front.
+  const order = [...model.nodes].sort((a, b) => k.depthOf([a.cx, a.cy, 0], P) - k.depthOf([b.cx, b.cy, 0], P));
+  for (const node of order) {
+    const halo = iso ? `<path class="k-halo" d="${k.haloOf(k.insetPlan(node.plan, 2), 0, Math.min(heightOf(node), 10), P)}"/>` : "";
+    const body = iso ? (ISO[node.kind] || ISO.box)(node, iso) : (FLAT[node.kind] || FLAT.box)(node, flat);
+    const extra = (node.sidecar ? sidecarOf(node, iso, flat) : "") + (node.queue && features.queues !== false ? queueCellsOf(node, iso, flat) : "");
+    out.push(`<g class="tp-node" data-node="${escape(node.id)}" data-kind="${node.kind}">${halo}${body}${extra}</g>`);
+  }
+
+  const svg = k.figureSvg({ width: W, height: H, label: describe(model), body: out, className: `tp-svg tp-${view}` });
+  const lift = iso ? 1.5 : 0;
+  const toScreen = (p, z = 0) => k.iso([p[0], p[1], z], P);
+  const vec = (dx, dy) => {
+    const a = toScreen([0, 0]);
+    const b = toScreen([dx, dy]);
+    return [b[0] - a[0], b[1] - a[1]];
+  };
+  const flagNode = model.nodes.find((node) => node.kind === "flags");
+  const data = {
+    P,
+    edges: model.edges.map((edge) => edge.points.map((p) => toScreen(p, lift)).map(([x, y]) => [r1(x), r1(y)])),
+    step: vec(PITCH, 0),
+    flagStep: flagNode ? vec(flagRows(flagNode)[0]?.travel || 0, 0) : [0, 0],
+    packet: iso ? isoPacket(P) : null,
+  };
+  return { svg, data, P, width: W, height: H };
+}
+
+// A live label on an edge: at the middle of its longest leg, set off to one side.
+function edgeLabel(edge, P, view) {
+  let best = 0;
+  let leg = [edge.corners[0], edge.corners[1]];
+  for (let i = 1; i < edge.corners.length; i++) {
+    const [a, b] = [edge.corners[i - 1], edge.corners[i]];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len > best) {
+      best = len;
+      leg = [a, b];
+    }
+  }
+  const along = Math.abs(leg[1][0] - leg[0][0]) >= Math.abs(leg[1][1] - leg[0][1]) ? "x" : "y";
+  const mid = [(leg[0][0] + leg[1][0]) / 2, (leg[0][1] + leg[1][1]) / 2];
+  const text = edge.label || "";
+  if (view === "iso") {
+    const at = along === "x" ? [mid[0], mid[1] - 6] : [mid[0] + 6, mid[1]];
+    return `<g class="tp-elabel" data-elabel="${edge.index}">${k.faceTextSvg(k.topMatrix(at, 0, P, along), text, { size: 6.2, tone: "mid", anchor: "middle" })}</g>`;
+  }
+  const [x, y] = k.iso([mid[0], mid[1], 0], P);
+  return `<g class="tp-elabel" data-elabel="${edge.index}"><text class="tp-ft tp-elabel-text" x="${r1(along === "x" ? x : x + 4)}" y="${r1(along === "x" ? y - 3.5 : y + 2)}" font-size="6.2" text-anchor="${along === "x" ? "middle" : "start"}">${escape(text)}</text></g>`;
+}
+
+// A sidecar proxy: a small box on the service's right-hand side.
+function sidecarOf(node, iso, flat) {
+  const { plan } = node;
+  const box = { x: plan.x + plan.w + 1.5, y: plan.y + plan.d - 14, w: 9, d: 12, r: 1 };
+  if (iso) return `<g class="tp-sidecar">${iso.S(k.slabOf(box, 0, Math.max(6, heightOf(node) * 0.6), iso.P, 2, 0.4), { tone: "mid" })}${iso.led(`${node.id}:s`, [box.x + box.w / 2, box.y + box.d, 3], 0.9)}</g>`;
+  return `<g class="tp-sidecar">${flat.rect(flat.box(box), "tp-f tp-f-chip", 1.5)}</g>`;
+}
+
+// A node's buffer: up to 8 cells along its top, lit by how full the queue is.
+function queueCellsOf(node, iso, flat) {
+  const n = Math.min(8, node.queue);
+  const out = [];
+  if (iso) {
+    const z = heightOf(node);
+    for (let i = 0; i < n; i++) {
+      const cell = { x: node.cx - n * 2.2 + i * 4.4, y: node.cy + 2, w: 3.4, d: 3.4, r: 0.5 };
+      out.push(`<g class="tp-cell tp-qcell" data-qcell="${escape(node.id)}:${i}">${iso.S(k.slabOf(cell, z, 1.4, iso.P, 2), { tone: "lo", crease: "none" })}</g>`);
+    }
+  } else {
+    const b = flat.box(node.plan);
+    const size = Math.min(4, (b.w - 8) / n - 1);
+    for (let i = 0; i < n; i++) out.push(`<rect class="tp-cell tp-fcell tp-qcell" data-qcell="${escape(node.id)}:${i}" x="${r1(b.x + 4 + i * (size + 1))}" y="${r1(b.y + b.h - size - 3)}" width="${r1(size)}" height="${r1(size)}" rx=".6"/>`);
+  }
+  return out.join("");
+}
+
+// A packet is a tiny cube drawn once around the screen origin; the page translates it.
+function isoPacket(P) {
+  const P0 = { ...P, origin: [0, 0] };
+  const s = 2.2;
+  const paths = k.slabOf({ x: -s, y: -s, w: s * 2, d: s * 2, r: 0 }, 0, s * 1.6, P0, 1);
+  return { top: paths.top, sides: paths.shades.filter(Boolean).join(""), outline: paths.outline };
+}
+
+function describe(model) {
+  const kinds = model.nodes.map((node) => `${node.label} (${node.kind})`).join(", ");
+  const links = model.edges.map((edge) => `${model.byId.get(edge.from).label} to ${model.byId.get(edge.to).label}`).join("; ");
+  return `${model.title}: ${kinds}. Connections: ${links}.`;
+}
+
+const GEOMETRY = new Set(["plan", "cx", "cy", "w", "d", "h", "auto", "at", "labelSpot", "groups", "index", "points", "lens", "corners", "ends", "ports", "channel", "axisOf", "via", "bend", "axis"]);
+const strip = (object) => Object.fromEntries(Object.entries(object).filter(([key, value]) => !GEOMETRY.has(key) && value !== undefined));
+
+// What the sim needs: everything in the spec except geometry, plus each edge's length.
+function simSpec(model, features) {
+  return {
+    nodes: model.nodes.map(strip),
+    edges: model.edges.map((edge) => ({ ...strip(edge), len: edge.len })),
+    sim: model.sim,
+    scenario: model.scenario,
+    flags: model.flags,
+    features: features || model.features,
+  };
+}
+
+const TOPO_CSS = `
+.tp-stage{position:relative;outline:none;touch-action:manipulation}
+.tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
+.tp-svg[hidden]{display:none}
+.tp-morph{pointer-events:none}
+.tp-morph svg{display:block}
+.tp-node{cursor:pointer;transition:opacity .25s var(--tp-ease)}
+.tp-edge .k-line{transition:stroke .2s}
+.tp-edge-bed{fill:none;stroke:var(--tp-card);stroke-width:3.4px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.tp-iso .tp-edge-bed{stroke:none}
+.tp-port{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-stage[data-focus] .tp-node:not([data-near]){opacity:.38}
+.tp-stage[data-focus] .tp-edge:not([data-near]) .k-line{stroke:var(--tp-faint)}
+.tp-stage[data-focus] .tp-edge[data-near] .k-line{stroke:var(--tp-hi)}
+.tp-stage[data-focus] .tp-label:not([data-near]) text{fill:var(--tp-lo)}
+.tp-label .tp-ft{fill:var(--tp-text)}
+.tp-node[data-sel] .k-solid>.k-edge{stroke:var(--tp-lit)}
+.tp-node[data-sel] .tp-f{stroke:var(--tp-lit)}
+.tp-led{fill:var(--tp-lo);stroke:none;transition:fill .5s}
+.tp-led[data-on]{fill:var(--tp-green);transition:none}
+.tp-node[data-down] .tp-led{fill:var(--tp-red)}
+.tp-node[data-down]>*:not(.tp-led){opacity:.4}
+.tp-node[data-down] .k-edge,.tp-node[data-down] .tp-f{stroke-dasharray:2 2}
+.tp-screen{fill:var(--tp-shade-0);stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-cell[data-on] .k-top{fill:var(--tp-hi)}
+.tp-cell[data-on] .k-shade{fill:var(--tp-mid)}
+.tp-cell[data-on] .k-edge{stroke:var(--tp-hi)}
+.tp-fcell{fill:var(--tp-card);stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-fcell[data-on]{fill:var(--tp-hi);stroke:var(--tp-hi)}
+.tp-fcursor{fill:none;stroke:var(--tp-lit);stroke-width:1.4px;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.tp-cursor[data-g="1"]{--tp-cur:var(--tp-blue)}
+.tp-fcursor[data-g="1"]{stroke:var(--tp-blue)}
+.tp-fcursor[data-g="2"]{stroke:var(--tp-green)}
+.tp-cursor[data-g="1"] .k-edge{stroke:var(--tp-blue)}
+.tp-cursor[data-g="2"] .k-edge{stroke:var(--tp-green)}
+.tp-f{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-f-back{stroke:var(--tp-lo)}
+.tp-f-top{fill:var(--tp-face)}
+.tp-f-chip{fill:var(--tp-face);stroke:var(--tp-lo)}
+.tp-f-mark{fill:none;stroke:var(--tp-lo);stroke-width:var(--tp-weight);vector-effect:non-scaling-stroke}
+.tp-fzone{fill:var(--tp-shade-1);stroke:var(--tp-lo);stroke-width:var(--tp-weight);stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.tp-ft{fill:var(--tp-hi);font-family:var(--tp-mono);letter-spacing:.02em}
+.tp-ft-dim{fill:var(--tp-muted)}
+.tp-zone .k-text{letter-spacing:.14em}
+.tp-pk{pointer-events:none}
+.tp-pk[data-kind="request"]{--pk:var(--tp-lit)}
+.tp-pk[data-kind="response"]{--pk:var(--tp-mid)}
+.tp-pk[data-kind="record"]{--pk:var(--tp-blue)}
+.tp-pk[data-kind="replication"]{--pk:var(--tp-green)}
+.tp-pk[data-kind="drop"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="error"]{--pk:var(--tp-red)}
+.tp-pk[data-kind="retry"]{--pk:var(--tp-amber)}
+.tp-pk[data-kind="late"]{--pk:var(--tp-lo)}
+.k-swatch[data-mark="amber"] path{stroke:var(--tp-amber)}
+.tp-ext .k-edge,.tp-f-ext{stroke-dasharray:2.5 2}
+.tp-f-dot{fill:var(--tp-mid)}
+.tp-f-knob{fill:var(--tp-lit);stroke:none}
+.tp-breaker{fill:var(--tp-card);stroke:var(--tp-mid);stroke-width:1px;vector-effect:non-scaling-stroke}
+.tp-breaker[data-state="open"]{fill:var(--tp-red);stroke:var(--tp-red)}
+.tp-breaker[data-state="half"]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-edge[data-breaker="open"] .k-line{stroke:var(--tp-red);stroke-dasharray:1.5 2.5}
+.tp-edge[data-kind="config"] .k-line{stroke-dasharray:1 3}
+.tp-elabel .k-text,.tp-elabel-text{fill:var(--tp-muted);font-variant-numeric:tabular-nums}
+.tp-elabel-text{paint-order:stroke;stroke:var(--tp-card);stroke-width:2.5px;stroke-linejoin:round}
+.tp-elabel[data-bad] .k-text,.tp-elabel[data-bad] .tp-elabel-text{fill:var(--tp-red)}
+.tp-lane{transition:opacity .3s}
+.tp-lane[data-paused]{opacity:.3}
+.tp-broker{cursor:pointer}
+.tp-broker[data-down] .tp-led{fill:var(--tp-red)}
+.tp-broker[data-down]>*:not(.tp-led){opacity:.4}
+.tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
+.tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-story{margin:18px 0 -10px}
+.tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
+.tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-play:focus-visible,.tp-track:focus-visible{outline:1px solid var(--tp-lit);outline-offset:2px}
+.tp-track{position:relative;flex:1;height:28px;cursor:pointer;touch-action:none}
+.tp-track::before{content:"";position:absolute;left:0;right:0;top:20px;height:1px;background:var(--tp-lo)}
+.tp-phase{all:unset;position:absolute;top:0;bottom:0;box-sizing:border-box;border-left:1px solid var(--tp-lo);cursor:pointer}
+.tp-phase span{position:absolute;left:5px;top:2px;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--tp-muted)}
+.tp-phase:hover span,.tp-phase[data-now] span{color:var(--tp-strong)}
+.tp-phase[data-now]{background:color-mix(in srgb,var(--tp-hi) 5%,transparent)}
+.tp-tick{position:absolute;top:16px;width:1px;height:9px;background:var(--tp-mid);pointer-events:none}
+.tp-head{position:absolute;top:12px;height:17px;width:2px;margin-left:-1px;background:var(--tp-lit);pointer-events:none}
+.tp-time{flex:none;min-width:40px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-say{margin:8px 0 0 34px;min-height:3em;font-size:12.5px;line-height:1.5;color:var(--tp-text)}
+.tp-story[data-mode="free"] .tp-track{opacity:.4}
+@media (max-width:560px){.tp-say{margin-left:0}}
+.tp-pk .pk-top{fill:var(--pk)}
+.tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
+.tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
+.tp-pk circle{fill:var(--pk)}
+.tp-pk .pk-trail{fill:none;stroke:var(--pk);stroke-width:1.6px;stroke-linecap:round;opacity:.28;vector-effect:non-scaling-stroke}
+.tp-spark{width:52px;height:10px;margin-right:9px;vertical-align:-1px;overflow:visible}
+.tp-spark polyline{fill:none;stroke:var(--tp-mid);stroke-width:1px;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+@media (max-width:560px){.tp-spark{display:none}}
+.tp-views{position:absolute;top:13px;left:50%;transform:translateX(-50%);display:flex;gap:0;z-index:2;font-family:var(--tp-mono);font-size:10px;letter-spacing:.08em}
+.tp-views button{all:unset;cursor:pointer;padding:3px 9px;color:var(--tp-muted);box-shadow:0 0 0 1px var(--tp-lo)}
+.tp-views button[aria-pressed="true"]{color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-mid);background:var(--tp-shade-2)}
+.tp-views button:focus-visible{outline:1px solid var(--tp-lit)}
+@media (max-width:560px){.k-card:has(.tp-views){padding-top:72px}.tp-views{top:40px}}
+`;
+
+return { KINDS, SLOTS, prepare, applyHops, VIEWS, heightOf, projectionOf, flagRows, laneOf, labelSpots, hiddenBy, renderView, simSpec, TOPO_CSS };
+})();
 // The live page. Inlined after topo-sim.mjs (exports stripped) and `const DATA = …`.
 // It steps the sim, draws its packets into the visible view and writes attributes:
 // it never re-renders markup per frame.
@@ -1021,20 +2507,21 @@ function packetEl(v) {
   g.setAttribute("class", "tp-pk");
   if (v.data.packet) {
     const { sides, top, outline } = v.data.packet;
-    g.innerHTML = `<path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
+    g.innerHTML = `<path class="pk-trail"/><path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
   } else {
-    g.innerHTML = `<circle r="1.9"/>`;
+    g.innerHTML = `<path class="pk-trail"/><circle r="1.9"/>`;
   }
   g.style.display = "none";
   v.layer.appendChild(g);
-  return { g, kind: "", shown: false };
+  return { g, trail: g.firstChild, kind: "", shown: false, tail: "" };
 }
 
-function pointOn(v, packet) {
+function pointOn(v, packet, back = 0) {
   const pts = v.data.edges[packet.edge];
   const L = lens[packet.edge];
   const total = L[L.length - 1];
-  const t = Math.min(1, Math.max(0, packet.dir > 0 ? packet.t : 1 - packet.t));
+  // `back` world units behind the packet, for its trail.
+  const t = Math.min(1, Math.max(0, packet.dir > 0 ? packet.t - back / total : 1 - packet.t + back / total));
   const want = t * total;
   let i = 1;
   while (i < L.length - 1 && L[i] < want) i++;
@@ -1044,9 +2531,12 @@ function pointOn(v, packet) {
 }
 
 function drawPackets() {
+  if (morphing) return;
   const v = views[view];
   const list = still.matches ? [] : sim.packets;
   const count = Math.min(list.length, POOL_MAX);
+  // Dense traffic reads as flow: past 40 packets each one draws a short tail.
+  const trails = DATA.features.trails && count > 40;
   while (v.pool.length < count) v.pool.push(packetEl(v));
   for (let i = 0; i < v.pool.length; i++) {
     const slot = v.pool[i];
@@ -1070,6 +2560,15 @@ function drawPackets() {
     const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
     const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
     slot.g.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})${grow !== 1 ? ` scale(${grow.toFixed(2)})` : ""}`);
+    let tail = "";
+    if (trails && packet.kind !== "drop") {
+      const [tx, ty] = pointOn(v, packet, 11);
+      tail = `M0 0L${(tx - x).toFixed(1)} ${(ty - y).toFixed(1)}`;
+    }
+    if (tail !== slot.tail) {
+      slot.tail = tail;
+      slot.trail.setAttribute("d", tail);
+    }
     slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
   }
 }
@@ -1227,17 +2726,104 @@ function setFocus(id) {
   say(true);
 }
 
+// The readout corner: optional sparkline of flow over the last 30 s, then the text.
+let readoutText = readout;
+let spark = null;
+if (readout && DATA.features.sparkline) {
+  readout.innerHTML = `<svg class="tp-spark" viewBox="0 0 64 12" aria-hidden="true"><polyline/></svg><span class="tp-readout-text"></span>`;
+  spark = readout.querySelector("polyline");
+  readoutText = readout.querySelector(".tp-readout-text");
+}
+function drawSpark() {
+  if (!spark) return;
+  const hist = focus ? sim.nodes.get(focus)?.hist || [] : sim.hist;
+  const top = Math.max(1e-6, ...hist);
+  const n = hist.length;
+  spark.setAttribute("points", hist.map((value, i) => `${(64 - (n - 1 - i) * (64 / 119)).toFixed(1)},${(11 - (value / top) * 10).toFixed(1)}`).join(" "));
+}
 let lastSay = 0;
 function say(force, now = performance.now()) {
   if (!force && now - lastSay < 250) return;
   lastSay = now;
   const text = focus ? sim.statsOf(focus) : sim.summary();
-  if (readout && readout.textContent !== text) readout.textContent = text;
+  if (readoutText && readoutText.textContent !== text) readoutText.textContent = text;
+  drawSpark();
   stage.setAttribute("aria-valuetext", text);
 }
 
+// Switching views: with the morph feature, the iso camera swings up to look straight down
+// (re-rendering the scene each frame), then crossfades into the 2D glyphs; and the reverse.
+const CAMERAS = { iso: { azimuth: 56, elevation: 32 }, flat: { azimuth: 90, elevation: 90 } };
+let morphing = false;
+let morphModel = null;
 function setView(name) {
-  if (!views[name] || name === view) return;
+  if (!views[name] || name === view || morphing) return;
+  if (DATA.features.morph && typeof TOPO !== "undefined" && DATA.raw && !still.matches) return morphTo(name);
+  swap(name);
+}
+
+function morphTo(name) {
+  morphing = true;
+  if (!morphModel) {
+    morphModel = TOPO.prepare(DATA.raw);
+    morphModel.features = DATA.features;
+    if (DATA.features.hops) TOPO.applyHops(morphModel);
+    TOPO.renderView(morphModel, "iso");
+    morphModel.fastLabels = true;
+  }
+  const holder = document.createElement("div");
+  holder.className = "tp-morph";
+  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+  const camera = (t) => {
+    const [a, b] = name === "flat" ? [CAMERAS.iso, CAMERAS.flat] : [CAMERAS.flat, CAMERAS.iso];
+    const e = ease(t);
+    return { azimuth: a.azimuth + (b.azimuth - a.azimuth) * e, elevation: a.elevation + (b.elevation - a.elevation) * e };
+  };
+  const frame = (t) => (holder.innerHTML = TOPO.renderView(morphModel, "iso", 640, camera(t)).svg);
+  const fade = (el, from, to, ms) => el.animate([{ opacity: from }, { opacity: to }], { duration: ms, easing: "ease-out", fill: "forwards" }).finished;
+  frame(0);
+  views[view].pool.forEach((slot) => {
+    slot.g.style.display = "none";
+    slot.shown = false;
+  });
+  const leaving = views[view].svg;
+  stage.appendChild(holder);
+  if (name === "flat") leaving.setAttribute("hidden", "");
+  const run = (start) => {
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 650);
+      frame(t);
+      if (t < 1) return requestAnimationFrame(step);
+      swap(name);
+      const arriving = views[name].svg;
+      if (name === "flat") {
+        // The top-down iso frame and the 2D glyphs share one layout: crossfade between them.
+        holder.style.position = "absolute";
+        holder.style.inset = "0";
+        fade(arriving, 0, 1, 220);
+        fade(holder, 1, 0, 220).then(() => holder.remove()).then(() => (morphing = false));
+      } else {
+        holder.remove();
+        morphing = false;
+      }
+    };
+    requestAnimationFrame(step);
+  };
+  if (name === "iso") {
+    // Fade the top-down frame in over the 2D view, then take its place.
+    holder.style.position = "absolute";
+    holder.style.inset = "0";
+    fade(holder, 0, 1, 180).then(() => {
+      leaving.setAttribute("hidden", "");
+      holder.style.position = "";
+      holder.style.inset = "";
+      run(performance.now());
+    });
+  }
+  else run(performance.now());
+}
+
+function swap(name) {
   views[view].svg.setAttribute("hidden", "");
   views[view].pool.forEach((slot) => {
     slot.g.style.display = "none";
@@ -1364,7 +2950,7 @@ function resetVisuals(next) {
   say(true);
 }
 
-window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
 drawLogs();
 drawStatus();
 say(true);

@@ -42,20 +42,21 @@ function packetEl(v) {
   g.setAttribute("class", "tp-pk");
   if (v.data.packet) {
     const { sides, top, outline } = v.data.packet;
-    g.innerHTML = `<path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
+    g.innerHTML = `<path class="pk-trail"/><path class="pk-side" d="${sides}"/><path class="pk-top" d="${top}"/><path class="pk-edge" d="${outline}"/>`;
   } else {
-    g.innerHTML = `<circle r="1.9"/>`;
+    g.innerHTML = `<path class="pk-trail"/><circle r="1.9"/>`;
   }
   g.style.display = "none";
   v.layer.appendChild(g);
-  return { g, kind: "", shown: false };
+  return { g, trail: g.firstChild, kind: "", shown: false, tail: "" };
 }
 
-function pointOn(v, packet) {
+function pointOn(v, packet, back = 0) {
   const pts = v.data.edges[packet.edge];
   const L = lens[packet.edge];
   const total = L[L.length - 1];
-  const t = Math.min(1, Math.max(0, packet.dir > 0 ? packet.t : 1 - packet.t));
+  // `back` world units behind the packet, for its trail.
+  const t = Math.min(1, Math.max(0, packet.dir > 0 ? packet.t - back / total : 1 - packet.t + back / total));
   const want = t * total;
   let i = 1;
   while (i < L.length - 1 && L[i] < want) i++;
@@ -65,9 +66,12 @@ function pointOn(v, packet) {
 }
 
 function drawPackets() {
+  if (morphing) return;
   const v = views[view];
   const list = still.matches ? [] : sim.packets;
   const count = Math.min(list.length, POOL_MAX);
+  // Dense traffic reads as flow: past 40 packets each one draws a short tail.
+  const trails = DATA.features.trails && count > 40;
   while (v.pool.length < count) v.pool.push(packetEl(v));
   for (let i = 0; i < v.pool.length; i++) {
     const slot = v.pool[i];
@@ -91,6 +95,15 @@ function drawPackets() {
     const fade = packet.kind === "drop" ? Math.max(0, 1 - packet.age / 0.6) : 1;
     const grow = packet.kind === "drop" ? 1 + packet.age * 1.4 : 1;
     slot.g.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})${grow !== 1 ? ` scale(${grow.toFixed(2)})` : ""}`);
+    let tail = "";
+    if (trails && packet.kind !== "drop") {
+      const [tx, ty] = pointOn(v, packet, 11);
+      tail = `M0 0L${(tx - x).toFixed(1)} ${(ty - y).toFixed(1)}`;
+    }
+    if (tail !== slot.tail) {
+      slot.tail = tail;
+      slot.trail.setAttribute("d", tail);
+    }
     slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
   }
 }
@@ -248,17 +261,104 @@ function setFocus(id) {
   say(true);
 }
 
+// The readout corner: optional sparkline of flow over the last 30 s, then the text.
+let readoutText = readout;
+let spark = null;
+if (readout && DATA.features.sparkline) {
+  readout.innerHTML = `<svg class="tp-spark" viewBox="0 0 64 12" aria-hidden="true"><polyline/></svg><span class="tp-readout-text"></span>`;
+  spark = readout.querySelector("polyline");
+  readoutText = readout.querySelector(".tp-readout-text");
+}
+function drawSpark() {
+  if (!spark) return;
+  const hist = focus ? sim.nodes.get(focus)?.hist || [] : sim.hist;
+  const top = Math.max(1e-6, ...hist);
+  const n = hist.length;
+  spark.setAttribute("points", hist.map((value, i) => `${(64 - (n - 1 - i) * (64 / 119)).toFixed(1)},${(11 - (value / top) * 10).toFixed(1)}`).join(" "));
+}
 let lastSay = 0;
 function say(force, now = performance.now()) {
   if (!force && now - lastSay < 250) return;
   lastSay = now;
   const text = focus ? sim.statsOf(focus) : sim.summary();
-  if (readout && readout.textContent !== text) readout.textContent = text;
+  if (readoutText && readoutText.textContent !== text) readoutText.textContent = text;
+  drawSpark();
   stage.setAttribute("aria-valuetext", text);
 }
 
+// Switching views: with the morph feature, the iso camera swings up to look straight down
+// (re-rendering the scene each frame), then crossfades into the 2D glyphs; and the reverse.
+const CAMERAS = { iso: { azimuth: 56, elevation: 32 }, flat: { azimuth: 90, elevation: 90 } };
+let morphing = false;
+let morphModel = null;
 function setView(name) {
-  if (!views[name] || name === view) return;
+  if (!views[name] || name === view || morphing) return;
+  if (DATA.features.morph && typeof TOPO !== "undefined" && DATA.raw && !still.matches) return morphTo(name);
+  swap(name);
+}
+
+function morphTo(name) {
+  morphing = true;
+  if (!morphModel) {
+    morphModel = TOPO.prepare(DATA.raw);
+    morphModel.features = DATA.features;
+    if (DATA.features.hops) TOPO.applyHops(morphModel);
+    TOPO.renderView(morphModel, "iso");
+    morphModel.fastLabels = true;
+  }
+  const holder = document.createElement("div");
+  holder.className = "tp-morph";
+  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+  const camera = (t) => {
+    const [a, b] = name === "flat" ? [CAMERAS.iso, CAMERAS.flat] : [CAMERAS.flat, CAMERAS.iso];
+    const e = ease(t);
+    return { azimuth: a.azimuth + (b.azimuth - a.azimuth) * e, elevation: a.elevation + (b.elevation - a.elevation) * e };
+  };
+  const frame = (t) => (holder.innerHTML = TOPO.renderView(morphModel, "iso", 640, camera(t)).svg);
+  const fade = (el, from, to, ms) => el.animate([{ opacity: from }, { opacity: to }], { duration: ms, easing: "ease-out", fill: "forwards" }).finished;
+  frame(0);
+  views[view].pool.forEach((slot) => {
+    slot.g.style.display = "none";
+    slot.shown = false;
+  });
+  const leaving = views[view].svg;
+  stage.appendChild(holder);
+  if (name === "flat") leaving.setAttribute("hidden", "");
+  const run = (start) => {
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / 650);
+      frame(t);
+      if (t < 1) return requestAnimationFrame(step);
+      swap(name);
+      const arriving = views[name].svg;
+      if (name === "flat") {
+        // The top-down iso frame and the 2D glyphs share one layout: crossfade between them.
+        holder.style.position = "absolute";
+        holder.style.inset = "0";
+        fade(arriving, 0, 1, 220);
+        fade(holder, 1, 0, 220).then(() => holder.remove()).then(() => (morphing = false));
+      } else {
+        holder.remove();
+        morphing = false;
+      }
+    };
+    requestAnimationFrame(step);
+  };
+  if (name === "iso") {
+    // Fade the top-down frame in over the 2D view, then take its place.
+    holder.style.position = "absolute";
+    holder.style.inset = "0";
+    fade(holder, 0, 1, 180).then(() => {
+      leaving.setAttribute("hidden", "");
+      holder.style.position = "";
+      holder.style.inset = "";
+      run(performance.now());
+    });
+  }
+  else run(performance.now());
+}
+
+function swap(name) {
   views[view].svg.setAttribute("hidden", "");
   views[view].pool.forEach((slot) => {
     slot.g.style.display = "none";
@@ -385,7 +485,7 @@ function resetVisuals(next) {
   say(true);
 }
 
-window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, get view() { return view; } };
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
 drawLogs();
 drawStatus();
 say(true);

@@ -245,6 +245,65 @@ function route(nodes, edges, byId) {
   }
 }
 
+// Where two edges cross at right angles, the later one hops over the earlier with a small
+// arc, so a crossing never reads as a junction. Works on the routed points, so packets follow.
+export function applyHops(model, radius = 4.2) {
+  const legsOf = (edge) => {
+    const legs = [];
+    for (let i = 1; i < edge.points.length; i++) {
+      const [a, b] = [edge.points[i - 1], edge.points[i]];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < radius * 3) continue;
+      if (Math.abs(a[1] - b[1]) < 0.01) legs.push({ i, axis: "x", at: a[1], from: Math.min(a[0], b[0]), to: Math.max(a[0], b[0]) });
+      else if (Math.abs(a[0] - b[0]) < 0.01) legs.push({ i, axis: "y", at: a[0], from: Math.min(a[1], b[1]), to: Math.max(a[1], b[1]) });
+    }
+    return legs;
+  };
+  const margin = radius * 1.6;
+  const fits = (leg, c) => c > leg.from + margin && c < leg.to - margin;
+  const legs = new Map(model.edges.map((edge) => [edge.index, legsOf(edge)]));
+  const hopsOf = new Map(model.edges.map((edge) => [edge.index, []]));
+  for (const edge of model.edges) {
+    for (const other of model.edges) {
+      if (other.index >= edge.index) continue;
+      for (const leg of legs.get(edge.index)) for (const cross of legs.get(other.index)) {
+        if (leg.axis === cross.axis) continue;
+        if (!(cross.at > leg.from - 0.5 && cross.at < leg.to + 0.5 && leg.at > cross.from - 0.5 && leg.at < cross.to + 0.5)) continue;
+        // The later edge hops if its leg has room around the crossing, else the earlier one does.
+        if (fits(leg, cross.at)) hopsOf.get(edge.index).push({ i: leg.i, axis: leg.axis, c: cross.at, line: leg.at });
+        else if (fits(cross, leg.at)) hopsOf.get(other.index).push({ i: cross.i, axis: cross.axis, c: leg.at, line: cross.at });
+      }
+    }
+  }
+  for (const edge of model.edges) {
+    const hops = hopsOf.get(edge.index);
+    if (!hops.length) continue;
+    // Insert from the last leg backwards so earlier indices stay valid.
+    const byLeg = new Map();
+    for (const hop of hops) byLeg.set(hop.i, [...(byLeg.get(hop.i) || []), hop]);
+    for (const [i, list] of [...byLeg].sort((p, q) => q[0] - p[0])) {
+      const [a, b] = [edge.points[i - 1], edge.points[i]];
+      const axis = list[0].axis;
+      const dir = axis === "x" ? Math.sign(b[0] - a[0]) : Math.sign(b[1] - a[1]);
+      list.sort((p, q) => (p.c - q.c) * dir);
+      const inserted = [];
+      for (const hop of list) {
+        for (let s = 0; s <= 6; s++) {
+          const angle = (Math.PI * s) / 6;
+          const along = hop.c - dir * radius * Math.cos(angle);
+          const offset = -radius * Math.sin(angle);
+          inserted.push(axis === "x" ? [along, hop.line + offset] : [hop.line + offset, along]);
+        }
+      }
+      edge.points.splice(i, 0, ...inserted);
+    }
+    edge.lens = [0];
+    for (let i = 1; i < edge.points.length; i++) edge.lens.push(edge.lens[i - 1] + Math.hypot(edge.points[i][0] - edge.points[i - 1][0], edge.points[i][1] - edge.points[i - 1][1]));
+    edge.len = edge.lens[edge.lens.length - 1];
+    edge.hops = hops.length;
+  }
+}
+
 function rounded(points, radius, steps = 5) {
   if (points.length < 3) return points.map((p) => [...p]);
   const out = [points[0]];
@@ -296,8 +355,8 @@ export function heightOf(node) {
   return node.h;
 }
 
-export function projectionOf(model, view, width = 640) {
-  const { azimuth, elevation } = VIEWS[view];
+export function projectionOf(model, view, width = 640, camera) {
+  const { azimuth, elevation } = camera || VIEWS[view];
   const pts = extentOf(model, view);
   const unit = { origin: [0, 0], scale: 1, azimuth, elevation };
   const flat = pts.map((p) => k.iso(p, unit));
@@ -597,6 +656,8 @@ function inside(hull, [x, y]) {
 }
 
 function isoLabel(node, c, model) {
+  // Morph frames reuse the spot chosen for the resting view.
+  if (model.fastLabels && node.labelSpot) return k.faceTextSvg(k.topMatrix(node.labelSpot.at, 0, c.P, node.labelSpot.along), node.label, { size: 8, tone: "hi", anchor: "middle" });
   const spots = labelSpots(node);
   const spot = (node.labelAt === "side" ? [spots[1]] : node.labelAt === "front" ? [spots[0]] : spots).find((s) => !hiddenBy(model, node, s, c.P).length) || spots[0];
   node.labelSpot = spot;
@@ -764,8 +825,9 @@ const FLAT = {
 // ---------------------------------------------------------------------------------------------
 // One view: markup plus what the live page needs to move things in it.
 
-export function renderView(model, view, width = 640) {
-  const { P, width: W, height: H } = projectionOf(model, view, width);
+// `camera` ({ azimuth, elevation }) overrides the iso camera: the page uses it to morph between views.
+export function renderView(model, view, width = 640, camera) {
+  const { P, width: W, height: H } = projectionOf(model, view, width, camera);
   const features = model.features || {};
   const out = [];
   const iso = view === "iso" ? isoKit(P) : null;
@@ -928,6 +990,8 @@ export const TOPO_CSS = `
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
+.tp-morph{pointer-events:none}
+.tp-morph svg{display:block}
 .tp-node{cursor:pointer;transition:opacity .25s var(--tp-ease)}
 .tp-edge .k-line{transition:stroke .2s}
 .tp-edge-bed{fill:none;stroke:var(--tp-card);stroke-width:3.4px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
@@ -1014,8 +1078,13 @@ export const TOPO_CSS = `
 .tp-pk .pk-side{fill:color-mix(in srgb,var(--pk) 55%,var(--tp-card))}
 .tp-pk .pk-edge{fill:none;stroke:color-mix(in srgb,var(--pk) 70%,var(--tp-card));stroke-width:.4px;vector-effect:non-scaling-stroke}
 .tp-pk circle{fill:var(--pk)}
+.tp-pk .pk-trail{fill:none;stroke:var(--pk);stroke-width:1.6px;stroke-linecap:round;opacity:.28;vector-effect:non-scaling-stroke}
+.tp-spark{width:52px;height:10px;margin-right:9px;vertical-align:-1px;overflow:visible}
+.tp-spark polyline{fill:none;stroke:var(--tp-mid);stroke-width:1px;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+@media (max-width:560px){.tp-spark{display:none}}
 .tp-views{position:absolute;top:13px;left:50%;transform:translateX(-50%);display:flex;gap:0;z-index:2;font-family:var(--tp-mono);font-size:10px;letter-spacing:.08em}
 .tp-views button{all:unset;cursor:pointer;padding:3px 9px;color:var(--tp-muted);box-shadow:0 0 0 1px var(--tp-lo)}
 .tp-views button[aria-pressed="true"]{color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-mid);background:var(--tp-shade-2)}
 .tp-views button:focus-visible{outline:1px solid var(--tp-lit)}
+@media (max-width:560px){.k-card:has(.tp-views){padding-top:72px}.tp-views{top:40px}}
 `;
