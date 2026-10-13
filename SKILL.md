@@ -4,7 +4,7 @@ description: Create or edit distributed-system architecture diagrams, request an
 license: MIT
 metadata:
   opencode/slash: "true"
-  version: "1.1.0"
+  version: "1.2.0"
 ---
 
 # Topology
