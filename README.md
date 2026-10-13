@@ -1,8 +1,10 @@
 # Topology
 
-**A Claude skill that draws a distributed system as a small working model of itself.**
+**An agent skill that turns a distributed system into an interactive, simulated diagram.**
 
-Write a spec of nodes, links, zones, rates and a short story. The build lays it out, routes the links, and draws it two ways: **isometric** (servers, disks, brokers and gateways standing on a floor) and **flat 2D** (the same layout as glyphs, reached by a camera morph). A seeded simulation moves requests through it with honest p50/p99 latency:
+Works with Codex, Claude Code, and OpenCode. Ships standalone HTML and static SVG; no npm dependencies or agent-specific APIs.
+
+Write a spec of nodes, links, zones, rates and a short story. The build lays it out, routes the links, and draws it two ways: **isometric** (servers, disks, brokers and gateways standing on a floor) and **flat 2D** (the same layout as glyphs, reached by a camera morph). A seeded simulation moves requests through it with model-derived throughput, p50/p99 latency, and failure readouts:
 
 - queues fill and answer 503
 - timeouts trigger retries, and breakers trip
@@ -11,6 +13,12 @@ Write a spec of nodes, links, zones, rates and a short story. The build lays it 
 - canaries ramp, and a kill switch sends traffic back
 
 The story plays on its own with a timeline and narration. Click a node to inspect routes or tables, follow a request, and use Fail/Restore or F to take over; the readout always says what the model says.
+
+![Order events demo: Kafka traffic, a billing consumer failure, growing lag, recovery, and a switch from isometric to 2D](docs/media/order-events.gif)
+
+[Watch or download the MP4](docs/media/order-events.mp4) · [Demo spec](examples/order-events/order-events.spec.mjs)
+
+Recorded from the working example at 2× model speed. The same system switches from isometric to 2D after recovery begins. Rates and failures are illustrative.
 
 ## Quick start
 
@@ -24,7 +32,7 @@ node --test tests/*.test.mjs                                                # th
 
 No dependencies: Node 20.10+ for building. Browser checks require Node 22+ (built-in WebSocket) and Chrome or Chromium.
 
-Install as a skill by copying or symlinking this folder to `~/.claude/skills/topology`, then ask Claude for an architecture figure:
+Use the whole repository as the skill folder: [SKILL.md](SKILL.md) is the entry point, and the kit, scripts, references, and examples must stay alongside it. For Claude Code, copy or symlink the folder to `~/.claude/skills/topology`, then ask for an architecture figure:
 
 ```text
 /topology show our checkout path: CloudFront → ALB → 3 api pods → Redis (85% hit) → Aurora with a reader, and the outbox to Kafka
@@ -66,12 +74,14 @@ export default {
 };
 ```
 
-Kinds: `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `db`, `storage`, `kafka`, `queue`, `cdn`, `dns`, `external`, `scheduler`, `flags`, `box`.
+Kinds: `client`, `lb`, `gateway`, `service`, `worker`, `cache`, `redis`, `elasticache`, `db`, `dynamodb`, `storage`, `kafka`, `queue`, `cdn`, `dns`, `external`, `scheduler`, `flags`, `box`.
 
 Behaviour:
 - sources, emit curves and schedulers
 - routing: `all` with per-edge probability, `roundrobin` with health-check delay, `random`
-- awaited sync calls, with model-time latency
+- awaited sync calls, endpoint route mixes, and request/span following
+- synthetic records, full saved-field inspection, and following writes across primary/replica copies
+- table operations, row locks, stale reads, lost updates, and ordered WAL replication
 - `capacity` + `queue`, timeouts, retries with backoff, circuit breakers
 - Kafka partitions, consumer groups, brokers, RF, min ISR, acks, hot partitions
 - competing-consumer queues, replication, CDN hit ratios, DNS TTLs
@@ -99,18 +109,16 @@ kit/topo-story.js        the scenario player; kit/topo-edit.js the drag editor; 
 scripts/serve.mjs        dev server: rebuild per request, SSE reload, ?edit
 kit/patterns.mjs         reusable fragments: region, kafkaTopic, cacheAside, replicatedDb, queueWorkers, canary
 scripts/catalog.mjs      the component catalog page
-examples/                order-events, checkout, retry-storm, failover, kafka-brokers, canary, platform (all patterns), catalog
+examples/                12 runnable system/data stories, plus the component catalog
+docs/media/              README GIF and MP4, recorded from the actual example
+scripts/record-demo.mjs  regenerates the README media (Chrome + ffmpeg)
 tests/                   node --test tests/*.test.mjs
 evals/evals.json         test prompts and what a good answer contains
 agents/openai.yaml       display name and short description for Codex
-.github/workflows/ci.yml tests, --check on every example, rebuild, committed pages unchanged
+.github/workflows/ci.yml Node tests, browser parity/controls, model checks, reproducible page builds
 ```
 
-## License
-
-MIT. See [LICENSE](LICENSE).
-
-### Endpoint and data stories
+## Endpoint and data stories
 
 - [Reusable data stores](examples/data-stores/data-stores.spec.mjs): Redis, ElastiCache and DynamoDB components with saved-field inspection.
 - [Orders API](examples/orders-api/orders-api.spec.mjs): route mixes, synthetic records and table inspection.
@@ -121,3 +129,43 @@ MIT. See [LICENSE](LICENSE).
 The overview stays compact; click for details, choose a route to filter traffic, then follow a request for its span timeline. These examples model illustrative workloads, not a SQL database or exactly-once side effects.
 
 To author a figure, start with [the spec reference and runnable recipe](references/spec.md#minimal-endpointtable-recipe), choose an example from [the skill](SKILL.md), and run the [verification workflow](references/verify.md). The kit supplies the engine; a new supported story needs only a spec. [Engine maintenance](references/engine.md) documents module ownership and browser packaging.
+
+## What the model covers
+
+This is an explanatory simulation. Its figures report results from the configured
+model; they are not production benchmarks or vendor performance predictions.
+
+- **gRPC:** represent unary request/response flows with synchronous edges and labels, timeouts, retries, and breakers. HTTP/2 streaming and Protobuf are not simulated.
+- **Kafka:** producers, partitions, consumer groups, lag, rebalancing, broker failures, elections, and ISR. Offsets advance on dispatch; durable acknowledgements and crash redelivery are not modeled.
+- **Redis / ElastiCache:** distinct reusable components backed by the cache model. Cache misses are probabilistic; commands, TTL, eviction, and managed-service failover are not modeled.
+- **DynamoDB / databases:** simulated rows, saved fields, operations, versions, and direct replication. The record inspector's `SELECT *` is a read-only illustration, not a SQL parser. Vendor consistency guarantees, disk durability, and exactly-once side effects are outside the model.
+
+See the [spec reference](references/spec.md#validation-and-recovery-limits) for the precise boundaries. Figure captions should disclose synthetic data, assumed rates, and relevant simplifications.
+
+## Verify and export
+
+```sh
+node --test tests/*.test.mjs
+node scripts/verify-sim-browser.mjs  # Node 22+ and Chrome/Chromium
+node scripts/build.mjs examples/orders-api/orders-api.spec.mjs --check
+node scripts/build.mjs examples/orders-api/orders-api.spec.mjs --svg --light
+```
+
+The last command emits standalone HTML plus separate isometric and flat SVGs next
+to the spec. Open generated HTML directly, or use the local server's example index.
+The repository's HTML links show source on GitHub; run the server to interact with them.
+
+CI tests the model and generated pages, checks every example, and rebuilds both
+themes and the catalog without changes to committed artifacts. For screenshots,
+interaction checks, and line-end checks, follow [verification](references/verify.md).
+
+To regenerate the demo (also requires `ffmpeg`):
+
+```sh
+node scripts/build.mjs examples/order-events/order-events.spec.mjs --light
+node scripts/record-demo.mjs
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
