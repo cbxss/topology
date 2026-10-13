@@ -68,7 +68,7 @@
 
 *{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
 body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="light"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 4</span><span class="k-corner" data-corner="title">Region failover</span><span class="k-corner" data-corner="hint">Hover a node · click to fail it · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>625/s in · healthy</span></div><style>
+.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="light"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 4</span><span class="k-corner" data-corner="title">Region failover</span><span class="k-corner" data-corner="hint">Hover a node · click to inspect · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>625/s in · healthy</span></div><style>
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
@@ -140,6 +140,34 @@ body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sa
 .tp-broker[data-down]>*:not(.tp-led){opacity:.4}
 .tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
 .tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-inspect{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lo);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-inspect[hidden],.tp-tip[hidden]{display:none}
+.tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
+.tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
+.tp-inspect header button{all:unset;cursor:pointer}
+button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}
+.tp-ins-fail{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-fail:hover{color:var(--tp-red);box-shadow:0 0 0 1px var(--tp-red)}
+.tp-inspect[data-down] .tp-ins-fail{color:var(--tp-green);box-shadow:0 0 0 1px var(--tp-green)}
+.tp-ins-close{padding:0 4px;font-size:15px;line-height:1;color:var(--tp-muted)}
+.tp-inspect button:focus-visible{outline:1px solid var(--tp-lit)}
+.tp-ins-body:not(:empty){margin-top:10px}
+.tp-routes{display:grid;gap:1px}
+.tp-route{display:grid;grid-template-columns:minmax(0,1fr) 64px 52px 52px 60px;gap:8px;align-items:baseline;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-route>span:first-child{text-align:left}
+.tp-route-head{color:var(--tp-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+button.tp-route:hover{background:var(--tp-shade-2)}
+button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-lit)}
+.tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.tp-route [data-bad]{color:var(--tp-red)}
+.tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
+.tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
+.tp-tip b{color:var(--tp-strong);font-weight:500}
+.tp-tip i{color:var(--tp-red);font-style:normal}
+@media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -300,6 +328,7 @@ function createSim(spec) {
       roots: [],
       hist: [],
       replica: 0,
+      routes: new Map(),
     });
   }
   for (const edge of edges) {
@@ -372,7 +401,15 @@ function createSim(spec) {
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
   let ids = 0;
-  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
+  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  // Per-route history at a node: rates, service times, end-to-end latency and errors.
+  const routeStats = (node, name) => {
+    if (!name) return null;
+    if (!node.routes.has(name)) node.routes.set(name, { name, recent: [], service: [], roots: [], errors: [] });
+    return node.routes.get(name);
+  };
+  // The endpoint a request is calling at this node, if the node declares it.
+  const endpointAt = (node, msg) => (node.endpoints && msg.endpoint ? node.endpoints[msg.endpoint] : undefined);
 
   function rebalance(log, group, now) {
     const live = group.members.filter((edge) => nodes.get(edge.to).up);
@@ -391,6 +428,7 @@ function createSim(spec) {
 
   function launch(edge, kind, extra = {}) {
     const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    packet.ep = (extra.msg || extra.call?.job.msg)?.endpoint;
     if (packet.dir > 0) {
       edge.sent++;
       edge.recent.push(sim.time);
@@ -408,6 +446,7 @@ function createSim(spec) {
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
+    routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
@@ -422,7 +461,7 @@ function createSim(spec) {
   function begin(job) {
     const node = job.node;
     // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
-    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const base = (endpointAt(node, job.msg)?.ms ?? node.ms) + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
     const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
     job.readyAt = sim.time + (base * spread) / 1000;
     node.working.push(job);
@@ -451,6 +490,12 @@ function createSim(spec) {
     const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
     const ms = own + job.cost;
     node.service.push({ at: sim.time, ms });
+    const route = routeStats(node, job.msg.endpoint);
+    if (route) {
+      route.service.push({ at: sim.time, ms });
+      if (!ok) route.errors.push(sim.time);
+      if (job.root && node.answers) route.roots.push({ at: sim.time, ms, ok });
+    }
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
@@ -478,6 +523,20 @@ function createSim(spec) {
 
   function forward(job) {
     const node = job.node;
+    // A declared endpoint makes exactly its calls, each along the edge to its target.
+    const endpoint = endpointAt(node, job.msg);
+    if (endpoint && endpoint.calls) {
+      for (const call of endpoint.calls) {
+        const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+        if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
+        else if (edge.sync) {
+          job.waiting++;
+          callOut(job, edge, 0, 0, call);
+        } else launch(edge, "request", { msg: job.msg, op: call });
+      }
+      return;
+    }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
     for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
     const data = node.gated ? node.data.filter(open) : node.data;
@@ -514,7 +573,7 @@ function createSim(spec) {
 
   const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
 
-  function callOut(job, edge, attempt, prior = 0) {
+  function callOut(job, edge, attempt, prior = 0, op) {
     const br = edge.breaker;
     let trial = false;
     if (br) {
@@ -528,10 +587,10 @@ function createSim(spec) {
         trial = true;
       }
     }
-    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
+    const call = { job, edge, attempt, trial, prior, op, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
     sim.calls.add(call);
     if (edge.timeout) sim.timed.add(call);
-    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg, op }));
   }
 
   function setBreaker(edge, state) {
@@ -571,7 +630,7 @@ function createSim(spec) {
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
       const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
-      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op) });
       return;
     }
     finish(job, ok, spent);
@@ -661,8 +720,11 @@ function createSim(spec) {
 
   // --- sources --------------------------------------------------------------------------------
 
-  const emitAt = (node, t) => {
-    const emit = node.emit;
+  // `emit` is a rate, a curve, a schedule ({ every, burst }) or a mix of endpoints, each
+  // with its own rate or curve: { "POST /orders": 3, "GET /orders/:id": [[0, 10], [20, 30]] }.
+  const isSchedule = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && "every" in emit;
+  const isMix = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && !("every" in emit);
+  const rateOf = (emit, t) => {
     if (typeof emit === "number") return emit;
     if (Array.isArray(emit)) {
       const span = cfg.length || emit[emit.length - 1][0] || 1;
@@ -677,8 +739,16 @@ function createSim(spec) {
     }
     return 0;
   };
+  const emitAt = (node, t) => (isMix(node.emit) ? Object.values(node.emit).reduce((sum, e) => sum + rateOf(e, t), 0) : rateOf(node.emit, t));
+  const pickEndpoint = (node, t) => {
+    if (!isMix(node.emit)) return undefined;
+    const entries = Object.entries(node.emit).map(([name, e]) => [name, rateOf(e, t)]);
+    let pick = rand() * entries.reduce((sum, [, r]) => sum + r, 0);
+    for (const [name, r] of entries) if ((pick -= r) <= 0) return name;
+    return entries[entries.length - 1][0];
+  };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id), null, { root: true });
+  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -702,7 +772,7 @@ function createSim(spec) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+      if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;
@@ -801,6 +871,12 @@ function createSim(spec) {
       trim(node.recentErrors);
       trim(node.service, 3);
       trim(node.roots, 3);
+      for (const route of node.routes.values()) {
+        trim(route.recent);
+        trim(route.errors);
+        trim(route.service, 3);
+        trim(route.roots, 3);
+      }
       node.flow = node.recent.length / window;
       node.dropRate = node.recentDrops.length / window;
       node.errorRateSeen = node.recentErrors.length / window;
@@ -918,6 +994,18 @@ function createSim(spec) {
     if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
   };
+  // Per-route numbers at a node: [{ name, rate, p50, p99, errors }], busiest first.
+  sim.routesOf = (id) => {
+    const node = nodes.get(id);
+    if (!node) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    return [...node.routes.values()]
+      .map((route) => {
+        const samples = (route.roots.length ? route.roots.filter((r) => r.ok) : route.service).map((s) => s.ms).sort((a, b) => a - b);
+        return { name: route.name, rate: route.recent.length / window, p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), errors: route.errors.length / window, count: samples.length, endToEnd: route.roots.length > 0 };
+      })
+      .sort((a, b) => b.rate - a.rate);
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -964,7 +1052,7 @@ function statsOf(sim, id) {
       if (offline) parts.push(`${offline} offline`);
       if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
     }
-    return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
+    return [`${name} · in ${formatRate(node.flow, per)}`, ...parts].join(" · ");
   }
   if (node.kind === "flags") {
     const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
@@ -1002,7 +1090,7 @@ function summaryOf(sim) {
   return bits.join(" · ");
 }
 
-const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[120,62],"positions":{"users":[0,1],"dns":[1,1],"lb-a":[2,0],"api-a":[3,0],"db-a":[4,0],"lb-b":[2,2.2],"api-b":[3,2.2],"db-b":[4,2.2]},"spec":{"nodes":[{"id":"users","kind":"client","emit":12,"partitions":0,"replicas":1,"label":"users"},{"id":"dns","kind":"dns","label":"route53","ttl":4,"partitions":0,"replicas":1},{"id":"lb-a","kind":"lb","label":"alb-a","partitions":0,"replicas":1},{"id":"api-a","kind":"service","replicas":2,"label":"api-a","partitions":0},{"id":"db-a","kind":"db","label":"pg-a","role":"primary","partitions":0,"replicas":1},{"id":"lb-b","kind":"lb","label":"alb-b","partitions":0,"replicas":1},{"id":"api-b","kind":"service","replicas":2,"label":"api-b","partitions":0},{"id":"db-b","kind":"db","label":"pg-b","role":"replica","partitions":0,"replicas":1}],"edges":[{"from":"users","to":"dns","kind":"sync","sync":true,"len":87},{"from":"dns","to":"lb-a","kind":"sync","sync":true,"len":134.7100250251891},{"from":"dns","to":"lb-b","kind":"sync","sync":true,"len":147.11002502518912},{"from":"lb-a","to":"api-a","kind":"sync","sync":true,"len":73.598529817263},{"from":"lb-b","to":"api-b","kind":"sync","sync":true,"len":73.598529817263},{"from":"api-a","to":"db-a","kind":"sync","sync":true,"len":72},{"from":"api-b","to":"db-b","kind":"sync","sync":true,"len":72},{"from":"db-a","to":"db-b","kind":"replication","ms":70,"sync":false,"len":94.4}],"sim":{"per":50,"seed":9},"scenario":{"length":36,"phases":[{"name":"active-active","at":0},{"name":"us-east down","at":8},{"name":"failed over","at":14},{"name":"restored","at":26}],"steps":[{"at":1,"say":"DNS splits ~600 req/s across both regions. Every write in us-east also crosses to us-west's replica."},{"phase":"us-east down","fail":"lb-a","say":"us-east's load balancer goes dark. Clients still hold DNS answers pointing at it: their requests are refused (red)."},{"phase":"failed over","say":"The TTL has run out; DNS answers only with us-west, which now carries everything."},{"phase":"restored","recover":"lb-a","say":"us-east is back and DNS returns it to the rotation."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,87],[0,32.3,34.83,36.97,38.95,41.08,43.62,82.1,84.63,86.76,88.74,90.88,93.41,134.71],[0,41.3,43.83,45.97,47.95,50.08,52.62,103.5,106.03,108.16,110.14,112.28,114.81,147.11],[0,73.6],[0,73.6],[0,72],[0,72],[0,94.4]],"views":{"iso":{"edges":[[[76.6,67.2],[159.4,96.8]],[[190.3,100.8],[221.1,111.8],[223.6,112.5],[226.1,112.8],[228.3,112.5],[230.3,111.8],[232.2,110.7],[256.9,91.2],[258.8,90.1],[260.9,89.4],[263.1,89.1],[265.5,89.4],[268.1,90.1],[307.4,104.1]],[[178.1,110.4],[217.4,124.5],[219.6,125.5],[221,126.6],[221.4,127.8],[220.9,129],[219.6,130.4],[186.9,156.1],[185.5,157.4],[185.1,158.7],[185.5,159.9],[186.8,161],[189.1,162],[219.8,173]],[[344.4,117.4],[414.5,142.4]],[[256.8,186.2],[326.9,211.2]],[[465.9,160.8],[534.5,185.3]],[[378.3,229.6],[446.9,254.1]],[[541,203],[480.3,250.7]]],"step":[6.666113678984786,2.382702722577555],"flagStep":[0,0],"packet":{"top":"M3.5 -3.8L0.7 -1.6L-3.5 -3.1L-0.7 -5.3Z","sides":"M3.5 -3.8L0.7 -1.6L0.7 1.9L3.5 -0.4ZM0.7 -1.6L-3.5 -3.1L-3.5 0.4L0.7 1.9Z","outline":"M-3.5 -3.1L-0.7 -5.3L3.5 -3.8L3.5 -0.4L0.7 1.9L-3.5 0.4Z"}},"flat":{"edges":[[[70.1,134.3],[165.3,134.3]],[[193.7,123.8],[229,123.8],[231.8,123.5],[233.9,122.6],[235.5,121.1],[236.4,118.9],[236.7,116.2],[236.7,74.1],[237,71.4],[237.9,69.2],[239.4,67.7],[241.6,66.8],[244.3,66.5],[289.5,66.5]],[[193.7,144.7],[238.9,144.7],[241.6,145],[243.8,145.9],[245.3,147.4],[246.2,149.6],[246.5,152.3],[246.5,208],[246.8,210.7],[247.7,212.9],[249.3,214.4],[251.4,215.3],[254.2,215.6],[289.5,215.6]],[[331.9,66.5],[412.4,66.5]],[[331.9,215.6],[412.4,215.6]],[[471.4,66.5],[550.2,66.5]],[[471.4,215.6],[550.2,215.6]],[[573.1,89.4],[573.1,192.6]]],"step":[7.654264972776772,0],"flagStep":[0,0],"packet":null,"k":1.0934664246823955}},"raw":{"title":"Region failover","fig":"Fig 4","caption":"DNS round-robins clients over two regions. Each region has its own load balancer, API and Postgres; region a's primary streams to region b over a 70 ms link. DNS health checks only take effect when cached answers expire (TTL 4 s), so a regional outage costs a few seconds of errors before traffic moves.","sim":{"per":50,"seed":9},"labels":"rate","grid":[120,62],"nodes":[{"id":"users","kind":"client","emit":12,"at":[0,1]},{"id":"dns","kind":"dns","label":"route53","ttl":4,"at":[1,1]},{"id":"lb-a","kind":"lb","label":"alb-a","at":[2,0]},{"id":"api-a","kind":"service","replicas":2,"label":"api-a","at":[3,0]},{"id":"db-a","kind":"db","label":"pg-a","role":"primary","at":[4,0]},{"id":"lb-b","kind":"lb","label":"alb-b","at":[2,2.2]},{"id":"api-b","kind":"service","replicas":2,"label":"api-b","at":[3,2.2]},{"id":"db-b","kind":"db","label":"pg-b","role":"replica","at":[4,2.2]}],"edges":[["users","dns"],["dns","lb-a"],["dns","lb-b"],["lb-a","api-a"],["lb-b","api-b"],["api-a","db-a"],{"from":"api-b","to":"db-b"},{"from":"db-a","to":"db-b","kind":"replication","ms":70}],"groups":[{"id":"us-east","label":"us-east-1","region":true,"nodes":["lb-a","api-a","db-a"]},{"id":"us-west","label":"us-west-2","region":true,"nodes":["lb-b","api-b","db-b"]}],"scenario":{"length":36,"phases":[{"name":"active-active","at":0},{"name":"us-east down","at":8},{"name":"failed over","at":14},{"name":"restored","at":26}],"steps":[{"at":1,"say":"DNS splits ~600 req/s across both regions. Every write in us-east also crosses to us-west's replica."},{"phase":"us-east down","fail":"lb-a","say":"us-east's load balancer goes dark. Clients still hold DNS answers pointing at it: their requests are refused (red)."},{"phase":"failed over","say":"The TTL has run out; DNS answers only with us-west, which now carries everything."},{"phase":"restored","recover":"lb-a","say":"us-east is back and DNS returns it to the rotation."}]}}};
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"labels":"rate","grid":[120,62],"positions":{"users":[0,1],"dns":[1,1],"lb-a":[2,0],"api-a":[3,0],"db-a":[4,0],"lb-b":[2,2.2],"api-b":[3,2.2],"db-b":[4,2.2]},"spec":{"nodes":[{"id":"users","kind":"client","emit":12,"partitions":0,"replicas":1,"label":"users"},{"id":"dns","kind":"dns","label":"route53","ttl":4,"partitions":0,"replicas":1},{"id":"lb-a","kind":"lb","label":"alb-a","partitions":0,"replicas":1},{"id":"api-a","kind":"service","replicas":2,"label":"api-a","partitions":0},{"id":"db-a","kind":"db","label":"pg-a","role":"primary","partitions":0,"replicas":1},{"id":"lb-b","kind":"lb","label":"alb-b","partitions":0,"replicas":1},{"id":"api-b","kind":"service","replicas":2,"label":"api-b","partitions":0},{"id":"db-b","kind":"db","label":"pg-b","role":"replica","partitions":0,"replicas":1}],"edges":[{"from":"users","to":"dns","kind":"sync","sync":true,"len":87},{"from":"dns","to":"lb-a","kind":"sync","sync":true,"len":134.7100250251891},{"from":"dns","to":"lb-b","kind":"sync","sync":true,"len":147.11002502518912},{"from":"lb-a","to":"api-a","kind":"sync","sync":true,"len":73.598529817263},{"from":"lb-b","to":"api-b","kind":"sync","sync":true,"len":73.598529817263},{"from":"api-a","to":"db-a","kind":"sync","sync":true,"len":72},{"from":"api-b","to":"db-b","kind":"sync","sync":true,"len":72},{"from":"db-a","to":"db-b","kind":"replication","ms":70,"sync":false,"len":94.4}],"sim":{"per":50,"seed":9},"scenario":{"length":36,"phases":[{"name":"active-active","at":0},{"name":"us-east down","at":8},{"name":"failed over","at":14},{"name":"restored","at":26}],"steps":[{"at":1,"say":"DNS splits ~600 req/s across both regions. Every write in us-east also crosses to us-west's replica."},{"phase":"us-east down","fail":"lb-a","say":"us-east's load balancer goes dark. Clients still hold DNS answers pointing at it: their requests are refused (red)."},{"phase":"failed over","say":"The TTL has run out; DNS answers only with us-west, which now carries everything."},{"phase":"restored","recover":"lb-a","say":"us-east is back and DNS returns it to the rotation."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,87],[0,32.3,34.83,36.97,38.95,41.08,43.62,82.1,84.63,86.76,88.74,90.88,93.41,134.71],[0,41.3,43.83,45.97,47.95,50.08,52.62,103.5,106.03,108.16,110.14,112.28,114.81,147.11],[0,73.6],[0,73.6],[0,72],[0,72],[0,94.4]],"views":{"iso":{"edges":[[[76.6,67.2],[159.4,96.8]],[[190.3,100.8],[221.1,111.8],[223.6,112.5],[226.1,112.8],[228.3,112.5],[230.3,111.8],[232.2,110.7],[256.9,91.2],[258.8,90.1],[260.9,89.4],[263.1,89.1],[265.5,89.4],[268.1,90.1],[307.4,104.1]],[[178.1,110.4],[217.4,124.5],[219.6,125.5],[221,126.6],[221.4,127.8],[220.9,129],[219.6,130.4],[186.9,156.1],[185.5,157.4],[185.1,158.7],[185.5,159.9],[186.8,161],[189.1,162],[219.8,173]],[[344.4,117.4],[414.5,142.4]],[[256.8,186.2],[326.9,211.2]],[[465.9,160.8],[534.5,185.3]],[[378.3,229.6],[446.9,254.1]],[[541,203],[480.3,250.7]]],"step":[6.666113678984786,2.382702722577555],"flagStep":[0,0],"packet":{"top":"M3.5 -3.8L0.7 -1.6L-3.5 -3.1L-0.7 -5.3Z","sides":"M3.5 -3.8L0.7 -1.6L0.7 1.9L3.5 -0.4ZM0.7 -1.6L-3.5 -3.1L-3.5 0.4L0.7 1.9Z","outline":"M-3.5 -3.1L-0.7 -5.3L3.5 -3.8L3.5 -0.4L0.7 1.9L-3.5 0.4Z"}},"flat":{"edges":[[[70.1,134.3],[165.3,134.3]],[[193.7,123.8],[229,123.8],[231.8,123.5],[233.9,122.6],[235.5,121.1],[236.4,118.9],[236.7,116.2],[236.7,74.1],[237,71.4],[237.9,69.2],[239.4,67.7],[241.6,66.8],[244.3,66.5],[289.5,66.5]],[[193.7,144.7],[238.9,144.7],[241.6,145],[243.8,145.9],[245.3,147.4],[246.2,149.6],[246.5,152.3],[246.5,208],[246.8,210.7],[247.7,212.9],[249.3,214.4],[251.4,215.3],[254.2,215.6],[289.5,215.6]],[[331.9,66.5],[412.4,66.5]],[[331.9,215.6],[412.4,215.6]],[[471.4,66.5],[550.2,66.5]],[[471.4,215.6],[550.2,215.6]],[[573.1,89.4],[573.1,192.6]]],"step":[7.654264972776772,0],"flagStep":[0,0],"packet":null,"k":1.0934664246823955}},"raw":{"title":"Region failover","fig":"Fig 4","caption":"DNS round-robins clients over two regions. Each region has its own load balancer, API and Postgres; region a's primary streams to region b over a 70 ms link. DNS health checks only take effect when cached answers expire (TTL 4 s), so a regional outage costs a few seconds of errors before traffic moves.","sim":{"per":50,"seed":9},"labels":"rate","grid":[120,62],"nodes":[{"id":"users","kind":"client","emit":12,"at":[0,1]},{"id":"dns","kind":"dns","label":"route53","ttl":4,"at":[1,1]},{"id":"lb-a","kind":"lb","label":"alb-a","at":[2,0]},{"id":"api-a","kind":"service","replicas":2,"label":"api-a","at":[3,0]},{"id":"db-a","kind":"db","label":"pg-a","role":"primary","at":[4,0]},{"id":"lb-b","kind":"lb","label":"alb-b","at":[2,2.2]},{"id":"api-b","kind":"service","replicas":2,"label":"api-b","at":[3,2.2]},{"id":"db-b","kind":"db","label":"pg-b","role":"replica","at":[4,2.2]}],"edges":[["users","dns"],["dns","lb-a"],["dns","lb-b"],["lb-a","api-a"],["lb-b","api-b"],["api-a","db-a"],{"from":"api-b","to":"db-b"},{"from":"db-a","to":"db-b","kind":"replication","ms":70}],"groups":[{"id":"us-east","label":"us-east-1","region":true,"nodes":["lb-a","api-a","db-a"]},{"id":"us-west","label":"us-west-2","region":true,"nodes":["lb-b","api-b","db-b"]}],"scenario":{"length":36,"phases":[{"name":"active-active","at":0},{"name":"us-east down","at":8},{"name":"failed over","at":14},{"name":"restored","at":26}],"steps":[{"at":1,"say":"DNS splits ~600 req/s across both regions. Every write in us-east also crosses to us-west's replica."},{"phase":"us-east down","fail":"lb-a","say":"us-east's load balancer goes dark. Clients still hold DNS answers pointing at it: their requests are refused (red)."},{"phase":"failed over","say":"The TTL has run out; DNS answers only with us-west, which now carries everything."},{"phase":"restored","recover":"lb-a","say":"us-east is back and DNS returns it to the rotation."}]}}};
 const k = (() => {
 // The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
 // lines laid on faces, SVG string emitters, and the framed card a figure sits in.
@@ -2461,6 +2549,34 @@ const TOPO_CSS = `
 .tp-broker[data-down]>*:not(.tp-led){opacity:.4}
 .tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
 .tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-inspect{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lo);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-inspect[hidden],.tp-tip[hidden]{display:none}
+.tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
+.tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
+.tp-inspect header button{all:unset;cursor:pointer}
+button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}
+.tp-ins-fail{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-fail:hover{color:var(--tp-red);box-shadow:0 0 0 1px var(--tp-red)}
+.tp-inspect[data-down] .tp-ins-fail{color:var(--tp-green);box-shadow:0 0 0 1px var(--tp-green)}
+.tp-ins-close{padding:0 4px;font-size:15px;line-height:1;color:var(--tp-muted)}
+.tp-inspect button:focus-visible{outline:1px solid var(--tp-lit)}
+.tp-ins-body:not(:empty){margin-top:10px}
+.tp-routes{display:grid;gap:1px}
+.tp-route{display:grid;grid-template-columns:minmax(0,1fr) 64px 52px 52px 60px;gap:8px;align-items:baseline;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-route>span:first-child{text-align:left}
+.tp-route-head{color:var(--tp-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+button.tp-route:hover{background:var(--tp-shade-2)}
+button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-lit)}
+.tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.tp-route [data-bad]{color:var(--tp-red)}
+.tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
+.tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
+.tp-tip b{color:var(--tp-strong);font-weight:500}
+.tp-tip i{color:var(--tp-red);font-style:normal}
+@media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -2502,7 +2618,9 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [] };
+// Set by the inspector: packets on other routes dim while one route is picked.
+let routeFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -2600,7 +2718,8 @@ function drawPackets() {
       slot.tail = tail;
       slot.trail.setAttribute("d", tail);
     }
-    slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
+    const dim = routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
 
@@ -2739,6 +2858,7 @@ const neighbours = (id) => {
 };
 function setFocus(id) {
   focus = id;
+  for (const hook of hooks.focus) hook(id);
   const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
   stage.toggleAttribute("data-focus", !!id);
   for (const v of viewList) {
@@ -2932,8 +3052,15 @@ stage.addEventListener("click", (event) => {
     sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
     drawStatus();
     say(true);
-  } else if (id) toggle(id);
+  } else if (id) select(id);
 });
+// A click (or Enter) inspects a node; F fails or restores it.
+function select(id) {
+  pinned = true;
+  setFocus(id);
+  if (hooks.select.length) for (const hook of hooks.select) hook(id);
+  else toggle(id);
+}
 const ring = DATA.spec.nodes.map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
@@ -2948,6 +3075,8 @@ stage.addEventListener("keydown", (event) => {
     pinned = true;
     setFocus(ring[(here - 1 + ring.length) % ring.length]);
   } else if ((event.key === "Enter" || event.key === " ") && focus) {
+    select(focus);
+  } else if ((event.key === "f" || event.key === "F") && focus) {
     toggle(focus);
   } else if (event.key === "v" || event.key === "V") {
     setView(view === "iso" ? "flat" : "iso");
@@ -2975,10 +3104,132 @@ function resetVisuals(next) {
   say(true);
 }
 
-window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, select, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
 drawLogs();
 drawStatus();
 say(true);
+
+// The inspector: level 2 of the disclosure ladder. Inlined after topo-live.js. Clicking a
+// node opens one panel under the stage for it: its numbers, a Fail/Restore button and, when
+// the spec declares them, its routes (and later its tables and traces). Hovering a node that
+// has routes shows a compact card (level 1). Esc closes the panel; one panel at a time.
+const inspector = (() => {
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const specOf = new Map(DATA.spec.nodes.map((node) => [node.id, node]));
+  const per = () => sim.cfg.per;
+  const ms = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}s` : n >= 10 ? `${n.toFixed(0)}ms` : `${n.toFixed(1)}ms`);
+  const rate = (n) => formatRate(n, per());
+
+  const panel = document.createElement("section");
+  panel.className = "tp-inspect";
+  panel.hidden = true;
+  panel.setAttribute("aria-live", "polite");
+  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
+  stage.after(panel);
+  const $ = (sel) => panel.querySelector(sel);
+  const tip = document.createElement("div");
+  tip.className = "tp-tip";
+  tip.hidden = true;
+  stage.appendChild(tip);
+
+  let open = null;
+  const written = new Map();
+  const write = (key, el, html) => {
+    if (written.get(key) === html) return;
+    written.set(key, html);
+    el.innerHTML = html;
+  };
+
+  // Sections, in order; each returns markup or "" for this node. Later milestones add more.
+  const sections = [
+    function routes(id) {
+      const list = sim.routesOf(id);
+      const declared = specOf.get(id)?.endpoints || {};
+      if (!list.length && !Object.keys(declared).length) return "";
+      const names = [...new Set([...list.map((r) => r.name), ...Object.keys(declared)])];
+      const byName = new Map(list.map((r) => [r.name, r]));
+      const rows = names.map((name) => {
+        const r = byName.get(name) || { rate: 0, p50: 0, p99: 0, errors: 0, count: 0 };
+        const calls = (declared[name]?.calls || []).map((c) => `${specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
+        return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
+      });
+      return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+  ];
+
+  function render() {
+    if (!open) return;
+    const node = sim.nodes.get(open);
+    const spec = specOf.get(open);
+    write("kind", $(".tp-ins-kind"), esc(spec.kind));
+    write("name", $(".tp-ins-name"), esc(spec.label || open));
+    write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
+    write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
+    write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
+    panel.toggleAttribute("data-down", !node.up);
+  }
+
+  function show(id) {
+    open = id;
+    written.clear();
+    panel.hidden = false;
+    tip.hidden = true;
+    render();
+  }
+  function close() {
+    open = null;
+    panel.hidden = true;
+    routeFilter = null;
+  }
+
+  hooks.select.push((id) => (open === id ? close() : show(id)));
+  hooks.key.push((event) => {
+    if (event.key !== "Escape" || !open) return false;
+    close();
+    return true;
+  });
+  let clock = 0;
+  hooks.tick.push((dt) => {
+    clock += dt;
+    if (clock < 0.25) return;
+    clock = 0;
+    render();
+    if (!tip.hidden && focus) drawTip(focus);
+  });
+  $(".tp-ins-close").addEventListener("click", close);
+  $(".tp-ins-fail").addEventListener("click", () => {
+    if (open) toggle(open);
+    render();
+  });
+  panel.addEventListener("click", (event) => {
+    const row = event.target.closest(".tp-route[data-route]");
+    if (!row) return;
+    routeFilter = routeFilter === row.dataset.route ? null : row.dataset.route;
+    written.delete("body");
+    render();
+  });
+
+  // Level 1: a compact card over a hovered node that has routes. Nothing for plain nodes.
+  function drawTip(id) {
+    const list = sim.routesOf(id).slice(0, 4);
+    if (!list.length || open === id) {
+      tip.hidden = true;
+      return;
+    }
+    tip.innerHTML = list.map((r) => `<div><b>${esc(r.name)}</b> ${rate(r.rate)}${r.count ? ` · p99 ${ms(r.p99)}` : ""}${r.errors ? ` · <i>${rate(r.errors)} err</i>` : ""}</div>`).join("");
+    const el = views[view].nodes.get(id);
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    const host = stage.getBoundingClientRect();
+    tip.style.left = `${Math.max(0, Math.min(host.width - 220, box.left - host.left + box.width / 2 - 110))}px`;
+    tip.style.top = `${Math.max(0, box.top - host.top - 8)}px`;
+    tip.hidden = false;
+  }
+  hooks.focus.push((id) => (id ? drawTip(id) : (tip.hidden = true)));
+
+  window.__topo.inspector = { show, close, get open() { return open; } };
+  return { show, close, sections, render, get open() { return open; } };
+})();
 
 // The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
 // `scenario` feature is on. A timeline under the stage shows the named phases and each step;
@@ -3058,7 +3309,7 @@ say(true);
     if (phase !== shown.phase) {
       shown.phase = phase;
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
-      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to take over · 1–${Math.min(9, story.phases.length)} jump` : hintText;
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to inspect · 1–${Math.min(9, story.phases.length)} jump` : hintText;
     }
     const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
     if (text !== shown.say) {

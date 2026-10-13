@@ -15,6 +15,9 @@ export const FEATURES = {
   queues: true, // buffered arrivals at capacity (off: arrivals over capacity drop)
   flags: true, // feature flags and rollouts as part of the modelled system
   edit: true, // drag-to-arrange in serve mode
+  endpoints: true, // routes on services, per-route stats and an endpoint mix on sources
+  tables: true, // database tables, writes, the WAL and replica lag
+  trace: true, // follow one request end to end
 };
 
 const known = (name) => {
@@ -56,6 +59,16 @@ export function stripFeatures(spec, set) {
   const out = { ...spec, nodes: spec.nodes.map((node) => ({ ...node })), edges: (spec.edges || []).map((edge) => (Array.isArray(edge) ? edge : { ...edge })) };
   const objects = (list) => list.filter((item) => !Array.isArray(item));
   if (!set.scenario) delete out.scenario;
+  if (!set.endpoints) {
+    for (const node of objects(out.nodes)) {
+      delete node.endpoints;
+      // An endpoint mix becomes one total rate (curves keep only their first rate).
+      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit) && !("every" in node.emit))
+        node.emit = Object.values(node.emit).reduce((sum, e) => sum + (typeof e === "number" ? e : Array.isArray(e) ? e[0][1] : 0), 0);
+    }
+    delete out.records;
+  }
+  if (!set.tables) objects(out.nodes).forEach((node) => delete node.tables);
   if (!set.queues) objects(out.nodes).forEach((node) => delete node.queue);
   if (!set.breakers) objects(out.edges).forEach((edge) => delete edge.breaker);
   if (!set.flags) {

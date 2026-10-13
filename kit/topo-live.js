@@ -6,7 +6,9 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [] };
+// Set by the inspector: packets on other routes dim while one route is picked.
+let routeFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -104,7 +106,8 @@ function drawPackets() {
       slot.tail = tail;
       slot.trail.setAttribute("d", tail);
     }
-    slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
+    const dim = routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
 
@@ -243,6 +246,7 @@ const neighbours = (id) => {
 };
 function setFocus(id) {
   focus = id;
+  for (const hook of hooks.focus) hook(id);
   const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
   stage.toggleAttribute("data-focus", !!id);
   for (const v of viewList) {
@@ -436,8 +440,15 @@ stage.addEventListener("click", (event) => {
     sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
     drawStatus();
     say(true);
-  } else if (id) toggle(id);
+  } else if (id) select(id);
 });
+// A click (or Enter) inspects a node; F fails or restores it.
+function select(id) {
+  pinned = true;
+  setFocus(id);
+  if (hooks.select.length) for (const hook of hooks.select) hook(id);
+  else toggle(id);
+}
 const ring = DATA.spec.nodes.map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
@@ -452,6 +463,8 @@ stage.addEventListener("keydown", (event) => {
     pinned = true;
     setFocus(ring[(here - 1 + ring.length) % ring.length]);
   } else if ((event.key === "Enter" || event.key === " ") && focus) {
+    select(focus);
+  } else if ((event.key === "f" || event.key === "F") && focus) {
     toggle(focus);
   } else if (event.key === "v" || event.key === "V") {
     setView(view === "iso" ? "flat" : "iso");
@@ -479,7 +492,7 @@ function resetVisuals(next) {
   say(true);
 }
 
-window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, select, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
 drawLogs();
 drawStatus();
 say(true);

@@ -68,7 +68,7 @@
 
 *{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
 body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="dark"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 3</span><span class="k-corner" data-corner="title">Retry storm</span><span class="k-corner" data-corner="hint">Hover a node · click to fail it · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>180/s in · healthy</span></div><style>
+.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="dark"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 3</span><span class="k-corner" data-corner="title">Retry storm</span><span class="k-corner" data-corner="hint">Hover a node · click to inspect · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>180/s in · healthy</span></div><style>
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
@@ -140,6 +140,34 @@ body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sa
 .tp-broker[data-down]>*:not(.tp-led){opacity:.4}
 .tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
 .tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-inspect{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lo);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-inspect[hidden],.tp-tip[hidden]{display:none}
+.tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
+.tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
+.tp-inspect header button{all:unset;cursor:pointer}
+button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}
+.tp-ins-fail{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-fail:hover{color:var(--tp-red);box-shadow:0 0 0 1px var(--tp-red)}
+.tp-inspect[data-down] .tp-ins-fail{color:var(--tp-green);box-shadow:0 0 0 1px var(--tp-green)}
+.tp-ins-close{padding:0 4px;font-size:15px;line-height:1;color:var(--tp-muted)}
+.tp-inspect button:focus-visible{outline:1px solid var(--tp-lit)}
+.tp-ins-body:not(:empty){margin-top:10px}
+.tp-routes{display:grid;gap:1px}
+.tp-route{display:grid;grid-template-columns:minmax(0,1fr) 64px 52px 52px 60px;gap:8px;align-items:baseline;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-route>span:first-child{text-align:left}
+.tp-route-head{color:var(--tp-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+button.tp-route:hover{background:var(--tp-shade-2)}
+button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-lit)}
+.tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.tp-route [data-bad]{color:var(--tp-red)}
+.tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
+.tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
+.tp-tip b{color:var(--tp-strong);font-weight:500}
+.tp-tip i{color:var(--tp-red);font-style:normal}
+@media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -300,6 +328,7 @@ function createSim(spec) {
       roots: [],
       hist: [],
       replica: 0,
+      routes: new Map(),
     });
   }
   for (const edge of edges) {
@@ -372,7 +401,15 @@ function createSim(spec) {
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
   let ids = 0;
-  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
+  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  // Per-route history at a node: rates, service times, end-to-end latency and errors.
+  const routeStats = (node, name) => {
+    if (!name) return null;
+    if (!node.routes.has(name)) node.routes.set(name, { name, recent: [], service: [], roots: [], errors: [] });
+    return node.routes.get(name);
+  };
+  // The endpoint a request is calling at this node, if the node declares it.
+  const endpointAt = (node, msg) => (node.endpoints && msg.endpoint ? node.endpoints[msg.endpoint] : undefined);
 
   function rebalance(log, group, now) {
     const live = group.members.filter((edge) => nodes.get(edge.to).up);
@@ -391,6 +428,7 @@ function createSim(spec) {
 
   function launch(edge, kind, extra = {}) {
     const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    packet.ep = (extra.msg || extra.call?.job.msg)?.endpoint;
     if (packet.dir > 0) {
       edge.sent++;
       edge.recent.push(sim.time);
@@ -408,6 +446,7 @@ function createSim(spec) {
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
+    routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
@@ -422,7 +461,7 @@ function createSim(spec) {
   function begin(job) {
     const node = job.node;
     // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
-    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const base = (endpointAt(node, job.msg)?.ms ?? node.ms) + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
     const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
     job.readyAt = sim.time + (base * spread) / 1000;
     node.working.push(job);
@@ -451,6 +490,12 @@ function createSim(spec) {
     const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
     const ms = own + job.cost;
     node.service.push({ at: sim.time, ms });
+    const route = routeStats(node, job.msg.endpoint);
+    if (route) {
+      route.service.push({ at: sim.time, ms });
+      if (!ok) route.errors.push(sim.time);
+      if (job.root && node.answers) route.roots.push({ at: sim.time, ms, ok });
+    }
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
@@ -478,6 +523,20 @@ function createSim(spec) {
 
   function forward(job) {
     const node = job.node;
+    // A declared endpoint makes exactly its calls, each along the edge to its target.
+    const endpoint = endpointAt(node, job.msg);
+    if (endpoint && endpoint.calls) {
+      for (const call of endpoint.calls) {
+        const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+        if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
+        else if (edge.sync) {
+          job.waiting++;
+          callOut(job, edge, 0, 0, call);
+        } else launch(edge, "request", { msg: job.msg, op: call });
+      }
+      return;
+    }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
     for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
     const data = node.gated ? node.data.filter(open) : node.data;
@@ -514,7 +573,7 @@ function createSim(spec) {
 
   const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
 
-  function callOut(job, edge, attempt, prior = 0) {
+  function callOut(job, edge, attempt, prior = 0, op) {
     const br = edge.breaker;
     let trial = false;
     if (br) {
@@ -528,10 +587,10 @@ function createSim(spec) {
         trial = true;
       }
     }
-    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
+    const call = { job, edge, attempt, trial, prior, op, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
     sim.calls.add(call);
     if (edge.timeout) sim.timed.add(call);
-    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg, op }));
   }
 
   function setBreaker(edge, state) {
@@ -571,7 +630,7 @@ function createSim(spec) {
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
       const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
-      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op) });
       return;
     }
     finish(job, ok, spent);
@@ -661,8 +720,11 @@ function createSim(spec) {
 
   // --- sources --------------------------------------------------------------------------------
 
-  const emitAt = (node, t) => {
-    const emit = node.emit;
+  // `emit` is a rate, a curve, a schedule ({ every, burst }) or a mix of endpoints, each
+  // with its own rate or curve: { "POST /orders": 3, "GET /orders/:id": [[0, 10], [20, 30]] }.
+  const isSchedule = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && "every" in emit;
+  const isMix = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && !("every" in emit);
+  const rateOf = (emit, t) => {
     if (typeof emit === "number") return emit;
     if (Array.isArray(emit)) {
       const span = cfg.length || emit[emit.length - 1][0] || 1;
@@ -677,8 +739,16 @@ function createSim(spec) {
     }
     return 0;
   };
+  const emitAt = (node, t) => (isMix(node.emit) ? Object.values(node.emit).reduce((sum, e) => sum + rateOf(e, t), 0) : rateOf(node.emit, t));
+  const pickEndpoint = (node, t) => {
+    if (!isMix(node.emit)) return undefined;
+    const entries = Object.entries(node.emit).map(([name, e]) => [name, rateOf(e, t)]);
+    let pick = rand() * entries.reduce((sum, [, r]) => sum + r, 0);
+    for (const [name, r] of entries) if ((pick -= r) <= 0) return name;
+    return entries[entries.length - 1][0];
+  };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id), null, { root: true });
+  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -702,7 +772,7 @@ function createSim(spec) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+      if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;
@@ -801,6 +871,12 @@ function createSim(spec) {
       trim(node.recentErrors);
       trim(node.service, 3);
       trim(node.roots, 3);
+      for (const route of node.routes.values()) {
+        trim(route.recent);
+        trim(route.errors);
+        trim(route.service, 3);
+        trim(route.roots, 3);
+      }
       node.flow = node.recent.length / window;
       node.dropRate = node.recentDrops.length / window;
       node.errorRateSeen = node.recentErrors.length / window;
@@ -918,6 +994,18 @@ function createSim(spec) {
     if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
   };
+  // Per-route numbers at a node: [{ name, rate, p50, p99, errors }], busiest first.
+  sim.routesOf = (id) => {
+    const node = nodes.get(id);
+    if (!node) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    return [...node.routes.values()]
+      .map((route) => {
+        const samples = (route.roots.length ? route.roots.filter((r) => r.ok) : route.service).map((s) => s.ms).sort((a, b) => a - b);
+        return { name: route.name, rate: route.recent.length / window, p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), errors: route.errors.length / window, count: samples.length, endToEnd: route.roots.length > 0 };
+      })
+      .sort((a, b) => b.rate - a.rate);
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -964,7 +1052,7 @@ function statsOf(sim, id) {
       if (offline) parts.push(`${offline} offline`);
       if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
     }
-    return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
+    return [`${name} · in ${formatRate(node.flow, per)}`, ...parts].join(" · ");
   }
   if (node.kind === "flags") {
     const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
@@ -1002,7 +1090,7 @@ function summaryOf(sim) {
   return bits.join(" · ");
 }
 
-const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[150,80],"positions":{"clients":[0,0],"gw":[1,0],"orders":[2,0],"inventory":[3,0],"pg":[4,0]},"spec":{"nodes":[{"id":"clients","kind":"client","emit":9,"partitions":0,"replicas":1,"label":"clients"},{"id":"gw","kind":"gateway","label":"gateway","partitions":0,"replicas":1},{"id":"orders","kind":"service","replicas":2,"label":"orders-api","partitions":0},{"id":"inventory","kind":"service","label":"inventory","ms":25,"capacity":14,"queue":6,"burst":0.1,"partitions":0,"replicas":1},{"id":"pg","kind":"db","label":"inventory-db","partitions":0,"replicas":1}],"edges":[{"from":"clients","to":"gw","kind":"sync","sync":true,"len":106},{"from":"gw","to":"orders","kind":"sync","sync":true,"len":99},{"from":"orders","to":"inventory","timeout":0.15,"retries":3,"backoff":0.05,"kind":"sync","sync":true,"len":96},{"from":"inventory","to":"pg","kind":"sync","sync":true,"len":102}],"sim":{"per":20,"seed":4},"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"slowdown","at":8},{"name":"breaker on","at":20},{"name":"fixed","at":30}],"steps":[{"at":1,"say":"~180 req/s. inventory answers in ~25 ms, well inside orders-api's 150 ms timeout."},{"phase":"slowdown","set":{"inventory":{"ms":260}},"say":"inventory slows to ~260 ms (a bad query plan). Calls start timing out; each one is retried up to 3 times (amber)."},{"phase":"slowdown","after":5,"say":"The storm: inventory now sees several times the real traffic, its buffer fills (amber cells) and it answers 503. Almost nothing succeeds."},{"phase":"breaker on","set":{"orders>inventory":{"breaker":{"errors":0.5,"min":6,"window":2,"open":2}}},"say":"A breaker on the call. It trips open (red port): calls fail fast without touching inventory, so its load collapses."},{"phase":"fixed","set":{"inventory":{"ms":25}},"say":"inventory is fixed. The breaker half-opens (amber), its trial call succeeds, and it closes."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,106],[0,99],[0,96],[0,102]],"views":{"iso":{"edges":[[[76.7,63.7],[169.2,96.8]],[[211.1,111.8],[297.6,142.7]],[[344.7,159.5],[428.5,189.5]],[[475.7,206.3],[564.7,238.2]]],"step":[6.111537677768098,2.1844778179917057],"flagStep":[0,0],"packet":{"top":"M3.2 -3.5L0.6 -1.4L-3.2 -2.8L-0.6 -4.8Z","sides":"M3.2 -3.5L0.6 -1.4L0.6 1.7L3.2 -0.3ZM0.6 -1.4L-3.2 -2.8L-3.2 0.3L0.6 1.7Z","outline":"M-3.2 -2.8L-0.6 -4.8L3.2 -3.5L3.2 -0.3L0.6 1.7L-3.2 0.3Z"}},"flat":{"edges":[[[62.1,113.7],[157.8,113.7]],[[201.2,113.7],[290.6,113.7]],[[339.3,113.7],[426,113.7]],[[474.8,113.7],[566.9,113.7]]],"step":[6.32063882063882,0],"flagStep":[0,0],"packet":null,"k":0.9029484029484028}},"raw":{"title":"Retry storm","fig":"Fig 3","caption":"inventory admits 14 req/s with a buffer of 6. orders-api calls it with a 150 ms timeout and 3 retries. When inventory slows past the timeout, every call times out and is retried: the load it sees triples, its buffer fills and it starts answering 503. A breaker on the call stops the amplification.","sim":{"per":20,"seed":4},"labels":"rate","grid":[150,80],"nodes":[{"id":"clients","kind":"client","emit":9,"at":[0,0]},{"id":"gw","kind":"gateway","label":"gateway","at":[1,0]},{"id":"orders","kind":"service","replicas":2,"label":"orders-api","at":[2,0]},{"id":"inventory","kind":"service","label":"inventory","ms":25,"capacity":14,"queue":6,"burst":0.1,"at":[3,0]},{"id":"pg","kind":"db","label":"inventory-db","at":[4,0]}],"edges":[["clients","gw"],["gw","orders"],{"from":"orders","to":"inventory","timeout":0.15,"retries":3,"backoff":0.05},["inventory","pg"]],"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"slowdown","at":8},{"name":"breaker on","at":20},{"name":"fixed","at":30}],"steps":[{"at":1,"say":"~180 req/s. inventory answers in ~25 ms, well inside orders-api's 150 ms timeout."},{"phase":"slowdown","set":{"inventory":{"ms":260}},"say":"inventory slows to ~260 ms (a bad query plan). Calls start timing out; each one is retried up to 3 times (amber)."},{"phase":"slowdown","after":5,"say":"The storm: inventory now sees several times the real traffic, its buffer fills (amber cells) and it answers 503. Almost nothing succeeds."},{"phase":"breaker on","set":{"orders>inventory":{"breaker":{"errors":0.5,"min":6,"window":2,"open":2}}},"say":"A breaker on the call. It trips open (red port): calls fail fast without touching inventory, so its load collapses."},{"phase":"fixed","set":{"inventory":{"ms":25}},"say":"inventory is fixed. The breaker half-opens (amber), its trial call succeeds, and it closes."}]}}};
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"labels":"rate","grid":[150,80],"positions":{"clients":[0,0],"gw":[1,0],"orders":[2,0],"inventory":[3,0],"pg":[4,0]},"spec":{"nodes":[{"id":"clients","kind":"client","emit":9,"partitions":0,"replicas":1,"label":"clients"},{"id":"gw","kind":"gateway","label":"gateway","partitions":0,"replicas":1},{"id":"orders","kind":"service","replicas":2,"label":"orders-api","partitions":0},{"id":"inventory","kind":"service","label":"inventory","ms":25,"capacity":14,"queue":6,"burst":0.1,"partitions":0,"replicas":1},{"id":"pg","kind":"db","label":"inventory-db","partitions":0,"replicas":1}],"edges":[{"from":"clients","to":"gw","kind":"sync","sync":true,"len":106},{"from":"gw","to":"orders","kind":"sync","sync":true,"len":99},{"from":"orders","to":"inventory","timeout":0.15,"retries":3,"backoff":0.05,"kind":"sync","sync":true,"len":96},{"from":"inventory","to":"pg","kind":"sync","sync":true,"len":102}],"sim":{"per":20,"seed":4},"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"slowdown","at":8},{"name":"breaker on","at":20},{"name":"fixed","at":30}],"steps":[{"at":1,"say":"~180 req/s. inventory answers in ~25 ms, well inside orders-api's 150 ms timeout."},{"phase":"slowdown","set":{"inventory":{"ms":260}},"say":"inventory slows to ~260 ms (a bad query plan). Calls start timing out; each one is retried up to 3 times (amber)."},{"phase":"slowdown","after":5,"say":"The storm: inventory now sees several times the real traffic, its buffer fills (amber cells) and it answers 503. Almost nothing succeeds."},{"phase":"breaker on","set":{"orders>inventory":{"breaker":{"errors":0.5,"min":6,"window":2,"open":2}}},"say":"A breaker on the call. It trips open (red port): calls fail fast without touching inventory, so its load collapses."},{"phase":"fixed","set":{"inventory":{"ms":25}},"say":"inventory is fixed. The breaker half-opens (amber), its trial call succeeds, and it closes."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,106],[0,99],[0,96],[0,102]],"views":{"iso":{"edges":[[[76.7,63.7],[169.2,96.8]],[[211.1,111.8],[297.6,142.7]],[[344.7,159.5],[428.5,189.5]],[[475.7,206.3],[564.7,238.2]]],"step":[6.111537677768098,2.1844778179917057],"flagStep":[0,0],"packet":{"top":"M3.2 -3.5L0.6 -1.4L-3.2 -2.8L-0.6 -4.8Z","sides":"M3.2 -3.5L0.6 -1.4L0.6 1.7L3.2 -0.3ZM0.6 -1.4L-3.2 -2.8L-3.2 0.3L0.6 1.7Z","outline":"M-3.2 -2.8L-0.6 -4.8L3.2 -3.5L3.2 -0.3L0.6 1.7L-3.2 0.3Z"}},"flat":{"edges":[[[62.1,113.7],[157.8,113.7]],[[201.2,113.7],[290.6,113.7]],[[339.3,113.7],[426,113.7]],[[474.8,113.7],[566.9,113.7]]],"step":[6.32063882063882,0],"flagStep":[0,0],"packet":null,"k":0.9029484029484028}},"raw":{"title":"Retry storm","fig":"Fig 3","caption":"inventory admits 14 req/s with a buffer of 6. orders-api calls it with a 150 ms timeout and 3 retries. When inventory slows past the timeout, every call times out and is retried: the load it sees triples, its buffer fills and it starts answering 503. A breaker on the call stops the amplification.","sim":{"per":20,"seed":4},"labels":"rate","grid":[150,80],"nodes":[{"id":"clients","kind":"client","emit":9,"at":[0,0]},{"id":"gw","kind":"gateway","label":"gateway","at":[1,0]},{"id":"orders","kind":"service","replicas":2,"label":"orders-api","at":[2,0]},{"id":"inventory","kind":"service","label":"inventory","ms":25,"capacity":14,"queue":6,"burst":0.1,"at":[3,0]},{"id":"pg","kind":"db","label":"inventory-db","at":[4,0]}],"edges":[["clients","gw"],["gw","orders"],{"from":"orders","to":"inventory","timeout":0.15,"retries":3,"backoff":0.05},["inventory","pg"]],"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"slowdown","at":8},{"name":"breaker on","at":20},{"name":"fixed","at":30}],"steps":[{"at":1,"say":"~180 req/s. inventory answers in ~25 ms, well inside orders-api's 150 ms timeout."},{"phase":"slowdown","set":{"inventory":{"ms":260}},"say":"inventory slows to ~260 ms (a bad query plan). Calls start timing out; each one is retried up to 3 times (amber)."},{"phase":"slowdown","after":5,"say":"The storm: inventory now sees several times the real traffic, its buffer fills (amber cells) and it answers 503. Almost nothing succeeds."},{"phase":"breaker on","set":{"orders>inventory":{"breaker":{"errors":0.5,"min":6,"window":2,"open":2}}},"say":"A breaker on the call. It trips open (red port): calls fail fast without touching inventory, so its load collapses."},{"phase":"fixed","set":{"inventory":{"ms":25}},"say":"inventory is fixed. The breaker half-opens (amber), its trial call succeeds, and it closes."}]}}};
 const k = (() => {
 // The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
 // lines laid on faces, SVG string emitters, and the framed card a figure sits in.
@@ -2461,6 +2549,34 @@ const TOPO_CSS = `
 .tp-broker[data-down]>*:not(.tp-led){opacity:.4}
 .tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
 .tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-inspect{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lo);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-inspect[hidden],.tp-tip[hidden]{display:none}
+.tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
+.tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
+.tp-inspect header button{all:unset;cursor:pointer}
+button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}
+.tp-ins-fail{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-fail:hover{color:var(--tp-red);box-shadow:0 0 0 1px var(--tp-red)}
+.tp-inspect[data-down] .tp-ins-fail{color:var(--tp-green);box-shadow:0 0 0 1px var(--tp-green)}
+.tp-ins-close{padding:0 4px;font-size:15px;line-height:1;color:var(--tp-muted)}
+.tp-inspect button:focus-visible{outline:1px solid var(--tp-lit)}
+.tp-ins-body:not(:empty){margin-top:10px}
+.tp-routes{display:grid;gap:1px}
+.tp-route{display:grid;grid-template-columns:minmax(0,1fr) 64px 52px 52px 60px;gap:8px;align-items:baseline;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-route>span:first-child{text-align:left}
+.tp-route-head{color:var(--tp-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+button.tp-route:hover{background:var(--tp-shade-2)}
+button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-lit)}
+.tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.tp-route [data-bad]{color:var(--tp-red)}
+.tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
+.tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
+.tp-tip b{color:var(--tp-strong);font-weight:500}
+.tp-tip i{color:var(--tp-red);font-style:normal}
+@media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -2502,7 +2618,9 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [] };
+// Set by the inspector: packets on other routes dim while one route is picked.
+let routeFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -2600,7 +2718,8 @@ function drawPackets() {
       slot.tail = tail;
       slot.trail.setAttribute("d", tail);
     }
-    slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
+    const dim = routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
 
@@ -2739,6 +2858,7 @@ const neighbours = (id) => {
 };
 function setFocus(id) {
   focus = id;
+  for (const hook of hooks.focus) hook(id);
   const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
   stage.toggleAttribute("data-focus", !!id);
   for (const v of viewList) {
@@ -2932,8 +3052,15 @@ stage.addEventListener("click", (event) => {
     sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
     drawStatus();
     say(true);
-  } else if (id) toggle(id);
+  } else if (id) select(id);
 });
+// A click (or Enter) inspects a node; F fails or restores it.
+function select(id) {
+  pinned = true;
+  setFocus(id);
+  if (hooks.select.length) for (const hook of hooks.select) hook(id);
+  else toggle(id);
+}
 const ring = DATA.spec.nodes.map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
@@ -2948,6 +3075,8 @@ stage.addEventListener("keydown", (event) => {
     pinned = true;
     setFocus(ring[(here - 1 + ring.length) % ring.length]);
   } else if ((event.key === "Enter" || event.key === " ") && focus) {
+    select(focus);
+  } else if ((event.key === "f" || event.key === "F") && focus) {
     toggle(focus);
   } else if (event.key === "v" || event.key === "V") {
     setView(view === "iso" ? "flat" : "iso");
@@ -2975,10 +3104,132 @@ function resetVisuals(next) {
   say(true);
 }
 
-window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, select, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
 drawLogs();
 drawStatus();
 say(true);
+
+// The inspector: level 2 of the disclosure ladder. Inlined after topo-live.js. Clicking a
+// node opens one panel under the stage for it: its numbers, a Fail/Restore button and, when
+// the spec declares them, its routes (and later its tables and traces). Hovering a node that
+// has routes shows a compact card (level 1). Esc closes the panel; one panel at a time.
+const inspector = (() => {
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const specOf = new Map(DATA.spec.nodes.map((node) => [node.id, node]));
+  const per = () => sim.cfg.per;
+  const ms = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}s` : n >= 10 ? `${n.toFixed(0)}ms` : `${n.toFixed(1)}ms`);
+  const rate = (n) => formatRate(n, per());
+
+  const panel = document.createElement("section");
+  panel.className = "tp-inspect";
+  panel.hidden = true;
+  panel.setAttribute("aria-live", "polite");
+  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
+  stage.after(panel);
+  const $ = (sel) => panel.querySelector(sel);
+  const tip = document.createElement("div");
+  tip.className = "tp-tip";
+  tip.hidden = true;
+  stage.appendChild(tip);
+
+  let open = null;
+  const written = new Map();
+  const write = (key, el, html) => {
+    if (written.get(key) === html) return;
+    written.set(key, html);
+    el.innerHTML = html;
+  };
+
+  // Sections, in order; each returns markup or "" for this node. Later milestones add more.
+  const sections = [
+    function routes(id) {
+      const list = sim.routesOf(id);
+      const declared = specOf.get(id)?.endpoints || {};
+      if (!list.length && !Object.keys(declared).length) return "";
+      const names = [...new Set([...list.map((r) => r.name), ...Object.keys(declared)])];
+      const byName = new Map(list.map((r) => [r.name, r]));
+      const rows = names.map((name) => {
+        const r = byName.get(name) || { rate: 0, p50: 0, p99: 0, errors: 0, count: 0 };
+        const calls = (declared[name]?.calls || []).map((c) => `${specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
+        return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
+      });
+      return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+  ];
+
+  function render() {
+    if (!open) return;
+    const node = sim.nodes.get(open);
+    const spec = specOf.get(open);
+    write("kind", $(".tp-ins-kind"), esc(spec.kind));
+    write("name", $(".tp-ins-name"), esc(spec.label || open));
+    write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
+    write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
+    write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
+    panel.toggleAttribute("data-down", !node.up);
+  }
+
+  function show(id) {
+    open = id;
+    written.clear();
+    panel.hidden = false;
+    tip.hidden = true;
+    render();
+  }
+  function close() {
+    open = null;
+    panel.hidden = true;
+    routeFilter = null;
+  }
+
+  hooks.select.push((id) => (open === id ? close() : show(id)));
+  hooks.key.push((event) => {
+    if (event.key !== "Escape" || !open) return false;
+    close();
+    return true;
+  });
+  let clock = 0;
+  hooks.tick.push((dt) => {
+    clock += dt;
+    if (clock < 0.25) return;
+    clock = 0;
+    render();
+    if (!tip.hidden && focus) drawTip(focus);
+  });
+  $(".tp-ins-close").addEventListener("click", close);
+  $(".tp-ins-fail").addEventListener("click", () => {
+    if (open) toggle(open);
+    render();
+  });
+  panel.addEventListener("click", (event) => {
+    const row = event.target.closest(".tp-route[data-route]");
+    if (!row) return;
+    routeFilter = routeFilter === row.dataset.route ? null : row.dataset.route;
+    written.delete("body");
+    render();
+  });
+
+  // Level 1: a compact card over a hovered node that has routes. Nothing for plain nodes.
+  function drawTip(id) {
+    const list = sim.routesOf(id).slice(0, 4);
+    if (!list.length || open === id) {
+      tip.hidden = true;
+      return;
+    }
+    tip.innerHTML = list.map((r) => `<div><b>${esc(r.name)}</b> ${rate(r.rate)}${r.count ? ` · p99 ${ms(r.p99)}` : ""}${r.errors ? ` · <i>${rate(r.errors)} err</i>` : ""}</div>`).join("");
+    const el = views[view].nodes.get(id);
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    const host = stage.getBoundingClientRect();
+    tip.style.left = `${Math.max(0, Math.min(host.width - 220, box.left - host.left + box.width / 2 - 110))}px`;
+    tip.style.top = `${Math.max(0, box.top - host.top - 8)}px`;
+    tip.hidden = false;
+  }
+  hooks.focus.push((id) => (id ? drawTip(id) : (tip.hidden = true)));
+
+  window.__topo.inspector = { show, close, get open() { return open; } };
+  return { show, close, sections, render, get open() { return open; } };
+})();
 
 // The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
 // `scenario` feature is on. A timeline under the stage shows the named phases and each step;
@@ -3058,7 +3309,7 @@ say(true);
     if (phase !== shown.phase) {
       shown.phase = phase;
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
-      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to take over · 1–${Math.min(9, story.phases.length)} jump` : hintText;
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to inspect · 1–${Math.min(9, story.phases.length)} jump` : hintText;
     }
     const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
     if (text !== shown.say) {

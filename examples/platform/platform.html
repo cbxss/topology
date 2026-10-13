@@ -68,7 +68,7 @@
 
 *{box-sizing:border-box}html{color-scheme:dark}body[data-theme="light"]{color-scheme:light}
 body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
-.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="dark"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 7</span><span class="k-corner" data-corner="title">Platform</span><span class="k-corner" data-corner="hint">Hover a node · click to fail it · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>380/s in · p50 1.6ms · p99 2.5ms · lag 0 · healthy</span></div><style>
+.k-page{width:min(698px,100% - 32px);margin:64px auto 96px}</style></head><body class="tp" data-theme="dark"><main class="k-page"><figure class="k-figure"><div class="k-card"><div class="k-corners" aria-hidden="true"><span class="k-corner" data-corner="fig">Fig 7</span><span class="k-corner" data-corner="title">Platform</span><span class="k-corner" data-corner="hint">Hover a node · click to inspect · V for 2D</span><span class="k-corner" data-corner="readout" data-readout>380/s in · p50 1.6ms · p99 2.5ms · lag 0 · healthy</span></div><style>
 .tp-stage{position:relative;outline:none;touch-action:manipulation}
 .tp-stage:focus-visible{outline:1px dashed var(--tp-faint);outline-offset:6px}
 .tp-svg[hidden]{display:none}
@@ -140,6 +140,34 @@ body{margin:0;background:var(--tp-page);color:var(--tp-text);font:14px/1.6 ui-sa
 .tp-broker[data-down]>*:not(.tp-led){opacity:.4}
 .tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
 .tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-inspect{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lo);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-inspect[hidden],.tp-tip[hidden]{display:none}
+.tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
+.tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
+.tp-inspect header button{all:unset;cursor:pointer}
+button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}
+.tp-ins-fail{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-fail:hover{color:var(--tp-red);box-shadow:0 0 0 1px var(--tp-red)}
+.tp-inspect[data-down] .tp-ins-fail{color:var(--tp-green);box-shadow:0 0 0 1px var(--tp-green)}
+.tp-ins-close{padding:0 4px;font-size:15px;line-height:1;color:var(--tp-muted)}
+.tp-inspect button:focus-visible{outline:1px solid var(--tp-lit)}
+.tp-ins-body:not(:empty){margin-top:10px}
+.tp-routes{display:grid;gap:1px}
+.tp-route{display:grid;grid-template-columns:minmax(0,1fr) 64px 52px 52px 60px;gap:8px;align-items:baseline;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-route>span:first-child{text-align:left}
+.tp-route-head{color:var(--tp-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+button.tp-route:hover{background:var(--tp-shade-2)}
+button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-lit)}
+.tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.tp-route [data-bad]{color:var(--tp-red)}
+.tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
+.tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
+.tp-tip b{color:var(--tp-strong);font-weight:500}
+.tp-tip i{color:var(--tp-red);font-style:normal}
+@media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -300,6 +328,7 @@ function createSim(spec) {
       roots: [],
       hist: [],
       replica: 0,
+      routes: new Map(),
     });
   }
   for (const edge of edges) {
@@ -372,7 +401,15 @@ function createSim(spec) {
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
   let ids = 0;
-  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
+  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  // Per-route history at a node: rates, service times, end-to-end latency and errors.
+  const routeStats = (node, name) => {
+    if (!name) return null;
+    if (!node.routes.has(name)) node.routes.set(name, { name, recent: [], service: [], roots: [], errors: [] });
+    return node.routes.get(name);
+  };
+  // The endpoint a request is calling at this node, if the node declares it.
+  const endpointAt = (node, msg) => (node.endpoints && msg.endpoint ? node.endpoints[msg.endpoint] : undefined);
 
   function rebalance(log, group, now) {
     const live = group.members.filter((edge) => nodes.get(edge.to).up);
@@ -391,6 +428,7 @@ function createSim(spec) {
 
   function launch(edge, kind, extra = {}) {
     const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    packet.ep = (extra.msg || extra.call?.job.msg)?.endpoint;
     if (packet.dir > 0) {
       edge.sent++;
       edge.recent.push(sim.time);
@@ -408,6 +446,7 @@ function createSim(spec) {
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
+    routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
@@ -422,7 +461,7 @@ function createSim(spec) {
   function begin(job) {
     const node = job.node;
     // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
-    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const base = (endpointAt(node, job.msg)?.ms ?? node.ms) + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
     const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
     job.readyAt = sim.time + (base * spread) / 1000;
     node.working.push(job);
@@ -451,6 +490,12 @@ function createSim(spec) {
     const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
     const ms = own + job.cost;
     node.service.push({ at: sim.time, ms });
+    const route = routeStats(node, job.msg.endpoint);
+    if (route) {
+      route.service.push({ at: sim.time, ms });
+      if (!ok) route.errors.push(sim.time);
+      if (job.root && node.answers) route.roots.push({ at: sim.time, ms, ok });
+    }
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
@@ -478,6 +523,20 @@ function createSim(spec) {
 
   function forward(job) {
     const node = job.node;
+    // A declared endpoint makes exactly its calls, each along the edge to its target.
+    const endpoint = endpointAt(node, job.msg);
+    if (endpoint && endpoint.calls) {
+      for (const call of endpoint.calls) {
+        const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+        if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
+        else if (edge.sync) {
+          job.waiting++;
+          callOut(job, edge, 0, 0, call);
+        } else launch(edge, "request", { msg: job.msg, op: call });
+      }
+      return;
+    }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
     for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
     const data = node.gated ? node.data.filter(open) : node.data;
@@ -514,7 +573,7 @@ function createSim(spec) {
 
   const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
 
-  function callOut(job, edge, attempt, prior = 0) {
+  function callOut(job, edge, attempt, prior = 0, op) {
     const br = edge.breaker;
     let trial = false;
     if (br) {
@@ -528,10 +587,10 @@ function createSim(spec) {
         trial = true;
       }
     }
-    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
+    const call = { job, edge, attempt, trial, prior, op, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
     sim.calls.add(call);
     if (edge.timeout) sim.timed.add(call);
-    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg, op }));
   }
 
   function setBreaker(edge, state) {
@@ -571,7 +630,7 @@ function createSim(spec) {
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
       const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
-      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op) });
       return;
     }
     finish(job, ok, spent);
@@ -661,8 +720,11 @@ function createSim(spec) {
 
   // --- sources --------------------------------------------------------------------------------
 
-  const emitAt = (node, t) => {
-    const emit = node.emit;
+  // `emit` is a rate, a curve, a schedule ({ every, burst }) or a mix of endpoints, each
+  // with its own rate or curve: { "POST /orders": 3, "GET /orders/:id": [[0, 10], [20, 30]] }.
+  const isSchedule = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && "every" in emit;
+  const isMix = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && !("every" in emit);
+  const rateOf = (emit, t) => {
     if (typeof emit === "number") return emit;
     if (Array.isArray(emit)) {
       const span = cfg.length || emit[emit.length - 1][0] || 1;
@@ -677,8 +739,16 @@ function createSim(spec) {
     }
     return 0;
   };
+  const emitAt = (node, t) => (isMix(node.emit) ? Object.values(node.emit).reduce((sum, e) => sum + rateOf(e, t), 0) : rateOf(node.emit, t));
+  const pickEndpoint = (node, t) => {
+    if (!isMix(node.emit)) return undefined;
+    const entries = Object.entries(node.emit).map(([name, e]) => [name, rateOf(e, t)]);
+    let pick = rand() * entries.reduce((sum, [, r]) => sum + r, 0);
+    for (const [name, r] of entries) if ((pick -= r) <= 0) return name;
+    return entries[entries.length - 1][0];
+  };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id), null, { root: true });
+  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -702,7 +772,7 @@ function createSim(spec) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+      if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;
@@ -801,6 +871,12 @@ function createSim(spec) {
       trim(node.recentErrors);
       trim(node.service, 3);
       trim(node.roots, 3);
+      for (const route of node.routes.values()) {
+        trim(route.recent);
+        trim(route.errors);
+        trim(route.service, 3);
+        trim(route.roots, 3);
+      }
       node.flow = node.recent.length / window;
       node.dropRate = node.recentDrops.length / window;
       node.errorRateSeen = node.recentErrors.length / window;
@@ -918,6 +994,18 @@ function createSim(spec) {
     if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
   };
+  // Per-route numbers at a node: [{ name, rate, p50, p99, errors }], busiest first.
+  sim.routesOf = (id) => {
+    const node = nodes.get(id);
+    if (!node) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    return [...node.routes.values()]
+      .map((route) => {
+        const samples = (route.roots.length ? route.roots.filter((r) => r.ok) : route.service).map((s) => s.ms).sort((a, b) => a - b);
+        return { name: route.name, rate: route.recent.length / window, p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), errors: route.errors.length / window, count: samples.length, endToEnd: route.roots.length > 0 };
+      })
+      .sort((a, b) => b.rate - a.rate);
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -964,7 +1052,7 @@ function statsOf(sim, id) {
       if (offline) parts.push(`${offline} offline`);
       if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
     }
-    return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
+    return [`${name} · in ${formatRate(node.flow, per)}`, ...parts].join(" · ");
   }
   if (node.kind === "flags") {
     const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
@@ -1002,7 +1090,7 @@ function summaryOf(sim) {
   return bits.join(" · ");
 }
 
-const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true},"edit":false,"labels":"rate","grid":[124,70],"positions":{"users":[0,0.6],"cdn":[1,0.6],"us-lb":[2,0.6],"us-api":[3,0.6],"us-db":[4.1,1.15],"us-cache":[4.1,0.04999999999999993],"us-replica":[4.1,2.2],"orders":[5.1,0.6],"orders-billing-1":[6.25,-0.20000000000000007],"orders-billing-2":[6.25,0.6],"orders-search":[6.25,1.4],"jobs":[5.1,3.4],"jobs-worker-1":[6.25,3],"jobs-worker-2":[6.25,3.8]},"spec":{"nodes":[{"id":"users","kind":"client","emit":10,"partitions":0,"replicas":1,"label":"users"},{"id":"cdn","kind":"cdn","hit":0.6,"partitions":0,"replicas":1,"label":"cdn"},{"id":"us-lb","kind":"lb","label":"us-lb","partitions":0,"replicas":1},{"id":"us-api","kind":"service","replicas":2,"label":"us-api","partitions":0},{"id":"us-db","kind":"db","role":"primary","label":"us-db","partitions":0,"replicas":1},{"id":"us-cache","kind":"cache","label":"us-cache","partitions":0,"replicas":1},{"id":"us-replica","kind":"db","role":"replica","label":"us-replica","partitions":0,"replicas":1},{"id":"orders","kind":"kafka","label":"orders","partitions":3,"replicas":1},{"id":"orders-billing-1","kind":"worker","rate":3.4,"label":"billing-1","partitions":0,"replicas":1},{"id":"orders-billing-2","kind":"worker","rate":3.4,"label":"billing-2","partitions":0,"replicas":1},{"id":"orders-search","kind":"worker","rate":16,"label":"search","partitions":0,"replicas":1},{"id":"jobs","kind":"queue","label":"jobs","partitions":1,"replicas":1},{"id":"jobs-worker-1","kind":"worker","rate":5,"label":"worker-1","partitions":0,"replicas":1},{"id":"jobs-worker-2","kind":"worker","rate":5,"label":"worker-2","partitions":0,"replicas":1}],"edges":[{"from":"us-lb","to":"us-api","kind":"sync","sync":true,"len":77.598529817263},{"from":"us-api","to":"us-cache","kind":"sync","sync":true,"len":106.45149520792613},{"from":"us-api","to":"us-db","p":0.15,"kind":"sync","sync":true,"len":118.17149520792611},{"from":"us-db","to":"us-replica","kind":"replication","sync":false,"len":31.5},{"from":"orders","to":"orders-billing-1","group":"billing","kind":"async","sync":false,"len":101.07149520792615},{"from":"orders","to":"orders-billing-2","group":"billing","kind":"async","sync":false,"len":63.60000000000002},{"from":"orders","to":"orders-search","group":"search","kind":"async","sync":false,"len":101.07149520792609},{"from":"jobs","to":"jobs-worker-1","kind":"async","sync":false,"len":78.95149520792614},{"from":"jobs","to":"jobs-worker-2","kind":"async","sync":false,"len":78.95149520792617},{"from":"users","to":"cdn","kind":"sync","sync":true,"len":79},{"from":"cdn","to":"us-lb","kind":"sync","sync":true,"len":79.59852981726297},{"from":"us-api","to":"orders","kind":"async","sync":false,"len":183.4715588499022},{"from":"us-api","to":"jobs","kind":"async","sync":false,"len":366.59597508109323,"hops":1}],"sim":{"per":40,"seed":12},"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"cache down","at":8},{"name":"consumer lost","at":18},{"name":"recovered","at":30}],"steps":[{"at":1,"say":"The CDN answers 60% of requests; the rest reach the API, which reads through Redis (85% hit) and publishes every order to Kafka and a job to the queue."},{"phase":"cache down","fail":"us-cache","say":"Redis dies. Its calls are refused, so those requests fail; reads that missed still reach Postgres."},{"phase":"consumer lost","recover":"us-cache","fail":"orders-billing-1","say":"Redis is back. Now a billing consumer dies: the group rebalances and billing lag climbs."},{"phase":"recovered","recover":"orders-billing-1","say":"Both consumers are back and the backlog drains."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true}},"lens":[[0,77.6],[0,31.45,33.99,36.12,38.1,40.23,42.77,57.19,59.72,61.85,63.83,65.97,68.5,106.45],[0,40.45,42.99,45.12,47.1,49.23,51.77,72.91,75.44,77.57,79.55,81.69,84.22,118.17],[0,31.5],[0,11.3,13.84,15.97,17.95,20.08,22.62,51.46,53.99,56.12,58.1,60.24,62.77,101.07],[0,63.6],[0,20.3,22.84,24.97,26.95,29.08,31.62,60.46,62.99,65.12,67.1,69.24,71.77,101.07],[0,29.3,31.84,33.97,35.95,38.08,40.62,47.34,49.87,52,53.98,56.12,58.65,78.95],[0,38.3,40.84,42.97,44.95,47.08,49.62,56.34,58.87,61,62.98,65.12,67.65,78.95],[0,79],[0,79.6],[0,84.52,85.13,85.64,86.12,86.63,87.24,87.24,87.84,88.36,88.83,89.34,89.95,183.47],[0,43.25,45.42,47.6,49.77,51.95,54.12,56.29,92.84,95.38,97.51,99.49,101.62,104.16,276.08,278.62,280.75,282.73,284.86,287.4,366.6]],"views":{"iso":{"edges":[[[225.5,113.4],[277,131.9]],[[317.4,141.1],[338.3,148.6],[340.1,149.1],[341.8,149.3],[343.3,149.1],[344.8,148.6],[346.1,147.8],[352.6,142.7],[353.9,141.9],[355.3,141.4],[356.9,141.2],[358.5,141.4],[360.3,141.9],[385.5,150.9]],[[311.4,145.9],[338.3,155.5],[339.8,156.2],[340.7,156.9],[341,157.7],[340.7,158.6],[339.8,159.6],[330.3,167],[329.4,168],[329,168.9],[329.4,169.7],[330.3,170.5],[331.8,171.2],[354.4,179.2]],[[358.9,191.6],[344.8,202.7]],[[508.4,207.8],[515.9,210.5],[517.7,211],[519.3,211.2],[520.9,211],[522.3,210.5],[523.7,209.7],[536.6,199.5],[537.9,198.7],[539.3,198.2],[540.9,198.1],[542.6,198.2],[544.4,198.7],[569.8,207.8]],[[502.5,212.4],[544.7,227.5]],[[496.6,217.1],[510.1,221.9],[511.6,222.6],[512.5,223.3],[512.8,224.2],[512.5,225.1],[511.6,226],[498.6,236.2],[497.7,237.1],[497.4,238],[497.7,238.8],[498.6,239.6],[500.2,240.3],[519.6,247.2]],[[417.9,278.9],[437.4,285.8],[439.2,286.3],[440.9,286.5],[442.4,286.3],[443.9,285.8],[445.2,285],[448.2,282.6],[449.5,281.8],[450.9,281.3],[452.5,281.2],[454.2,281.3],[456,281.8],[469.4,286.7]],[[411.4,284],[436.8,293.1],[438.4,293.8],[439.3,294.5],[439.6,295.4],[439.3,296.2],[438.3,297.2],[435.3,299.6],[434.4,300.5],[434.1,301.4],[434.4,302.2],[435.3,303],[436.9,303.7],[444.4,306.4]],[[61.2,54.7],[113.7,73.5]],[[146.9,85.3],[199.7,104.2]],[[314.4,143.5],[370.6,163.6],[370.9,163.7],[371.1,163.9],[371.2,164.1],[371.1,164.3],[370.9,164.6],[370.9,164.6],[370.7,164.8],[370.6,165],[370.7,165.2],[370.9,165.4],[371.3,165.5],[433.4,187.7]],[[308.4,148.2],[337.1,158.5],[338.4,157.9],[340.1,157.7],[341.8,158],[342.9,158.7],[343.3,159.6],[342.7,160.5],[367,169.2],[368.5,169.9],[369.4,170.6],[369.8,171.4],[369.4,172.3],[368.5,173.3],[291.5,233.8],[290.5,234.8],[290.2,235.6],[290.5,236.5],[291.4,237.2],[293,237.9],[345.6,256.7]]],"step":[4.6492511586546925,1.6618053527344685],"flagStep":[0,0],"packet":{"top":"M2.4 -2.6L0.5 -1.1L-2.4 -2.1L-0.5 -3.7Z","sides":"M2.4 -2.6L0.5 -1.1L0.5 1.3L2.4 -0.3ZM0.5 -1.1L-2.4 -2.1L-2.4 0.3L0.5 1.3Z","outline":"M-2.4 -2.1L-0.5 -3.7L2.4 -2.6L2.4 -0.3L0.5 1.3L-2.4 0.3Z"}},"flat":{"edges":[[[231.6,78.9],[287.1,78.9]],[[325.7,71.7],[348.2,71.7],[350,71.5],[351.4,70.9],[352.4,69.9],[353,68.5],[353.2,66.7],[353.2,56.4],[353.4,54.6],[354,53.2],[355,52.2],[356.4,51.6],[358.2,51.4],[385.4,51.4]],[[325.7,81.3],[354.6,81.3],[356.5,81.5],[357.9,82.1],[358.9,83.1],[359.5,84.5],[359.7,86.3],[359.7,101.4],[359.9,103.3],[360.5,104.7],[361.5,105.7],[362.9,106.3],[364.7,106.5],[388.9,106.5]],[[404,121.5],[404,144]],[[529.8,69.5],[537.9,69.5],[539.7,69.3],[541.1,68.7],[542.1,67.7],[542.7,66.3],[542.9,64.5],[542.9,43.9],[543.1,42.1],[543.7,40.7],[544.7,39.7],[546.1,39.1],[547.9,38.9],[575.3,38.9]],[[529.8,78.9],[575.3,78.9]],[[529.8,88.3],[544.3,88.3],[546.1,88.5],[547.5,89.1],[548.5,90.1],[549.1,91.5],[549.3,93.3],[549.3,114],[549.5,115.8],[550.2,117.2],[551.2,118.2],[552.6,118.8],[554.4,119],[575.3,119]],[[529.8,213.9],[550.8,213.9],[552.6,213.7],[554,213.1],[555,212.1],[555.6,210.7],[555.8,208.9],[555.8,204.1],[556,202.3],[556.6,200.9],[557.6,199.9],[559,199.3],[560.8,199.1],[575.3,199.1]],[[529.8,224.3],[557.2,224.3],[559,224.5],[560.4,225.1],[561.4,226.1],[562,227.5],[562.2,229.3],[562.2,234.1],[562.4,235.9],[563,237.3],[564,238.3],[565.4,238.9],[567.2,239.1],[575.3,239.1]],[[54.7,78.9],[111.2,78.9]],[[146.9,78.9],[203.9,78.9]],[[325.7,76.5],[386.2,76.5],[386.6,76.6],[386.9,76.7],[387.2,77],[387.3,77.3],[387.4,77.7],[387.4,77.7],[387.4,78.2],[387.6,78.5],[387.8,78.7],[388.1,78.9],[388.6,78.9],[455.4,78.9]],[[325.7,86.1],[356.7,86.1],[357.1,84.6],[358.2,83.5],[359.7,83.1],[361.2,83.5],[362.3,84.6],[362.7,86.1],[388.8,86.1],[390.6,86.3],[392,86.9],[393,87.9],[393.6,89.3],[393.8,91.1],[393.8,214.1],[394,215.9],[394.6,217.3],[395.6,218.3],[397,218.9],[398.8,219.1],[455.4,219.1]]],"step":[5.006060606060608,0],"flagStep":[0,0],"packet":null,"k":0.7151515151515152}},"raw":{"title":"Platform","fig":"Fig 7","caption":"Built from patterns: region() gives the load balancer, API, cache-aside reads (85% hit) and a primary with a replica on a region plate; kafkaTopic() the topic and its two consumer groups; queueWorkers() the job queue. Fail the cache and every read goes to Postgres; fail a billing consumer and the group rebalances while lag climbs.","sim":{"per":40,"seed":12},"grid":[124,70],"labels":"rate","nodes":[{"id":"users","kind":"client","emit":10,"at":[0,0.6]},{"id":"cdn","kind":"cdn","hit":0.6,"at":[1,0.6]},{"id":"us-lb","kind":"lb","label":"us-lb","at":[2,0.6]},{"id":"us-api","kind":"service","replicas":2,"label":"us-api","at":[3,0.6]},{"id":"us-db","kind":"db","role":"primary","label":"us-db","at":[4.1,1.15]},{"id":"us-cache","kind":"cache","label":"us-cache","at":[4.1,0.04999999999999993]},{"id":"us-replica","kind":"db","role":"replica","label":"us-replica","at":[4.1,2.2]},{"id":"orders","kind":"kafka","label":"orders","partitions":3,"at":[5.1,0.6]},{"id":"orders-billing-1","kind":"worker","rate":3.4,"label":"billing-1","at":[6.25,-0.20000000000000007]},{"id":"orders-billing-2","kind":"worker","rate":3.4,"label":"billing-2","at":[6.25,0.6]},{"id":"orders-search","kind":"worker","rate":16,"label":"search","at":[6.25,1.4]},{"id":"jobs","kind":"queue","label":"jobs","at":[5.1,3.4]},{"id":"jobs-worker-1","kind":"worker","rate":5,"label":"worker-1","at":[6.25,3]},{"id":"jobs-worker-2","kind":"worker","rate":5,"label":"worker-2","at":[6.25,3.8]}],"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"cache down","at":8},{"name":"consumer lost","at":18},{"name":"recovered","at":30}],"steps":[{"at":1,"say":"The CDN answers 60% of requests; the rest reach the API, which reads through Redis (85% hit) and publishes every order to Kafka and a job to the queue."},{"phase":"cache down","fail":"us-cache","say":"Redis dies. Its calls are refused, so those requests fail; reads that missed still reach Postgres."},{"phase":"consumer lost","recover":"us-cache","fail":"orders-billing-1","say":"Redis is back. Now a billing consumer dies: the group rebalances and billing lag climbs."},{"phase":"recovered","recover":"orders-billing-1","say":"Both consumers are back and the backlog drains."}]},"edges":[{"from":"us-lb","to":"us-api"},{"from":"us-api","to":"us-cache"},{"from":"us-api","to":"us-db","p":0.15},{"from":"us-db","to":"us-replica","kind":"replication"},{"from":"orders","to":"orders-billing-1","group":"billing"},{"from":"orders","to":"orders-billing-2","group":"billing"},{"from":"orders","to":"orders-search","group":"search"},{"from":"jobs","to":"jobs-worker-1"},{"from":"jobs","to":"jobs-worker-2"},{"from":"users","to":"cdn"},{"from":"cdn","to":"us-lb"},{"from":"us-api","to":"orders"},{"from":"us-api","to":"jobs"}],"groups":[{"id":"us","label":"us-east-1","region":true,"nodes":["us-lb","us-api","us-db","us-cache","us-replica"]}]}};
+const DATA = {"view":"iso","slots":12,"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true},"edit":false,"labels":"rate","grid":[124,70],"positions":{"users":[0,0.6],"cdn":[1,0.6],"us-lb":[2,0.6],"us-api":[3,0.6],"us-db":[4.1,1.15],"us-cache":[4.1,0.04999999999999993],"us-replica":[4.1,2.2],"orders":[5.1,0.6],"orders-billing-1":[6.25,-0.20000000000000007],"orders-billing-2":[6.25,0.6],"orders-search":[6.25,1.4],"jobs":[5.1,3.4],"jobs-worker-1":[6.25,3],"jobs-worker-2":[6.25,3.8]},"spec":{"nodes":[{"id":"users","kind":"client","emit":10,"partitions":0,"replicas":1,"label":"users"},{"id":"cdn","kind":"cdn","hit":0.6,"partitions":0,"replicas":1,"label":"cdn"},{"id":"us-lb","kind":"lb","label":"us-lb","partitions":0,"replicas":1},{"id":"us-api","kind":"service","replicas":2,"label":"us-api","partitions":0},{"id":"us-db","kind":"db","role":"primary","label":"us-db","partitions":0,"replicas":1},{"id":"us-cache","kind":"cache","label":"us-cache","partitions":0,"replicas":1},{"id":"us-replica","kind":"db","role":"replica","label":"us-replica","partitions":0,"replicas":1},{"id":"orders","kind":"kafka","label":"orders","partitions":3,"replicas":1},{"id":"orders-billing-1","kind":"worker","rate":3.4,"label":"billing-1","partitions":0,"replicas":1},{"id":"orders-billing-2","kind":"worker","rate":3.4,"label":"billing-2","partitions":0,"replicas":1},{"id":"orders-search","kind":"worker","rate":16,"label":"search","partitions":0,"replicas":1},{"id":"jobs","kind":"queue","label":"jobs","partitions":1,"replicas":1},{"id":"jobs-worker-1","kind":"worker","rate":5,"label":"worker-1","partitions":0,"replicas":1},{"id":"jobs-worker-2","kind":"worker","rate":5,"label":"worker-2","partitions":0,"replicas":1}],"edges":[{"from":"us-lb","to":"us-api","kind":"sync","sync":true,"len":77.598529817263},{"from":"us-api","to":"us-cache","kind":"sync","sync":true,"len":106.45149520792613},{"from":"us-api","to":"us-db","p":0.15,"kind":"sync","sync":true,"len":118.17149520792611},{"from":"us-db","to":"us-replica","kind":"replication","sync":false,"len":31.5},{"from":"orders","to":"orders-billing-1","group":"billing","kind":"async","sync":false,"len":101.07149520792615},{"from":"orders","to":"orders-billing-2","group":"billing","kind":"async","sync":false,"len":63.60000000000002},{"from":"orders","to":"orders-search","group":"search","kind":"async","sync":false,"len":101.07149520792609},{"from":"jobs","to":"jobs-worker-1","kind":"async","sync":false,"len":78.95149520792614},{"from":"jobs","to":"jobs-worker-2","kind":"async","sync":false,"len":78.95149520792617},{"from":"users","to":"cdn","kind":"sync","sync":true,"len":79},{"from":"cdn","to":"us-lb","kind":"sync","sync":true,"len":79.59852981726297},{"from":"us-api","to":"orders","kind":"async","sync":false,"len":183.4715588499022},{"from":"us-api","to":"jobs","kind":"async","sync":false,"len":366.59597508109323,"hops":1}],"sim":{"per":40,"seed":12},"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"cache down","at":8},{"name":"consumer lost","at":18},{"name":"recovered","at":30}],"steps":[{"at":1,"say":"The CDN answers 60% of requests; the rest reach the API, which reads through Redis (85% hit) and publishes every order to Kafka and a job to the queue."},{"phase":"cache down","fail":"us-cache","say":"Redis dies. Its calls are refused, so those requests fail; reads that missed still reach Postgres."},{"phase":"consumer lost","recover":"us-cache","fail":"orders-billing-1","say":"Redis is back. Now a billing consumer dies: the group rebalances and billing lag climbs."},{"phase":"recovered","recover":"orders-billing-1","say":"Both consumers are back and the backlog drains."}]},"features":{"scenario":true,"labels":true,"trails":true,"morph":true,"sparkline":true,"hops":true,"breakers":true,"queues":true,"flags":true,"edit":true,"endpoints":true,"tables":true,"trace":true}},"lens":[[0,77.6],[0,31.45,33.99,36.12,38.1,40.23,42.77,57.19,59.72,61.85,63.83,65.97,68.5,106.45],[0,40.45,42.99,45.12,47.1,49.23,51.77,72.91,75.44,77.57,79.55,81.69,84.22,118.17],[0,31.5],[0,11.3,13.84,15.97,17.95,20.08,22.62,51.46,53.99,56.12,58.1,60.24,62.77,101.07],[0,63.6],[0,20.3,22.84,24.97,26.95,29.08,31.62,60.46,62.99,65.12,67.1,69.24,71.77,101.07],[0,29.3,31.84,33.97,35.95,38.08,40.62,47.34,49.87,52,53.98,56.12,58.65,78.95],[0,38.3,40.84,42.97,44.95,47.08,49.62,56.34,58.87,61,62.98,65.12,67.65,78.95],[0,79],[0,79.6],[0,84.52,85.13,85.64,86.12,86.63,87.24,87.24,87.84,88.36,88.83,89.34,89.95,183.47],[0,43.25,45.42,47.6,49.77,51.95,54.12,56.29,92.84,95.38,97.51,99.49,101.62,104.16,276.08,278.62,280.75,282.73,284.86,287.4,366.6]],"views":{"iso":{"edges":[[[225.5,113.4],[277,131.9]],[[317.4,141.1],[338.3,148.6],[340.1,149.1],[341.8,149.3],[343.3,149.1],[344.8,148.6],[346.1,147.8],[352.6,142.7],[353.9,141.9],[355.3,141.4],[356.9,141.2],[358.5,141.4],[360.3,141.9],[385.5,150.9]],[[311.4,145.9],[338.3,155.5],[339.8,156.2],[340.7,156.9],[341,157.7],[340.7,158.6],[339.8,159.6],[330.3,167],[329.4,168],[329,168.9],[329.4,169.7],[330.3,170.5],[331.8,171.2],[354.4,179.2]],[[358.9,191.6],[344.8,202.7]],[[508.4,207.8],[515.9,210.5],[517.7,211],[519.3,211.2],[520.9,211],[522.3,210.5],[523.7,209.7],[536.6,199.5],[537.9,198.7],[539.3,198.2],[540.9,198.1],[542.6,198.2],[544.4,198.7],[569.8,207.8]],[[502.5,212.4],[544.7,227.5]],[[496.6,217.1],[510.1,221.9],[511.6,222.6],[512.5,223.3],[512.8,224.2],[512.5,225.1],[511.6,226],[498.6,236.2],[497.7,237.1],[497.4,238],[497.7,238.8],[498.6,239.6],[500.2,240.3],[519.6,247.2]],[[417.9,278.9],[437.4,285.8],[439.2,286.3],[440.9,286.5],[442.4,286.3],[443.9,285.8],[445.2,285],[448.2,282.6],[449.5,281.8],[450.9,281.3],[452.5,281.2],[454.2,281.3],[456,281.8],[469.4,286.7]],[[411.4,284],[436.8,293.1],[438.4,293.8],[439.3,294.5],[439.6,295.4],[439.3,296.2],[438.3,297.2],[435.3,299.6],[434.4,300.5],[434.1,301.4],[434.4,302.2],[435.3,303],[436.9,303.7],[444.4,306.4]],[[61.2,54.7],[113.7,73.5]],[[146.9,85.3],[199.7,104.2]],[[314.4,143.5],[370.6,163.6],[370.9,163.7],[371.1,163.9],[371.2,164.1],[371.1,164.3],[370.9,164.6],[370.9,164.6],[370.7,164.8],[370.6,165],[370.7,165.2],[370.9,165.4],[371.3,165.5],[433.4,187.7]],[[308.4,148.2],[337.1,158.5],[338.4,157.9],[340.1,157.7],[341.8,158],[342.9,158.7],[343.3,159.6],[342.7,160.5],[367,169.2],[368.5,169.9],[369.4,170.6],[369.8,171.4],[369.4,172.3],[368.5,173.3],[291.5,233.8],[290.5,234.8],[290.2,235.6],[290.5,236.5],[291.4,237.2],[293,237.9],[345.6,256.7]]],"step":[4.6492511586546925,1.6618053527344685],"flagStep":[0,0],"packet":{"top":"M2.4 -2.6L0.5 -1.1L-2.4 -2.1L-0.5 -3.7Z","sides":"M2.4 -2.6L0.5 -1.1L0.5 1.3L2.4 -0.3ZM0.5 -1.1L-2.4 -2.1L-2.4 0.3L0.5 1.3Z","outline":"M-2.4 -2.1L-0.5 -3.7L2.4 -2.6L2.4 -0.3L0.5 1.3L-2.4 0.3Z"}},"flat":{"edges":[[[231.6,78.9],[287.1,78.9]],[[325.7,71.7],[348.2,71.7],[350,71.5],[351.4,70.9],[352.4,69.9],[353,68.5],[353.2,66.7],[353.2,56.4],[353.4,54.6],[354,53.2],[355,52.2],[356.4,51.6],[358.2,51.4],[385.4,51.4]],[[325.7,81.3],[354.6,81.3],[356.5,81.5],[357.9,82.1],[358.9,83.1],[359.5,84.5],[359.7,86.3],[359.7,101.4],[359.9,103.3],[360.5,104.7],[361.5,105.7],[362.9,106.3],[364.7,106.5],[388.9,106.5]],[[404,121.5],[404,144]],[[529.8,69.5],[537.9,69.5],[539.7,69.3],[541.1,68.7],[542.1,67.7],[542.7,66.3],[542.9,64.5],[542.9,43.9],[543.1,42.1],[543.7,40.7],[544.7,39.7],[546.1,39.1],[547.9,38.9],[575.3,38.9]],[[529.8,78.9],[575.3,78.9]],[[529.8,88.3],[544.3,88.3],[546.1,88.5],[547.5,89.1],[548.5,90.1],[549.1,91.5],[549.3,93.3],[549.3,114],[549.5,115.8],[550.2,117.2],[551.2,118.2],[552.6,118.8],[554.4,119],[575.3,119]],[[529.8,213.9],[550.8,213.9],[552.6,213.7],[554,213.1],[555,212.1],[555.6,210.7],[555.8,208.9],[555.8,204.1],[556,202.3],[556.6,200.9],[557.6,199.9],[559,199.3],[560.8,199.1],[575.3,199.1]],[[529.8,224.3],[557.2,224.3],[559,224.5],[560.4,225.1],[561.4,226.1],[562,227.5],[562.2,229.3],[562.2,234.1],[562.4,235.9],[563,237.3],[564,238.3],[565.4,238.9],[567.2,239.1],[575.3,239.1]],[[54.7,78.9],[111.2,78.9]],[[146.9,78.9],[203.9,78.9]],[[325.7,76.5],[386.2,76.5],[386.6,76.6],[386.9,76.7],[387.2,77],[387.3,77.3],[387.4,77.7],[387.4,77.7],[387.4,78.2],[387.6,78.5],[387.8,78.7],[388.1,78.9],[388.6,78.9],[455.4,78.9]],[[325.7,86.1],[356.7,86.1],[357.1,84.6],[358.2,83.5],[359.7,83.1],[361.2,83.5],[362.3,84.6],[362.7,86.1],[388.8,86.1],[390.6,86.3],[392,86.9],[393,87.9],[393.6,89.3],[393.8,91.1],[393.8,214.1],[394,215.9],[394.6,217.3],[395.6,218.3],[397,218.9],[398.8,219.1],[455.4,219.1]]],"step":[5.006060606060608,0],"flagStep":[0,0],"packet":null,"k":0.7151515151515152}},"raw":{"title":"Platform","fig":"Fig 7","caption":"Built from patterns: region() gives the load balancer, API, cache-aside reads (85% hit) and a primary with a replica on a region plate; kafkaTopic() the topic and its two consumer groups; queueWorkers() the job queue. Fail the cache and every read goes to Postgres; fail a billing consumer and the group rebalances while lag climbs.","sim":{"per":40,"seed":12},"grid":[124,70],"labels":"rate","nodes":[{"id":"users","kind":"client","emit":10,"at":[0,0.6]},{"id":"cdn","kind":"cdn","hit":0.6,"at":[1,0.6]},{"id":"us-lb","kind":"lb","label":"us-lb","at":[2,0.6]},{"id":"us-api","kind":"service","replicas":2,"label":"us-api","at":[3,0.6]},{"id":"us-db","kind":"db","role":"primary","label":"us-db","at":[4.1,1.15]},{"id":"us-cache","kind":"cache","label":"us-cache","at":[4.1,0.04999999999999993]},{"id":"us-replica","kind":"db","role":"replica","label":"us-replica","at":[4.1,2.2]},{"id":"orders","kind":"kafka","label":"orders","partitions":3,"at":[5.1,0.6]},{"id":"orders-billing-1","kind":"worker","rate":3.4,"label":"billing-1","at":[6.25,-0.20000000000000007]},{"id":"orders-billing-2","kind":"worker","rate":3.4,"label":"billing-2","at":[6.25,0.6]},{"id":"orders-search","kind":"worker","rate":16,"label":"search","at":[6.25,1.4]},{"id":"jobs","kind":"queue","label":"jobs","at":[5.1,3.4]},{"id":"jobs-worker-1","kind":"worker","rate":5,"label":"worker-1","at":[6.25,3]},{"id":"jobs-worker-2","kind":"worker","rate":5,"label":"worker-2","at":[6.25,3.8]}],"scenario":{"length":50,"phases":[{"name":"steady","at":0},{"name":"cache down","at":8},{"name":"consumer lost","at":18},{"name":"recovered","at":30}],"steps":[{"at":1,"say":"The CDN answers 60% of requests; the rest reach the API, which reads through Redis (85% hit) and publishes every order to Kafka and a job to the queue."},{"phase":"cache down","fail":"us-cache","say":"Redis dies. Its calls are refused, so those requests fail; reads that missed still reach Postgres."},{"phase":"consumer lost","recover":"us-cache","fail":"orders-billing-1","say":"Redis is back. Now a billing consumer dies: the group rebalances and billing lag climbs."},{"phase":"recovered","recover":"orders-billing-1","say":"Both consumers are back and the backlog drains."}]},"edges":[{"from":"us-lb","to":"us-api"},{"from":"us-api","to":"us-cache"},{"from":"us-api","to":"us-db","p":0.15},{"from":"us-db","to":"us-replica","kind":"replication"},{"from":"orders","to":"orders-billing-1","group":"billing"},{"from":"orders","to":"orders-billing-2","group":"billing"},{"from":"orders","to":"orders-search","group":"search"},{"from":"jobs","to":"jobs-worker-1"},{"from":"jobs","to":"jobs-worker-2"},{"from":"users","to":"cdn"},{"from":"cdn","to":"us-lb"},{"from":"us-api","to":"orders"},{"from":"us-api","to":"jobs"}],"groups":[{"id":"us","label":"us-east-1","region":true,"nodes":["us-lb","us-api","us-db","us-cache","us-replica"]}]}};
 const k = (() => {
 // The drawing core: an orthographic camera over a floor (x, y) with z up, shaded prisms,
 // lines laid on faces, SVG string emitters, and the framed card a figure sits in.
@@ -2461,6 +2549,34 @@ const TOPO_CSS = `
 .tp-broker[data-down]>*:not(.tp-led){opacity:.4}
 .tp-qcell[data-on] .k-top{fill:var(--tp-amber)}
 .tp-fcell.tp-qcell[data-on]{fill:var(--tp-amber);stroke:var(--tp-amber)}
+.tp-inspect{margin:16px 0 -6px;padding:10px 12px 12px;background:var(--tp-page);box-shadow:0 0 0 1px var(--tp-lo);font:11px/1.5 var(--tp-mono);color:var(--tp-text)}
+.tp-inspect[hidden],.tp-tip[hidden]{display:none}
+.tp-inspect header{display:flex;align-items:center;gap:10px;min-width:0}
+.tp-ins-kind{color:var(--tp-muted);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px}
+.tp-ins-name{color:var(--tp-strong);font-weight:600}
+.tp-ins-stat{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tp-muted)}
+.tp-inspect header button{all:unset;cursor:pointer}
+button.tp-route{border:0;margin:0;background:none;color:inherit;font:inherit;cursor:pointer;width:100%;box-sizing:border-box}
+.tp-ins-fail{padding:2px 8px;box-shadow:0 0 0 1px var(--tp-lo);color:var(--tp-text)}
+.tp-ins-fail:hover{color:var(--tp-red);box-shadow:0 0 0 1px var(--tp-red)}
+.tp-inspect[data-down] .tp-ins-fail{color:var(--tp-green);box-shadow:0 0 0 1px var(--tp-green)}
+.tp-ins-close{padding:0 4px;font-size:15px;line-height:1;color:var(--tp-muted)}
+.tp-inspect button:focus-visible{outline:1px solid var(--tp-lit)}
+.tp-ins-body:not(:empty){margin-top:10px}
+.tp-routes{display:grid;gap:1px}
+.tp-route{display:grid;grid-template-columns:minmax(0,1fr) 64px 52px 52px 60px;gap:8px;align-items:baseline;padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+.tp-route>span:first-child{text-align:left}
+.tp-route-head{color:var(--tp-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+button.tp-route:hover{background:var(--tp-shade-2)}
+button.tp-route[data-on]{background:var(--tp-shade-3);box-shadow:inset 2px 0 0 var(--tp-lit)}
+.tp-route-name{color:var(--tp-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tp-route-name small{display:block;color:var(--tp-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.tp-route [data-bad]{color:var(--tp-red)}
+.tp-ins-note{margin:6px 4px 0;color:var(--tp-muted);font-size:10px}
+.tp-tip{position:absolute;z-index:3;width:220px;transform:translateY(-100%);padding:6px 8px;background:var(--tp-card);box-shadow:0 0 0 1px var(--tp-mid);font:10px/1.5 var(--tp-mono);color:var(--tp-text);pointer-events:none}
+.tp-tip b{color:var(--tp-strong);font-weight:500}
+.tp-tip i{color:var(--tp-red);font-style:normal}
+@media (max-width:560px){.tp-route{grid-template-columns:minmax(0,1fr) 54px 46px 46px}.tp-route>span:last-child{display:none}.tp-tip{display:none}}
 .tp-story{margin:18px 0 -10px}
 .tp-timeline{display:flex;align-items:center;gap:10px;font-family:var(--tp-mono);font-size:10.5px;color:var(--tp-muted)}
 .tp-play{all:unset;flex:none;cursor:pointer;width:24px;height:22px;text-align:center;line-height:22px;font-size:9px;color:var(--tp-strong);box-shadow:0 0 0 1px var(--tp-lo)}
@@ -2502,7 +2618,9 @@ const readout = document.querySelector("[data-readout]");
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 let sim = createSim(DATA.spec);
 // Extension points for topo-story.js and topo-edit.js.
-const hooks = { tick: [], takeover: [], key: [] };
+const hooks = { tick: [], takeover: [], key: [], select: [], focus: [] };
+// Set by the inspector: packets on other routes dim while one route is picked.
+let routeFilter = null;
 let paused = false;
 const SLOTS = DATA.slots;
 const lens = DATA.lens;
@@ -2600,7 +2718,8 @@ function drawPackets() {
       slot.tail = tail;
       slot.trail.setAttribute("d", tail);
     }
-    slot.g.style.opacity = fade < 1 ? fade.toFixed(2) : "";
+    const dim = routeFilter && packet.ep !== routeFilter ? 0.12 : 1;
+    slot.g.style.opacity = fade * dim < 1 ? (fade * dim).toFixed(2) : "";
   }
 }
 
@@ -2739,6 +2858,7 @@ const neighbours = (id) => {
 };
 function setFocus(id) {
   focus = id;
+  for (const hook of hooks.focus) hook(id);
   const { near, edges } = id ? neighbours(id) : { near: new Set(), edges: new Set() };
   stage.toggleAttribute("data-focus", !!id);
   for (const v of viewList) {
@@ -2932,8 +3052,15 @@ stage.addEventListener("click", (event) => {
     sim.setBroker(id, b, !sim.logs.get(id).brokers[b]);
     drawStatus();
     say(true);
-  } else if (id) toggle(id);
+  } else if (id) select(id);
 });
+// A click (or Enter) inspects a node; F fails or restores it.
+function select(id) {
+  pinned = true;
+  setFocus(id);
+  if (hooks.select.length) for (const hook of hooks.select) hook(id);
+  else toggle(id);
+}
 const ring = DATA.spec.nodes.map((node) => node.id);
 stage.addEventListener("keydown", (event) => {
   const here = focus ? ring.indexOf(focus) : -1;
@@ -2948,6 +3075,8 @@ stage.addEventListener("keydown", (event) => {
     pinned = true;
     setFocus(ring[(here - 1 + ring.length) % ring.length]);
   } else if ((event.key === "Enter" || event.key === " ") && focus) {
+    select(focus);
+  } else if ((event.key === "f" || event.key === "F") && focus) {
     toggle(focus);
   } else if (event.key === "v" || event.key === "V") {
     setView(view === "iso" ? "flat" : "iso");
@@ -2975,10 +3104,132 @@ function resetVisuals(next) {
   say(true);
 }
 
-window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
+window.__topo = { get sim() { return sim; }, setView, setFocus, toggle, select, resetVisuals, data: DATA, get kit() { return typeof TOPO !== "undefined" ? TOPO : null; }, get view() { return view; }, get morphing() { return morphing; } };
 drawLogs();
 drawStatus();
 say(true);
+
+// The inspector: level 2 of the disclosure ladder. Inlined after topo-live.js. Clicking a
+// node opens one panel under the stage for it: its numbers, a Fail/Restore button and, when
+// the spec declares them, its routes (and later its tables and traces). Hovering a node that
+// has routes shows a compact card (level 1). Esc closes the panel; one panel at a time.
+const inspector = (() => {
+  const esc = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const specOf = new Map(DATA.spec.nodes.map((node) => [node.id, node]));
+  const per = () => sim.cfg.per;
+  const ms = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}s` : n >= 10 ? `${n.toFixed(0)}ms` : `${n.toFixed(1)}ms`);
+  const rate = (n) => formatRate(n, per());
+
+  const panel = document.createElement("section");
+  panel.className = "tp-inspect";
+  panel.hidden = true;
+  panel.setAttribute("aria-live", "polite");
+  panel.innerHTML = `<header><span class="tp-ins-kind"></span><strong class="tp-ins-name"></strong><span class="tp-ins-stat"></span><button type="button" class="tp-ins-fail"></button><button type="button" class="tp-ins-close" aria-label="Close">×</button></header><div class="tp-ins-body"></div>`;
+  stage.after(panel);
+  const $ = (sel) => panel.querySelector(sel);
+  const tip = document.createElement("div");
+  tip.className = "tp-tip";
+  tip.hidden = true;
+  stage.appendChild(tip);
+
+  let open = null;
+  const written = new Map();
+  const write = (key, el, html) => {
+    if (written.get(key) === html) return;
+    written.set(key, html);
+    el.innerHTML = html;
+  };
+
+  // Sections, in order; each returns markup or "" for this node. Later milestones add more.
+  const sections = [
+    function routes(id) {
+      const list = sim.routesOf(id);
+      const declared = specOf.get(id)?.endpoints || {};
+      if (!list.length && !Object.keys(declared).length) return "";
+      const names = [...new Set([...list.map((r) => r.name), ...Object.keys(declared)])];
+      const byName = new Map(list.map((r) => [r.name, r]));
+      const rows = names.map((name) => {
+        const r = byName.get(name) || { rate: 0, p50: 0, p99: 0, errors: 0, count: 0 };
+        const calls = (declared[name]?.calls || []).map((c) => `${specOf.get(c.to)?.label || c.to}${c.op ? ` ${c.op}${c.table ? ` ${c.table}` : ""}` : ""}${c.p != null && c.p < 1 ? ` (${Math.round(c.p * 100)}%)` : ""}`).join(", ");
+        return `<button type="button" class="tp-route" data-route="${esc(name)}"${routeFilter === name ? " data-on" : ""}><span class="tp-route-name">${esc(name)}${calls ? `<small>→ ${esc(calls)}</small>` : ""}</span><span>${rate(r.rate)}</span><span>${r.count ? ms(r.p50) : "—"}</span><span>${r.count ? ms(r.p99) : "—"}</span><span${r.errors ? " data-bad" : ""}>${r.errors ? rate(r.errors) : "·"}</span></button>`;
+      });
+      return `<div class="tp-routes"><div class="tp-route tp-route-head"><span>route</span><span>rate</span><span>p50</span><span>p99</span><span>errors</span></div>${rows.join("")}</div><p class="tp-ins-note">Pick a route to follow only its packets.</p>`;
+    },
+  ];
+
+  function render() {
+    if (!open) return;
+    const node = sim.nodes.get(open);
+    const spec = specOf.get(open);
+    write("kind", $(".tp-ins-kind"), esc(spec.kind));
+    write("name", $(".tp-ins-name"), esc(spec.label || open));
+    write("stat", $(".tp-ins-stat"), esc(sim.statsOf(open).replace(/^[^·]*·\s*/, "")));
+    write("fail", $(".tp-ins-fail"), node.up ? "Fail" : "Restore");
+    write("body", $(".tp-ins-body"), sections.map((section) => section(open)).join(""));
+    panel.toggleAttribute("data-down", !node.up);
+  }
+
+  function show(id) {
+    open = id;
+    written.clear();
+    panel.hidden = false;
+    tip.hidden = true;
+    render();
+  }
+  function close() {
+    open = null;
+    panel.hidden = true;
+    routeFilter = null;
+  }
+
+  hooks.select.push((id) => (open === id ? close() : show(id)));
+  hooks.key.push((event) => {
+    if (event.key !== "Escape" || !open) return false;
+    close();
+    return true;
+  });
+  let clock = 0;
+  hooks.tick.push((dt) => {
+    clock += dt;
+    if (clock < 0.25) return;
+    clock = 0;
+    render();
+    if (!tip.hidden && focus) drawTip(focus);
+  });
+  $(".tp-ins-close").addEventListener("click", close);
+  $(".tp-ins-fail").addEventListener("click", () => {
+    if (open) toggle(open);
+    render();
+  });
+  panel.addEventListener("click", (event) => {
+    const row = event.target.closest(".tp-route[data-route]");
+    if (!row) return;
+    routeFilter = routeFilter === row.dataset.route ? null : row.dataset.route;
+    written.delete("body");
+    render();
+  });
+
+  // Level 1: a compact card over a hovered node that has routes. Nothing for plain nodes.
+  function drawTip(id) {
+    const list = sim.routesOf(id).slice(0, 4);
+    if (!list.length || open === id) {
+      tip.hidden = true;
+      return;
+    }
+    tip.innerHTML = list.map((r) => `<div><b>${esc(r.name)}</b> ${rate(r.rate)}${r.count ? ` · p99 ${ms(r.p99)}` : ""}${r.errors ? ` · <i>${rate(r.errors)} err</i>` : ""}</div>`).join("");
+    const el = views[view].nodes.get(id);
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    const host = stage.getBoundingClientRect();
+    tip.style.left = `${Math.max(0, Math.min(host.width - 220, box.left - host.left + box.width / 2 - 110))}px`;
+    tip.style.top = `${Math.max(0, box.top - host.top - 8)}px`;
+    tip.hidden = false;
+  }
+  hooks.focus.push((id) => (id ? drawTip(id) : (tip.hidden = true)));
+
+  window.__topo.inspector = { show, close, get open() { return open; } };
+  return { show, close, sections, render, get open() { return open; } };
+})();
 
 // The scenario player, inlined after topo-live.js when the spec has a `scenario` and the
 // `scenario` feature is on. A timeline under the stage shows the named phases and each step;
@@ -3058,7 +3309,7 @@ say(true);
     if (phase !== shown.phase) {
       shown.phase = phase;
       bar.querySelectorAll(".tp-phase").forEach((el) => el.toggleAttribute("data-now", phase && +el.dataset.at === phase.at));
-      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to take over · 1–${Math.min(9, story.phases.length)} jump` : hintText;
+      if (hint) hint.textContent = mode === "free" ? "Free play · ▶ resumes the story" : story.phases.length > 1 ? `Click to inspect · 1–${Math.min(9, story.phases.length)} jump` : hintText;
     }
     const text = mode === "free" ? "You've taken over: click nodes to fail and restore them." : step ? step.say : "";
     if (text !== shown.say) {

@@ -57,7 +57,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   const body = k.plateHtml({
     fig: model.fig,
     title: model.title,
-    hint: data.edit ? "Edit: drag nodes in 2D · positions save to the layout file" : model.hint || "Hover a node · click to fail it · V for 2D",
+    hint: data.edit ? "Edit: drag nodes in 2D · positions save to the layout file" : model.hint || "Hover a node · click to inspect · V for 2D",
     readout: sim.summary(),
     keys,
     caption: model.caption,
@@ -68,7 +68,7 @@ export function buildPage(spec, { theme = "dark", view, featureLayers = [], edit
   // The morph re-renders the iso scene in the page, so it needs the kit and the renderers,
   // each wrapped in its own scope so none of their names meet the live code's.
   if (features.morph) script += scoped("iso.mjs", "k") + scoped("topo.mjs", "TOPO");
-  script += readFileSync(join(KIT, "topo-live.js"), "utf8");
+  script += readFileSync(join(KIT, "topo-live.js"), "utf8") + "\n" + readFileSync(join(KIT, "topo-inspect.js"), "utf8");
   if (model.scenario) script += "\n" + readFileSync(join(KIT, "topo-story.js"), "utf8");
   if (data.edit) script += "\n" + readFileSync(join(KIT, "topo-edit.js"), "utf8");
   const html = k.pageHtml({ title: model.title, theme, body, script, width: Math.max(rendered.iso.width, 650) + 48 });
@@ -149,7 +149,13 @@ export function check(spec, { seconds = 30, featureLayers = [], log = console.lo
   if (story) reportStory(story, samples, lines, per, sim.logs.size > 0, log, warnings);
   progress.forEach((line) => log(line));
   log(story ? `nodes at ${seconds}s:` : "nodes:");
-  for (const node of model.nodes) log(`  ${sim.statsOf(node.id)}`);
+  for (const node of model.nodes) {
+    log(`  ${sim.statsOf(node.id)}`);
+    for (const route of sim.routesOf(node.id)) log(`      ${route.name}  ${formatRate(route.rate, per)} · p50 ${formatMs(route.p50)} · p99 ${formatMs(route.p99)}${route.errors ? ` · ${formatRate(route.errors, per)} errors` : ""}`);
+  }
+  // An endpoint's calls ride edges: each must have one.
+  for (const node of model.nodes) for (const [name, endpoint] of Object.entries(node.endpoints || {})) for (const call of endpoint.calls || [])
+    if (!model.edges.some((edge) => edge.from === node.id && edge.to === call.to)) warnings.push(`endpoint ${name} on ${node.id} calls ${call.to}, but there is no edge ${node.id} → ${call.to}`);
   [...sim.logs.keys()].forEach((id, index) => {
     const mid = lagAt[Math.floor(lagAt.length / 2)]?.[index] ?? 0;
     const end = lagAt[lagAt.length - 1]?.[index] ?? 0;

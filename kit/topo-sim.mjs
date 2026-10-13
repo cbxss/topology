@@ -129,6 +129,7 @@ export function createSim(spec) {
       roots: [],
       hist: [],
       replica: 0,
+      routes: new Map(),
     });
   }
   for (const edge of edges) {
@@ -201,7 +202,15 @@ export function createSim(spec) {
 
   const sim = { cfg, nodes, edges, logs, flags, scenario, features, packets: [], time: 0, events: [], rand, calls: new Set(), timed: new Set(), timers: [], stepIndex: 0, histClock: 0, hist: [] };
   let ids = 0;
-  const newMsg = (source) => ({ id: ++ids, source, born: sim.time, draws: null });
+  const newMsg = (source, endpoint) => ({ id: ++ids, source, born: sim.time, draws: null, endpoint });
+  // Per-route history at a node: rates, service times, end-to-end latency and errors.
+  const routeStats = (node, name) => {
+    if (!name) return null;
+    if (!node.routes.has(name)) node.routes.set(name, { name, recent: [], service: [], roots: [], errors: [] });
+    return node.routes.get(name);
+  };
+  // The endpoint a request is calling at this node, if the node declares it.
+  const endpointAt = (node, msg) => (node.endpoints && msg.endpoint ? node.endpoints[msg.endpoint] : undefined);
 
   function rebalance(log, group, now) {
     const live = group.members.filter((edge) => nodes.get(edge.to).up);
@@ -220,6 +229,7 @@ export function createSim(spec) {
 
   function launch(edge, kind, extra = {}) {
     const packet = { edge: edge.index, t: 0, dir: kind === "response" || kind === "error" ? -1 : 1, kind, duration: durationOf(edge), launched: sim.time, ...extra };
+    packet.ep = (extra.msg || extra.call?.job.msg)?.endpoint;
     if (packet.dir > 0) {
       edge.sent++;
       edge.recent.push(sim.time);
@@ -237,6 +247,7 @@ export function createSim(spec) {
     node.jobs.add(job);
     node.handled++;
     node.recent.push(sim.time);
+    routeStats(node, msg.endpoint)?.recent.push(sim.time);
     node.replica = (node.replica + 1) % Math.max(1, node.replicas || 1);
     if (!sim.quiet) sim.events.push({ type: "handle", node: node.id, replica: node.replica, at: sim.time });
     if (!node.capacity) return begin(job);
@@ -251,7 +262,7 @@ export function createSim(spec) {
   function begin(job) {
     const node = job.node;
     // Service time varies: ±40% around `ms`, and one request in 30 takes 2-5x as long.
-    const base = node.ms + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
+    const base = (endpointAt(node, job.msg)?.ms ?? node.ms) + (node.sidecar ? node.sidecarMs ?? 1.5 : 0);
     const spread = cfg.jitter === false ? 1 : (0.6 + 0.8 * rand()) * (rand() < 1 / 30 ? 2 + 3 * rand() : 1);
     job.readyAt = sim.time + (base * spread) / 1000;
     node.working.push(job);
@@ -280,6 +291,12 @@ export function createSim(spec) {
     const own = job.readyAt != null ? (job.readyAt - job.arrived) * 1000 : 0;
     const ms = own + job.cost;
     node.service.push({ at: sim.time, ms });
+    const route = routeStats(node, job.msg.endpoint);
+    if (route) {
+      route.service.push({ at: sim.time, ms });
+      if (!ok) route.errors.push(sim.time);
+      if (job.root && node.answers) route.roots.push({ at: sim.time, ms, ok });
+    }
     if (job.call) launch(job.call.edge, ok ? "response" : "error", { call: job.call, ms });
     if (job.root && node.answers) node.roots.push({ at: sim.time, ms, ok });
   }
@@ -307,6 +324,20 @@ export function createSim(spec) {
 
   function forward(job) {
     const node = job.node;
+    // A declared endpoint makes exactly its calls, each along the edge to its target.
+    const endpoint = endpointAt(node, job.msg);
+    if (endpoint && endpoint.calls) {
+      for (const call of endpoint.calls) {
+        const edge = node.out.find((e) => e.to === call.to && e.kind !== "config");
+        if (!edge || rand() >= (call.p ?? 1)) continue;
+        if (edge.kind === "replication") launch(edge, "replication", { msg: job.msg });
+        else if (edge.sync) {
+          job.waiting++;
+          callOut(job, edge, 0, 0, call);
+        } else launch(edge, "request", { msg: job.msg, op: call });
+      }
+      return;
+    }
     const open = (edge) => (edge.flag ? decide(job.msg, edge.flag) : edge.unless ? !decide(job.msg, edge.unless) : true);
     for (const edge of node.repl) if (!node.gated || open(edge)) launch(edge, "replication", { msg: job.msg });
     const data = node.gated ? node.data.filter(open) : node.data;
@@ -343,7 +374,7 @@ export function createSim(spec) {
 
   const netOf = (edge) => (edge.ms ?? cfg.net) * 2;
 
-  function callOut(job, edge, attempt, prior = 0) {
+  function callOut(job, edge, attempt, prior = 0, op) {
     const br = edge.breaker;
     let trial = false;
     if (br) {
@@ -357,10 +388,10 @@ export function createSim(spec) {
         trial = true;
       }
     }
-    const call = { job, edge, attempt, trial, prior, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
+    const call = { job, edge, attempt, trial, prior, op, sent: sim.time, deadline: edge.timeout ? sim.time + allowance.get(edge.index) + edge.timeout + 1 : Infinity, done: false, packets: [] };
     sim.calls.add(call);
     if (edge.timeout) sim.timed.add(call);
-    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg }));
+    call.packets.push(launch(edge, attempt ? "retry" : "request", { call, msg: job.msg, op }));
   }
 
   function setBreaker(edge, state) {
@@ -400,7 +431,7 @@ export function createSim(spec) {
     }
     if (!ok && call.attempt < (edge.retries || 0) && !job.dead && !job.done) {
       const wait = (edge.backoff ?? 0.05) * 2 ** call.attempt * (0.5 + rand());
-      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000) });
+      sim.timers.push({ at: sim.time + wait, run: () => !job.dead && !job.done && callOut(job, edge, call.attempt + 1, spent + wait * 1000, call.op) });
       return;
     }
     finish(job, ok, spent);
@@ -490,8 +521,11 @@ export function createSim(spec) {
 
   // --- sources --------------------------------------------------------------------------------
 
-  const emitAt = (node, t) => {
-    const emit = node.emit;
+  // `emit` is a rate, a curve, a schedule ({ every, burst }) or a mix of endpoints, each
+  // with its own rate or curve: { "POST /orders": 3, "GET /orders/:id": [[0, 10], [20, 30]] }.
+  const isSchedule = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && "every" in emit;
+  const isMix = (emit) => emit && typeof emit === "object" && !Array.isArray(emit) && !("every" in emit);
+  const rateOf = (emit, t) => {
     if (typeof emit === "number") return emit;
     if (Array.isArray(emit)) {
       const span = cfg.length || emit[emit.length - 1][0] || 1;
@@ -506,8 +540,16 @@ export function createSim(spec) {
     }
     return 0;
   };
+  const emitAt = (node, t) => (isMix(node.emit) ? Object.values(node.emit).reduce((sum, e) => sum + rateOf(e, t), 0) : rateOf(node.emit, t));
+  const pickEndpoint = (node, t) => {
+    if (!isMix(node.emit)) return undefined;
+    const entries = Object.entries(node.emit).map(([name, e]) => [name, rateOf(e, t)]);
+    let pick = rand() * entries.reduce((sum, [, r]) => sum + r, 0);
+    for (const [name, r] of entries) if ((pick -= r) <= 0) return name;
+    return entries[entries.length - 1][0];
+  };
 
-  const emitOne = (node) => startJob(node, newMsg(node.id), null, { root: true });
+  const emitOne = (node) => startJob(node, newMsg(node.id, pickEndpoint(node, sim.time)), null, { root: true });
 
   // --- the tick -------------------------------------------------------------------------------
 
@@ -531,7 +573,7 @@ export function createSim(spec) {
     for (const node of nodes.values()) {
       if (node.capacity) node.bucket = Math.min(node.capacity * (node.burst ?? 0.25) + 1, node.bucket + node.capacity * dt);
       if (!node.up) continue;
-      if (node.emit && typeof node.emit === "object" && !Array.isArray(node.emit)) {
+      if (isSchedule(node.emit)) {
         // A scheduler: `burst` messages every `every` seconds, spread over a third of a second.
         if (now >= node.nextBurst) {
           node.nextBurst = now + node.emit.every;
@@ -630,6 +672,12 @@ export function createSim(spec) {
       trim(node.recentErrors);
       trim(node.service, 3);
       trim(node.roots, 3);
+      for (const route of node.routes.values()) {
+        trim(route.recent);
+        trim(route.errors);
+        trim(route.service, 3);
+        trim(route.roots, 3);
+      }
       node.flow = node.recent.length / window;
       node.dropRate = node.recentDrops.length / window;
       node.errorRateSeen = node.recentErrors.length / window;
@@ -747,6 +795,18 @@ export function createSim(spec) {
     if (!group) return 0;
     return log.end.reduce((sum, end, p) => sum + end - group.committed[p], 0);
   };
+  // Per-route numbers at a node: [{ name, rate, p50, p99, errors }], busiest first.
+  sim.routesOf = (id) => {
+    const node = nodes.get(id);
+    if (!node) return [];
+    const window = Math.min(cfg.window, Math.max(sim.time, 0.25));
+    return [...node.routes.values()]
+      .map((route) => {
+        const samples = (route.roots.length ? route.roots.filter((r) => r.ok) : route.service).map((s) => s.ms).sort((a, b) => a - b);
+        return { name: route.name, rate: route.recent.length / window, p50: quantile(samples, 0.5), p99: quantile(samples, 0.99), errors: route.errors.length / window, count: samples.length, endToEnd: route.roots.length > 0 };
+      })
+      .sort((a, b) => b.rate - a.rate);
+  };
   sim.latencyOf = (id) => latencyOf(id ? [nodes.get(id)] : [...nodes.values()]);
   sim.statsOf = (id) => statsOf(sim, id);
   sim.summary = () => summaryOf(sim);
@@ -793,7 +853,7 @@ export function statsOf(sim, id) {
       if (offline) parts.push(`${offline} offline`);
       if (under) parts.push(`${under} under min ISR${log.acks === "all" ? " (writes refused)" : ""}`);
     }
-    return `${name} · in ${formatRate(node.flow, per)} · ${parts.join(" · ")}`;
+    return [`${name} · in ${formatRate(node.flow, per)}`, ...parts].join(" · ");
   }
   if (node.kind === "flags") {
     const list = [...sim.flags.values()].map((flag) => `${flag.name} ${Math.round(flag.effective * 100)}%${flag.effective !== flag.rollout ? ` (→${Math.round(flag.rollout * 100)}%)` : ""}`);
