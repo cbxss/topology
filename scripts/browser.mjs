@@ -37,7 +37,11 @@ export async function openBrowser({ width = 1440, height = 1000, scale = 2, redu
   const chrome = spawn(findChrome(), ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--mute-audio", `--window-size=${width},${height}`, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
   const endpoint = await new Promise((done, fail) => {
     let text = "";
-    const timer = setTimeout(() => fail(new Error("Chrome did not start")), 20000);
+    const abort = (reason) => {
+      clearTimeout(timer);
+      fail(new Error(`${reason}\n${text.slice(-8192)}`));
+    };
+    const timer = setTimeout(() => { chrome.kill(); abort("Chrome did not start"); }, 20000);
     chrome.stderr.on("data", (chunk) => {
       text += chunk;
       const match = /DevTools listening on (ws:\/\/\S+)/.exec(text);
@@ -46,7 +50,11 @@ export async function openBrowser({ width = 1440, height = 1000, scale = 2, redu
         done(match[1]);
       }
     });
-    chrome.on("exit", (code) => fail(new Error(`Chrome exited (${code})`)));
+    chrome.once("error", (error) => abort(`Chrome could not start: ${error.message}`));
+    chrome.once("exit", (code, signal) => abort(`Chrome exited (${signal || code})`));
+  }).catch((error) => {
+    rmSync(profile, { recursive: true, force: true });
+    throw error;
   });
   const socket = new WebSocket(endpoint);
   await new Promise((done) => socket.addEventListener("open", done, { once: true }));
